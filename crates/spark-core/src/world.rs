@@ -44,6 +44,7 @@ pub struct World {
     /// Immediate-mode UI state (buttons, sliders, panels).
     pub ui: crate::ui::Ui,
     quit: bool,
+    restart: bool,
 }
 
 impl World {
@@ -86,6 +87,16 @@ impl World {
 
     pub fn quit_requested(&self) -> bool {
         self.quit
+    }
+
+    /// Ask the script host to restart the game (scene cleared, `start()` runs again) at the next frame.
+    pub fn request_restart(&mut self) {
+        self.restart = true;
+    }
+
+    /// True once after `request_restart` (the script host consumes it).
+    pub fn take_restart(&mut self) -> bool {
+        std::mem::take(&mut self.restart)
     }
 
     /// Clears scene, assets, render settings, bodies and sounds (keeps input, time, backends and asset root).

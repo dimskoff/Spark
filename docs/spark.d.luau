@@ -74,6 +74,7 @@ type LightSpec = {
     range: number?,
     angle: number?,
     softness: number?,
+    shadows: boolean?,
     position: vector?,
     rotation: vector?,
     parent: Object?,
@@ -193,6 +194,8 @@ declare extern type Shader with
     name: string
     kind: "surface" | "post"
     params: { string }
+    -- false = ignore the shader's `fn vertex` (engine vertex stage, plain depth: early depth testing stays on)
+    vertex: boolean
     texture1: (Texture | string)?
     texture2: (Texture | string)?
     -- `shader.<param>` reads / writes a field of `struct Params` in the WGSL code (any name).
@@ -255,6 +258,7 @@ declare extern type LightRef with
     range: number
     angle: number
     softness: number
+    shadows: boolean
 end
 
 declare extern type Object with
@@ -376,6 +380,7 @@ declare Mesh: {
     sphere: (radius: number?, segments: number?) -> Mesh,
     cylinder: (radius: number?, height: number?, segments: number?) -> Mesh,
     triangles: (points: { vector }) -> Mesh,
+    custom: (positions: { vector }, indices: { number }, uvs: { number }?, normals: { vector }?) -> Mesh,
 }
 
 declare Texture: {
@@ -465,6 +470,10 @@ declare graphics: {
     shadows: boolean,
     shadow_distance: number,
     shadow_size: number,
+    light_shadows: number,
+    light_shadow_size: number,
+    light_shadow_updates: number,
+    light_shadow_soft: boolean,
     scene_width: number,
     scene_height: number,
     shader: Shader?,
@@ -609,6 +618,32 @@ declare time: {
     fixed_dt: number,
 }
 
+-- ===================================================================== scenario tests (spark test only)
+
+-- Exists only in files under tests/ run by `spark test`.
+declare test: {
+    press: (key: Key) -> (),
+    release: (key: Key) -> (),
+    tap: (key: Key) -> (),
+    hold: (key: Key, seconds: number?) -> (),
+    mouse: (x: number, y: number) -> (),
+    button: (name: string, down: boolean) -> (),
+    click: (x: number?, y: number?, button: string?) -> (),
+    text: (s: string) -> (),
+    type: (s: string) -> (),
+    wait: (seconds: number?) -> number,
+    frames: (n: number?) -> (),
+    wait_until: (condition: () -> boolean, timeout: number?, what: string?) -> (),
+    wait_event: (name: string, timeout: number?) -> ...any,
+    find: (name: string, timeout: number?) -> Object,
+    expect: <T>(cond: T, msg: string?) -> T,
+    eq: (actual: any, expected: any, msg: string?) -> (),
+    near: (actual: any, expected: any, eps: number?, msg: string?) -> (),
+    fail: (msg: string?) -> (),
+    step: (name: string) -> (),
+    snapshot: (name: string, state: any?) -> (),
+}
+
 -- ===================================================================== saving, window, misc
 
 declare save: {
@@ -620,6 +655,24 @@ declare save: {
     keys: () -> { string },
     flush: () -> (),
     path: () -> string?,
+}
+
+declare discord: {
+    connect: (app_id: string) -> (),
+    set: (presence: {
+        details: string?,
+        state: string?,
+        large_image: string?,
+        large_text: string?,
+        small_image: string?,
+        small_text: string?,
+        start: (boolean | number)?,
+        finish: number?,
+        buttons: { { label: string, url: string } }?,
+    }) -> (),
+    clear: () -> (),
+    shutdown: () -> (),
+    status: () -> "off" | "connecting" | "connected",
 }
 
 declare window: {
@@ -648,6 +701,7 @@ declare debug: {
 }
 
 declare function quit(): ()
+declare function restart(): ()
 
 -- Callbacks the engine calls if the game defines them (globals in main.luau):
 --   function start() end              once, after every (re)load; runs as a task (may wait)

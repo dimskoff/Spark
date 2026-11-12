@@ -41,7 +41,7 @@ spark = "0.1"            # engine version the game is made for (warns when run b
 width = 1280             # window size
 height = 720
 fullscreen = false       # start in borderless fullscreen
-icon = "icon.png"        # window / taskbar icon
+icon = "icon.png"        # window / taskbar icon; `spark build` also makes it the exe (Windows) / .app (macOS) icon
 vsync = true
 show_fps = false         # fps in the title bar (default: only when there is no title)
 save_name = "MyGame"     # folder for save data (default: title)
@@ -269,6 +269,7 @@ Primitives are centered at the origin (a cube of size 1 spans -0.5..0.5). Same p
 | `Mesh.sphere(radius=0.5, segments=24)` | |
 | `Mesh.cylinder(radius=0.5, height=1, segments=24)` | |
 | `Mesh.triangles({p1, p2, p3, ...})` | counter-clockwise triangles, flat normals |
+| `Mesh.custom(positions, indices, uvs?, normals?)` | indexed mesh: `positions` = `{vector}`, `indices` = 1-based, 3 per counter-clockwise triangle, `uvs` = flat `{u1, v1, u2, v2, ...}`, `normals` = `{vector}` (smooth normals are computed when omitted). For swept tunnels, terrain, any generated geometry |
 | `Texture.load("img.png")` | PNG/JPEG, path relative to the script folder, cached |
 | `Texture.checker(a="white", b="gray", cells=8, size=64)` | |
 | `Texture.solid(color)` | |
@@ -389,6 +390,9 @@ t:cancel()
 - Point / spot lights (up to 32 nearest visible lights per frame; any object can carry one):
   - `light({ type = "point", color = "#ffd9a0", intensity = 1.5, range = 8, position = vec3(0, 3, 0) })` -> Object (invisible, only light)
   - `light({ type = "spot", angle = 30, softness = 0.3, ... })` - cone along the object's forward (-Z); aim with `rotation` or `obj:look_at(...)`
+  - `shadows = true` (also `obj.light.shadows`): the light casts shadows (a cube map, PCF). Only the `graphics.light_shadows`
+    nearest such lights in view get one; `obj.cast_shadow = false` keeps an object out, and the object carrying the light
+    (a bulb mesh around it) never shadows its own light
   - `spawn(mesh, mat, { light = { type = "point", ... } })` - glowing lamp mesh with its light
   - `obj.light` -> light ref (`.type .color .intensity .range .angle .softness`, read/write); `obj.light = {...}` / `obj.light = nil`
   - Flicker: change `obj.light.intensity` in `update`; flashlight: spot light that follows `camera.position/rotation`
@@ -417,6 +421,11 @@ graphics.post = { vhs }                            -- chain of full-screen passe
 - `graphics.msaa` = 1 / 2 / 4 (default) / 8 or true/false - anti-aliasing of the 3D scene (falls back to what the GPU supports)
 - `graphics.shadows` (default true), `graphics.shadow_distance` (meters around the camera, default 40),
   `graphics.shadow_size` (shadow map pixels, default 2048) - sun shadows; `obj.cast_shadow = false` per object
+- `graphics.light_shadows` (0..8, default 8: how many `shadows = true` lights get a shadow cube, the nearest first; 0 = off),
+  `graphics.light_shadow_size` (pixels per cube face, 64..2048, default 512), `graphics.light_shadow_updates` (how many cubes of
+  lights that did not move are re-drawn per frame, round robin; 0 = all, default). A new or moved light is always re-drawn
+  at once; with a small number, objects moving through a still light's shadow lag by a few frames.
+  `graphics.light_shadow_soft` (default true): 9 filtered taps per shadowed light; false = 4 (cheaper, slightly harder edges)
 - `graphics.scene_width`, `graphics.scene_height` -> current size of the 3D image in pixels (read-only)
 - `graphics.shader` = surface Shader or nil (default lit shader)
 - `graphics.post` = Shader, list of Shaders / `{ shader = s, size = "screen" | "scene" }`, or nil. `size = "scene"` runs the pass at
@@ -427,6 +436,9 @@ graphics.post = { vhs }                            -- chain of full-screen passe
   Colors are converted to linear. `shader:set({ a = 1, b = vec3(...) })` sets many. Unknown names error with the list of params.
 - `shader.texture1`, `shader.texture2` = Texture / image path / nil (bound as `texture1` / `texture2` in WGSL)
 - `shader.name`, `shader.kind` (`"surface"` | `"post"`), `shader.params` -> list of param names
+- `shader.vertex` (bool, default true): use the shader's own `fn vertex`. A custom vertex stage makes the engine write a
+  corrected depth per pixel (snapped / wobbling geometry keeps its true order), which turns off early depth testing for
+  everything drawn with it; `false` = the engine's vertex stage and plain depth (faster, e.g. a "PS1 wobble" option)
 - Per material / object: `mat:with_shader(s)`, `mat:with_data(a, b, c, d)`; `obj.shader`, `obj.data` (read/write);
   spawn props `shader = s`, `data = {a, b, c, d}`. `data` arrives in WGSL as `object.data` (per-object values, e.g. a hit flash).
 
@@ -697,6 +709,53 @@ Prints `file:line: message` per error and exits with code 1 (0 = ok). `--json` p
 
 `line` is `null` when the error has no location (e.g. a `game.toml` mistake). Input is empty during the check:
 code behind `input.pressed(...)` only runs in a real session (`spark . --headless` with a script that drives it, or a window).
+For that use scenario tests:
+
+## Scenario tests (spark test)
+
+```
+spark test path/to/game [NAME...] [--update] [--json] [--max-time SECONDS]
+```
+
+Every `tests/**/*.luau` file is one test (files starting with `_` are helpers for `require`). For each test the game
+starts fresh: headless, fixed 1/60 s steps, physics on, no audio, no GPU, save data in memory only (player saves are
+never touched). The test file runs as a task next to the game and plays it: it presses keys, waits, checks the state.
+The game's globals are visible, so call your own helpers to jump to a chapter (`goto_chapter(3)`).
+
+A test **fails** on a failed check, on **any** script error of the game, when it does not finish within `--max-time`
+seconds of game time (default 300), when the game calls `quit()` first, or when a snapshot changed.
+
+```lua
+-- tests/ch1_door.luau
+test.step("open the door")                  -- shown when the test fails
+local door = test.find("door")              -- waits up to 5 s for the object, returns it
+test.tap("e")                               -- press + release (one frame each)
+test.wait_until(function() return door.position.y > 2 end, 3, "door to open")
+test.eq(save.get("door_open"), true, "door flag")
+test.snapshot("door_open", { quest = Quest.state })  -- the world + your state vs tests/snapshots/
+```
+
+| function | |
+|---|---|
+| `test.press(key)` / `test.release(key)` | hold / release a key from the next frame on |
+| `test.tap(key)` / `test.hold(key, seconds)` | press and release (waits) |
+| `test.mouse(x, y)` / `test.button(name, down)` / `test.click(x?, y?, button?)` | mouse (window pixels) |
+| `test.text(s)` / `test.type(s)` | text input |
+| `test.wait(s)` / `test.frames(n)` | let the game run |
+| `test.wait_until(fn, timeout?, what?)` | wait for a condition, fail after `timeout` s (default 10) |
+| `test.wait_event(name, timeout?)` | wait for an event, fail on timeout; returns its arguments |
+| `test.find(name, timeout?)` | wait for an object by name (default 5 s) |
+| `test.expect(cond, msg?)` / `test.eq(actual, expected, msg?)` / `test.near(a, b, eps?, msg?)` / `test.fail(msg)` | checks (`near` works on numbers and vectors, eps 0.01) |
+| `test.step(name)` | name of the current step, printed on failure |
+| `test.snapshot(name, state?)` | compare the world (+ `state` table) with `tests/snapshots/<test>.<name>.snap` |
+
+Snapshots list every **named** object (position, rotation, scale, parent, body, hidden; rounded to 0.01), the camera,
+the number of unnamed objects and the `state` table flattened to `state.key = value` lines. The first run writes the
+file; later runs print what changed, e.g. `~ obj "guard_2": pos (0.00, 0.00, 4.00) -> (0.00, -48.20, 4.00)` or
+`- obj "bridge" = ...   (gone)`. Changes you meant: `spark test . --update`. Commit `tests/snapshots/`.
+
+Output: `PASS tests/a.luau (12.0 s game, 0.3 s real)` / `FAIL ...` with `file:line: message` and `at step: ...`;
+`--json`: `{"ok":false,"passed":1,"failed":1,"tests":[{"test":"tests/b.luau","ok":false,"error":{"file","line","message"},"step":"...","diffs":[{"snapshot","changes":[...]}]}]}`.
 
 ## Saving
 
@@ -711,6 +770,33 @@ never leaves a half-written file) and on exit; `save.flush()` writes immediately
 ```lua
 local best = save.get("best_time", 0)
 save.set("settings", { volume = 0.8, fov = 75 })
+```
+
+## Discord Rich Presence
+
+Shows what the player is doing on their Discord profile. Talks to the local Discord client over IPC on a
+background thread, so it never stalls a frame, survives hot reload, and needs no Discord SDK or login. If Discord
+is not running nothing happens; it connects by itself when Discord starts (checked every 15 s) and puts the
+presence back if Discord restarts. Updates go out at most once per 4 s (Discord's rate limit), always the latest,
+so calling `discord.set` every frame is fine.
+
+Create an application at discord.com/developers/applications: its name is the "Playing ..." title, its
+Application ID goes to `discord.connect`, images uploaded under Rich Presence -> Art Assets are referenced by key.
+
+- `discord.connect(app_id)` - the Application ID (a string of digits); again with the same id does nothing
+- `discord.set({ details, state, large_image, large_text, small_image, small_text, start, finish, buttons })` - all optional:
+  `details` / `state` are the two text lines, `*_image` are art asset keys, `*_text` their tooltips,
+  `start = true` shows time elapsed since the game started (or unix seconds, `os.time()`), `finish` a countdown to unix seconds,
+  `buttons = { { label = "Steam", url = "https://..." } }` at most 2 (other players see them, not you)
+- `discord.clear()` - remove the presence (still "Playing <app>"), `discord.shutdown()` - disconnect
+- `discord.status()` -> `"off"`, `"connecting"` (Discord not found yet) or `"connected"`
+
+Texts are cut to 128 characters. A presence Discord refuses (unknown image key, bad URL) is logged as a warning.
+Engines built without the `discord` feature keep the global with no-op functions.
+
+```lua
+discord.connect("123456789012345678")
+discord.set({ details = "Main menu", large_image = "logo", start = true })
 ```
 
 ## Window
@@ -736,6 +822,7 @@ Unknown fields and writes to read-only ones are errors.
 - `print(...)` -> engine log `[script] ...`
 - `dump_scene()` -> text with every object, position, rotation, bounds (same as `--dump-scene`)
 - `quit()`
+- `restart()` - clears the scene and runs `start()` again at the next frame (like a hot reload; works in shipped builds)
 
 ## Example
 
