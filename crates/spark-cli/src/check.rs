@@ -130,8 +130,19 @@ pub fn check(path: &Path, frames: u32) -> Report {
         return report;
     }
     let main = dir.join(main.file_name().unwrap_or_default());
-    if let Err(e) = Manifest::load(&dir) {
-        report.errors.push(problem("game.toml", None, &e));
+    match Manifest::load(&dir) {
+        Err(e) => report.errors.push(problem("game.toml", None, &e)),
+        Ok(m) => {
+            // Agents read the report, not the runner's stderr: surface API-compatibility hints here.
+            if let Some(w) = m.version_warning(engine::VERSION) {
+                report.notes.push(format!("game.toml: {w}"));
+            } else if m.spark.is_none() && dir.join("game.toml").is_file() {
+                report.notes.push(format!(
+                    "game.toml has no `spark = \"{}\"`: add it so a different engine version can warn about API changes",
+                    spark_project::template::engine_minor()
+                ));
+            }
+        }
     }
 
     // 1. Syntax of every module, required or not.
@@ -487,6 +498,19 @@ mod tests {
         // luau-lsp is usually absent on CI; either way the check must not invent errors for a clean game.
         assert!(r.ok() || r.errors.iter().all(|e| e.line.is_some()), "{:?}", r.errors);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn version_mismatch_and_missing_key_are_notes() {
+        let dir = game(&[("main.luau", "function start() end\n"), ("game.toml", "spark = \"0.99\"\n")]);
+        let r = check(&dir, 2);
+        assert!(r.ok(), "{:?}", r.errors);
+        assert!(r.notes.iter().any(|n| n.contains("game.toml")), "{:?}", r.notes);
+        let dir2 = game(&[("main.luau", "function start() end\n"), ("game.toml", "title = \"X\"\n")]);
+        let r2 = check(&dir2, 2);
+        assert!(r2.notes.iter().any(|n| n.contains("no `spark =")), "{:?}", r2.notes);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&dir2);
     }
 
     #[test]

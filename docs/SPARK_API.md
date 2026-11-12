@@ -810,6 +810,17 @@ discord.connect("123456789012345678")
 discord.set({ details = "Main menu", large_image = "logo", start = true })
 ```
 
+## Platforms and versions
+
+- **Same API everywhere.** Windows 10/11 x64 is the most played platform; Linux (X11 / Wayland) and macOS (Apple Silicon)
+  run the same scripts. Paths, saves and `spark build` follow the OS: a build is made for the OS it runs on.
+- **Mouse lock** (`input.lock_mouse`) uses the OS "locked" mode and falls back to "confined" where the platform has no
+  locked mode; `input.mouse_delta` works either way. Test it on the OS you ship to.
+- **No GPU needed** for `spark check` and `spark test`. `--headless --screenshot` needs an adapter (DirectX 12 / Vulkan /
+  Metal); on Linux CI install software Vulkan (`mesa-vulkan-drivers`) or force one with `WGPU_BACKEND=vulkan|dx12|metal|gl`.
+- **API versions.** `spark = "0.1"` in `game.toml` is the API this reference describes. Before 1.0 every minor version may
+  change the API: after `spark update` run `spark docs .`, read the changes, fix the code, then raise `spark`.
+  `spark check` reports a version mismatch (and a missing `spark` key) under `notes`, not only on stderr.
 ## Window
 
 - `window.fullscreen` (read/write, borderless), `window.title` (read/write; nil = game title), `window.width`, `window.height` (pixels, read-only)

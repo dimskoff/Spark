@@ -241,7 +241,7 @@ Conventions: Y-up, right-handed, 1 unit = 1 meter, objects look along -Z, radian
 ## Status
 
 Early version (0.1). Windows 10/11 x64 is the main and most played platform; Linux (X11 / Wayland) and macOS
-are built and tested by CI on every commit (headless tests), but have seen less real play. The API can still change between versions - `spark docs` keeps a game's docs in sync.
+are built and tested by CI on every commit (headless tests), but have seen less real play. The API can still change between versions - `spark docs` keeps a game's docs in sync, [CHANGELOG.md](CHANGELOG.md) lists what changed and `spark check` warns about a version mismatch.
 
 ## License
 
