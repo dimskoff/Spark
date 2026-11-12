@@ -48,7 +48,7 @@ fn to_text(v: &Value, what: &str) -> LuaResult<String> {
 
 pub(crate) fn texture_of(w: &mut World, v: &Value, what: &str) -> LuaResult<TextureId> {
     match v {
-        Value::String(s) => w.assets.load_texture(&s.to_string_lossy()).map_err(|e| rt(format!("{what}: {e}"))),
+        Value::String(s) => crate::untimed(|| w.assets.load_texture(&s.to_string_lossy())).map_err(|e| rt(format!("{what}: {e}"))),
         Value::UserData(ud) => ud
             .borrow::<LuaTexture>()
             .map(|t| t.0)

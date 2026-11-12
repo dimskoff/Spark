@@ -290,7 +290,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set("Mesh", mesh)?;
 
     let texture = lua.create_table()?;
-    texture.set("load", lua.create_function(|lua, path: String| with(lua, |w| w.assets.load_texture(&path).map(LuaTexture).map_err(rt)))?)?;
+    texture.set("load", lua.create_function(|lua, path: String| with(lua, |w| crate::untimed(|| w.assets.load_texture(&path)).map(LuaTexture).map_err(rt)))?)?;
     texture.set(
         "checker",
         lua.create_function(|lua, (a, b, cells, size): (Value, Value, Option<u32>, Option<u32>)| {
@@ -326,7 +326,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
             let tex = match &t {
                 Value::String(s) => {
                     let p = s.to_string_lossy();
-                    with(lua, |w| w.assets.load_texture(&p).map_err(rt))?
+                    with(lua, |w| crate::untimed(|| w.assets.load_texture(&p)).map_err(rt))?
                 }
                 Value::UserData(ud) => ud.borrow::<LuaTexture>().map_err(|_| bad())?.0,
                 _ => return Err(bad()),
@@ -556,7 +556,7 @@ fn to_sky(w: &mut World, v: &Value) -> LuaResult<Option<spark_core::Sky>> {
                 sky.cubemap = match &x {
                     Value::Nil | Value::Boolean(false) => None,
                     Value::String(path) => {
-                        Some(w.assets.load_cubemap(&path.to_string_lossy()).map_err(|e| rt(format!("{what}: {e}")))?)
+                        Some(crate::untimed(|| w.assets.load_cubemap(&path.to_string_lossy())).map_err(|e| rt(format!("{what}: {e}")))?)
                     }
                     _ => return Err(rt(format!("{what}: expected an image path (a 6:1 strip of +X -X +Y -Y +Z -Z faces)"))),
                 }

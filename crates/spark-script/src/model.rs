@@ -52,7 +52,7 @@ pub(crate) fn to_model(w: &mut World, v: &Value, what: &str) -> LuaResult<Option
         Value::UserData(ud) => Ok(ud.borrow::<LuaModel>().ok().map(|m| m.0)),
         Value::String(s) => {
             let s = s.to_string_lossy();
-            if is_model_path(&s) { w.assets.load_model(&s).map(Some).map_err(|e| rt(format!("{what}: {e}"))) } else { Ok(None) }
+            if is_model_path(&s) { crate::untimed(|| w.assets.load_model(&s)).map(Some).map_err(|e| rt(format!("{what}: {e}"))) } else { Ok(None) }
         }
         _ => Ok(None),
     }
@@ -187,7 +187,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     let model = lua.create_table()?;
     model.set(
         "load",
-        lua.create_function(|lua, path: String| with(lua, |w| w.assets.load_model(&path).map(LuaModel).map_err(rt)))?,
+        lua.create_function(|lua, path: String| with(lua, |w| crate::untimed(|| w.assets.load_model(&path)).map(LuaModel).map_err(rt)))?,
     )?;
     g.set("Model", model)?;
     Ok(())

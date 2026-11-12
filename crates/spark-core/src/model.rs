@@ -281,6 +281,18 @@ impl ModelData {
                         Err(e) => log::warn!("{}: {e}", model.name),
                     }
                 }
+                // KHR_materials_pbrSpecularGlossiness (older exporters): the diffuse part is the base color.
+                if let Some(sg) = m.pbr_specular_glossiness() {
+                    let f = sg.diffuse_factor();
+                    material.color = Color::rgba(to_srgb(f[0]), to_srgb(f[1]), to_srgb(f[2]), f[3]);
+                    material.roughness = (1.0 - sg.glossiness_factor()).clamp(0.0, 1.0);
+                    if let Some(info) = sg.diffuse_texture() {
+                        match image(info.texture().source().index(), assets) {
+                            Ok(id) => material.texture = Some(id),
+                            Err(e) => log::warn!("{}: {e}", model.name),
+                        }
+                    }
+                }
                 if let Some(info) = m.normal_texture() {
                     match image(info.texture().source().index(), assets) {
                         Ok(id) => material.normal_map = Some(id),

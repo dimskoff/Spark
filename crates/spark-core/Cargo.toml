@@ -17,4 +17,4 @@ image.workspace = true
 fontdue = "0.9.4"
 miniz_oxide = "0.8"
 naga = { version = "30", features = ["wgsl-in"] }
-gltf = { version = "1.4", default-features = false, features = ["utils", "names", "KHR_materials_unlit"] }
+gltf = { version = "1.4", default-features = false, features = ["utils", "names", "KHR_materials_unlit", "KHR_materials_pbrSpecularGlossiness"] }

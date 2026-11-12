@@ -99,7 +99,7 @@ pub fn spawn_model(world: &mut World, model_id: ModelId, material: Option<Materi
 }
 
 /// Like [`spawn_model`], but only the node called `only` (and everything below it) is created, moved to the origin
-/// in X / Z: models that hold a whole kit of parts (a tree pack, a prop sheet) are spawned one part at a time.
+/// in X / Z (the offsets of its parents too): models that hold a whole kit of parts (a tree pack, a prop sheet) are spawned one part at a time.
 pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<Material>, only: Option<&str>) -> Option<ObjectId> {
     let model = world.assets.model(model_id)?.clone();
     let mut root_obj = Object::empty();
@@ -127,7 +127,8 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
                 let n = &model.nodes[a];
                 let mut o = Object::empty();
                 o.name = n.name.clone();
-                o.position = n.translation;
+                // kit parts sit side by side in the file: drop the X / Z offsets of the whole chain
+                o.position = if a == 0 || model.nodes[a].parent.is_none() { n.translation } else { Vec3::new(0.0, n.translation.y, 0.0) };
                 o.rotation = n.rotation;
                 o.scale = n.scale;
                 let id = world.scene.add(o);

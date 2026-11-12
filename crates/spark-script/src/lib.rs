@@ -53,6 +53,20 @@ use runtime::SharedRuntime;
 /// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
 /// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
 /// -> render. `start()` runs once as a task (may `wait`).
+thread_local! {
+    /// Time the running callback spent loading assets (models, textures, cube maps): it does not count towards the
+    /// "script ran too long" limit, big files may take seconds to decode.
+    static LOAD_TIME: std::cell::Cell<std::time::Duration> = const { std::cell::Cell::new(std::time::Duration::ZERO) };
+}
+
+/// Runs an asset load without charging its time to the script watchdog.
+pub(crate) fn untimed<R>(f: impl FnOnce() -> R) -> R {
+    let t = Instant::now();
+    let r = f();
+    LOAD_TIME.with(|c| c.set(c.get() + t.elapsed()));
+    r
+}
+
 pub struct ScriptGame {
     path: PathBuf,
     shared: Rc<RefCell<World>>,
@@ -206,6 +220,7 @@ impl ScriptGame {
         let Some(lua) = self.lua.clone() else { return };
         std::mem::swap(world, &mut self.shared.borrow_mut());
         self.deadline.set(Instant::now().checked_add(self.timeout));
+        LOAD_TIME.with(|c| c.set(std::time::Duration::ZERO));
         let result = f(&lua);
         self.deadline.set(None);
         std::mem::swap(world, &mut self.shared.borrow_mut());
@@ -246,7 +261,7 @@ impl ScriptGame {
         let deadline = self.deadline.clone();
         let limit = self.timeout;
         lua.set_interrupt(move |_| {
-            if deadline.get().is_some_and(|d| Instant::now() > d) {
+            if deadline.get().is_some_and(|d| Instant::now() > d + LOAD_TIME.with(|c| c.get())) {
                 // The deadline stays set: a `pcall` around the loop cannot swallow the error, every
                 // later check fails too until the callback returns (`run` then clears it).
                 return Err(mlua::Error::runtime(format!(

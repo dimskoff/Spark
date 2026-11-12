@@ -522,6 +522,34 @@ fn find_sibling(dir: &Path, prefix: &str, suffixes: &[&str], cache: &mut HashMap
     None
 }
 
+/// Last resort for generic material names ("bark_mat", "cluster_mat_spring_ex"): a color texture whose name contains
+/// every meaningful word of the material name ("summer" preferred when several seasons match).
+fn find_by_tokens(dir: &Path, mat_name: &str, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+    const SKIP: &[&str] = &["mat", "material", "ex", "tex", "default", "lod", "mtl", "shader", "m"];
+    let tokens: Vec<&str> = mat_name.split('_').filter(|w| w.len() > 1 && !SKIP.contains(w) && !w.chars().all(|c| c.is_ascii_digit())).collect();
+    if tokens.is_empty() {
+        return None;
+    }
+    let files = dir_files(dir, cache);
+    let mut best: Option<(i32, &std::path::PathBuf)> = None;
+    for (n, p) in files {
+        if !matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg")) {
+            continue;
+        }
+        let stem = norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n));
+        // the color suffix is optional here ("Cluster_Bare.png"); the file must share at least one word with the material
+        let matched = tokens.iter().filter(|w| stem.contains(**w)).count() as i32;
+        if matched == 0 || stem.ends_with("_opacity") || stem.ends_with("_normal") || stem.ends_with("_ao") || stem.ends_with("_roughness") {
+            continue;
+        }
+        let score = matched * 10 + if COLOR_SUFFIXES.iter().any(|s| stem.ends_with(s)) { 3 } else { 0 } + if stem.contains("summer") { 2 } else { 0 } - (stem.len() as i32 / 64);
+        if best.is_none_or(|(s, _)| score > s) {
+            best = Some((score, p));
+        }
+    }
+    best.map(|(_, p)| p.clone())
+}
+
 fn read_image(path: &Path) -> Option<image::RgbaImage> {
     let data = crate::vfs::read(path).ok()?;
     image::load_from_memory(&data).ok().map(|i| i.to_rgba8())
@@ -668,6 +696,9 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 node_of.insert(id, model.nodes.len());
                 model_ids.push(id);
                 let tf = Transform::of(o);
+                if std::env::var_os("SPARK_FBX_DEBUG").is_some() && clean_name(o.text(1).unwrap_or("")) == "Bip01" {
+                    log::warn!("{name}: Bip01 props: t={:?} pre={:?} r={:?} post={:?} s={:?} order={} all={:?}", tf.t, tf.pre, tf.r, tf.post, tf.s, tf.order, o.child("Properties70").map(|p| p.all("P").map(|n| n.text(0).unwrap_or("").to_owned()).collect::<Vec<_>>()));
+                }
                 model.nodes.push(ModelNode {
                     name: clean_name(o.text(1).unwrap_or("node")),
                     parent: Some(0),
@@ -748,6 +779,9 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 continue;
             };
             let lp = prop.to_lowercase();
+            if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
+                log::warn!("{name}: material {id} texture prop \"{prop}\" -> {file}");
+            }
             if lp.contains("normal") || lp.contains("bump") {
                 if m.normal_map.is_none() {
                     m.normal_map = load_plain_texture(&path_found, assets, &mut tex_cache);
@@ -776,10 +810,14 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         if m.texture.is_none() {
             // No texture connected (some exporters drop the link): look for files named after the material.
             let mat_name = objects.get(&id).and_then(|o| o.text(1)).map(|s| norm_name(&clean_name(s))).unwrap_or_default();
+            if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
+                log::warn!("{name}: material {id} has no color texture; name \"{mat_name}\"");
+            }
             if !mat_name.is_empty() {
                 let mut suffixes: Vec<&str> = vec![""];
                 suffixes.extend_from_slice(COLOR_SUFFIXES);
-                if let Some(p) = find_sibling(dir, &mat_name, &suffixes, &mut dir_cache) {
+                let found = find_sibling(dir, &mat_name, &suffixes, &mut dir_cache).or_else(|| find_by_tokens(dir, &mat_name, &mut dir_cache));
+                if let Some(p) = found {
                     let set = set_cache.entry(p.clone()).or_insert_with(|| build_texture_set(&p, &mut dir_cache, assets)).clone();
                     m.texture = set.color;
                     if m.texture.is_some() {
@@ -886,7 +924,20 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         worst_name = model.nodes[c.bone_node].name.clone();
                     }
                 }
-                log::warn!("{name}: skin bind pose deviation {worst:.4} (bone {worst_name}), {} clusters; transform={:?} link0={:?}", cl.len(), cl[0].transform.to_cols_array(), cl[0].link.to_cols_array());
+                log::warn!("{name}: skin bind pose deviation {worst:.4} (bone {worst_name}), {} clusters", cl.len());
+                if worst > 0.01 {
+                    for c in cl.iter().take(3) {
+                        let n = &model.nodes[c.bone_node];
+                        let mut chain = Vec::new();
+                        let mut cur = Some(c.bone_node);
+                        while let Some(i) = cur {
+                            let m = &model.nodes[i];
+                            chain.push(format!("{} t={:?} r={:?} s={:?}", m.name, m.translation, m.rotation.to_euler(glam::EulerRot::XYZ), m.scale));
+                            cur = m.parent;
+                        }
+                        log::warn!("  bone {} link={:?}\n    global={:?}\n    chain: {}", n.name, c.link.to_cols_array(), (root_inv * model.node_matrix(c.bone_node)).to_cols_array(), chain.join(" <- "));
+                    }
+                }
             }
             model.skins.push(Skin { joints, inverse_bind });
             skin_index = Some(model.skins.len() - 1);
@@ -1015,7 +1066,10 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         if stack.name != "AnimationStack" {
             continue;
         }
-        let mut clip = Clip { name: clean_name(stack.text(1).unwrap_or("take")), duration: 0.0, channels: Vec::new() };
+        // "skeleton|walk" (Blender / Source exports prefix the armature name) -> "walk"
+        let full = clean_name(stack.text(1).unwrap_or("take"));
+        let short = full.rsplit('|').next().unwrap_or(&full).to_owned();
+        let mut clip = Clip { name: if short.is_empty() { full } else { short }, duration: 0.0, channels: Vec::new() };
         let layers: Vec<i64> = children_of(stack_id, "AnimationLayer").iter().map(|c| c.src).collect();
         for layer in layers {
             for cn in children_of(layer, "AnimationCurveNode") {
