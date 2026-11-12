@@ -99,8 +99,8 @@ spark build mygame        # dist/mygame(.exe) — один файл, всё вн
 spark update              # потом: поставить свежую версию Spark
 ```
 
-В готовых релизах и установочных скриптах есть только консольная команда `spark`. Spark Editor (`spark editor`) —
-отдельная программа: пока он собирается из исходников, см. [Spark Editor](#spark-editor).
+Релизные архивы и установочные скрипты кладут `spark` и `spark-editor` рядом; установщики проверяют SHA-256,
+опубликованный рядом с каждым архивом. `spark editor` запускает [Spark Editor](#spark-editor).
 
 Или скачай архив для своей системы со страницы [Releases](https://github.com/AcelateOrg/Spark/releases) и положи
 `spark` / `spark.exe` куда угодно. Бинарники пока не подписаны: Windows SmartScreen может написать «Неизвестный
@@ -148,8 +148,8 @@ target/release/spark new mygame
 - F5 запускает игру в отдельном процессе — ровно так, как её получат игроки; живая связь (`spark-devtools`, TCP на localhost)
   показывает статистику и сцену запущенной игры, умеет ставить на паузу, шагать и перезагружать
 
-Это отдельная программа рядом с `spark`: `spark editor [path/to/game]` её запускает. В архивы релизов она пока не входит —
-собери из исходников (нужен Rust 1.95+):
+Это отдельная программа рядом с `spark` (в релизных архивах она есть): `spark editor [path/to/game]` её запускает.
+Чтобы собрать из исходников, нужен Rust 1.95+:
 
 ```
 cargo build --release -p spark-cli -p spark-editor

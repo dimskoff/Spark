@@ -1,5 +1,5 @@
 # Create a release on GitHub (Releases > Draft a new release, tag v0.1.0): this builds spark on Windows, Linux and
-# macOS and attaches spark-windows-x64.zip, spark-linux-x64.tar.gz and spark-macos-arm64.tar.gz to it.
+# macOS and attaches spark-windows-x64.zip, spark-linux-x64.tar.gz and spark-macos-arm64.tar.gz (each holds `spark` and\n# `spark-editor`) plus a .sha256 file per archive to it. The installers verify that checksum.
 # The asset names are what install.ps1, install.sh and `spark update` download - keep them in sync.
 # Run it by hand (Actions > Release > Run workflow) to only build the archives as workflow artifacts.
 name: Release
@@ -22,13 +22,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, exe: spark.exe, asset: spark-windows-x64.zip }
-          - { os: ubuntu-latest, exe: spark, asset: spark-linux-x64.tar.gz }
-          - { os: macos-latest, exe: spark, asset: spark-macos-arm64.tar.gz }
+          - { os: windows-latest, exe: spark.exe, editor: spark-editor.exe, asset: spark-windows-x64.zip }
+          - { os: ubuntu-latest, exe: spark, editor: spark-editor, asset: spark-linux-x64.tar.gz }
+          - { os: macos-latest, exe: spark, editor: spark-editor, asset: spark-macos-arm64.tar.gz }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
 
       - name: Linux packages
@@ -38,14 +38,17 @@ jobs:
           sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-dev libdbus-1-dev pkg-config
 
       - name: Build
-        run: cargo build --release -p spark-cli
+        run: |
+          cargo build --release -p spark-cli
+          # Separate invocation: `--features gui` must not reach spark-cli (it has a feature of the same name).
+          cargo build --release -p spark-editor --features gui
 
       - name: Package (zip)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/release/spark.exe, LICENSE, README.md dist/
+          Copy-Item target/release/spark.exe, target/release/spark-editor.exe, LICENSE, README.md dist/
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.asset }} -Force
 
       - name: Package (tar.gz)
@@ -53,22 +56,32 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp target/release/spark LICENSE README.md install.sh dist/
-          chmod +x dist/spark dist/install.sh
+          cp target/release/spark target/release/spark-editor LICENSE README.md install.sh dist/
+          chmod +x dist/spark dist/spark-editor dist/install.sh
           tar -czf ${{ matrix.asset }} -C dist .
 
       - name: Smoke test
         shell: bash
-        run: dist/${{ matrix.exe }} --version
+        run: |
+          dist/${{ matrix.exe }} --version
+          dist/${{ matrix.editor }} --version
+
+      - name: Checksum
+        shell: bash
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+          else shasum -a 256 "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"; fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
-          path: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
 
       - name: Attach to release
         if: github.event_name == 'release'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "${{ matrix.asset }}" --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ matrix.asset }}" "${{ matrix.asset }}.sha256" --clobber

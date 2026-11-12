@@ -109,12 +109,11 @@ fn push(out: &mut Vec<Span>, range: Range<usize>, token: Token) {
     if range.is_empty() {
         return;
     }
-    if let Some((last, t)) = out.last_mut() {
-        if *t == token && last.end == range.start {
+    if let Some((last, t)) = out.last_mut()
+        && *t == token && last.end == range.start {
             last.end = range.end;
             return;
         }
-    }
     out.push((range, token));
 }
 
@@ -154,13 +153,12 @@ fn code(text: &str, keywords: &[&str], builtins: &[&str], comments: Comments) ->
             Comments::CLike => c == b'/' && s.get(i + 1) == Some(&b'/'),
         };
         if line_comment {
-            if comments == Comments::Luau {
-                if let Some(level) = long_bracket(&s[i + 2..]) {
+            if comments == Comments::Luau
+                && let Some(level) = long_bracket(&s[i + 2..]) {
                     i = find_long_close(s, i + 4 + level, level);
                     push(&mut out, start..i, Token::Comment);
                     continue;
                 }
-            }
             while i < s.len() && s[i] != b'\n' {
                 i += 1;
             }
@@ -189,13 +187,12 @@ fn code(text: &str, keywords: &[&str], builtins: &[&str], comments: Comments) ->
             push(&mut out, start..i, Token::String);
             continue;
         }
-        if comments == Comments::Luau {
-            if let Some(level) = long_bracket(&s[i..]) {
+        if comments == Comments::Luau
+            && let Some(level) = long_bracket(&s[i..]) {
                 i = find_long_close(s, i + 2 + level, level);
                 push(&mut out, start..i, Token::String);
                 continue;
             }
-        }
         // Numbers
         if c.is_ascii_digit() || (c == b'.' && s.get(i + 1).is_some_and(u8::is_ascii_digit)) {
             i += 1;

@@ -1,0 +1,6 @@
+# Pinned so that CI (clippy -D warnings) does not turn red whenever a new stable adds lints.
+# Bump it on purpose: change the version here and in .github/workflows/*.yml, fix new lints, commit.
+# The engine itself still builds with Rust 1.85+ (`rust-version` in Cargo.toml); Spark Editor needs 1.95+.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

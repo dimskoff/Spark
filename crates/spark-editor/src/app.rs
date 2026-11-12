@@ -128,12 +128,11 @@ impl EditorApp {
         if !ctx.input(|i| i.viewport().close_requested()) || self.quit_confirmed {
             return;
         }
-        if let Screen::Workspace(ws) = &self.screen {
-            if ws.has_unsaved() {
+        if let Screen::Workspace(ws) = &self.screen
+            && ws.has_unsaved() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.confirm_quit = true;
             }
-        }
     }
 
     fn quit_dialog(&mut self, ctx: &egui::Context) {
@@ -159,11 +158,10 @@ impl EditorApp {
             });
         });
         if let Some(save) = choice {
-            if let Screen::Workspace(ws) = &mut self.screen {
-                if save {
+            if let Screen::Workspace(ws) = &mut self.screen
+                && save {
                     ws.save_all(&mut self.toasts);
                 }
-            }
             self.confirm_quit = false;
             self.quit_confirmed = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);

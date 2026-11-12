@@ -83,7 +83,7 @@ pub fn set_exe_icon(exe: &[u8], img: &RgbaImage) -> Result<Vec<u8>, String> {
             for (i, png) in pngs.iter().enumerate() {
                 ok &= UpdateResourceW(h, RT_ICON as *const u16, (i + 1) as *const u16, 0, png.as_ptr().cast(), png.len() as u32) != 0;
             }
-            ok &= UpdateResourceW(h, RT_GROUP_ICON as *const u16, 1usize as *const u16, 0, group.as_ptr().cast(), group.len() as u32) != 0;
+            ok &= UpdateResourceW(h, RT_GROUP_ICON as *const u16, std::ptr::dangling::<u16>(), 0, group.as_ptr().cast(), group.len() as u32) != 0;
             if !ok {
                 EndUpdateResourceW(h, 1);
                 Err("UpdateResource failed".to_string())

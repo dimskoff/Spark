@@ -10,7 +10,9 @@
 #   SPARK_NO_PATH = 1               do not print PATH hints
 #   SPARK_ARCHIVE = file.tar.gz     install from a local spark-<os>-<arch>.tar.gz (testing)
 #   SPARK_REPO    = owner/repo      download from a fork (default AcelateOrg/Spark)
+#   SPARK_ALLOW_UNVERIFIED = 1      install a release that has no .sha256 file (the checksum is verified otherwise)
 #
+# Installs `spark` and, when the archive has it, `spark-editor` (`spark editor`).
 # Prebuilt: Linux x64, macOS arm64 (Apple Silicon). Anything else: build from source
 #   git clone https://github.com/AcelateOrg/Spark.git && cd Spark && cargo build --release -p spark-cli
 set -eu
@@ -66,22 +68,47 @@ else
     fi
     echo "Downloading Spark $tag ($asset) ..."
     download "$url" "$tmp/spark.tar.gz" || fail "download failed: $url (does release $tag have $asset?)"
+    # The release publishes <asset>.sha256 next to every archive: refuse a corrupted or tampered download.
+    if download "$url.sha256" "$tmp/spark.sha256" 2>/dev/null; then
+        expected="$(cut -d' ' -f1 "$tmp/spark.sha256" | head -n 1)"
+        if command -v sha256sum >/dev/null 2>&1; then
+            actual="$(sha256sum "$tmp/spark.tar.gz" | cut -d' ' -f1)"
+        elif command -v shasum >/dev/null 2>&1; then
+            actual="$(shasum -a 256 "$tmp/spark.tar.gz" | cut -d' ' -f1)"
+        else
+            actual=""
+            echo "spark install: warning: no sha256sum / shasum, the download is not verified" >&2
+        fi
+        if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
+            fail "checksum mismatch for $asset (expected $expected, got $actual)"
+        fi
+    elif [ -z "${SPARK_ALLOW_UNVERIFIED:-}" ]; then
+        fail "release $tag has no $asset.sha256, so the download cannot be verified (older release? set SPARK_ALLOW_UNVERIFIED=1 to install anyway)"
+    fi
 fi
 
 mkdir -p "$tmp/x" "$bin"
 tar -xzf "$tmp/spark.tar.gz" -C "$tmp/x" || fail "$asset is not a valid .tar.gz"
-new="$(find "$tmp/x" -type f -name spark | head -n 1)"
-[ -n "$new" ] || fail "$asset does not contain the spark executable"
-chmod +x "$new"
-# macOS: files downloaded by a browser are quarantined; curl doesn't do that, but a local archive might.
-if [ "$os" = macos ] && command -v xattr >/dev/null 2>&1; then
-    xattr -d com.apple.quarantine "$new" 2>/dev/null || true
-fi
 
-# Replace atomically: a running spark (`spark update`) keeps its old inode.
-cp "$new" "$bin/spark.new"
-chmod 755 "$bin/spark.new"
-mv -f "$bin/spark.new" "$bin/spark"
+# install_exe NAME [required]: copies NAME from the archive into $bin. Replaced atomically: a running
+# spark (`spark update`) keeps its old inode.
+install_exe() {
+    found="$(find "$tmp/x" -type f -name "$1" | head -n 1)"
+    if [ -z "$found" ]; then
+        [ "${2:-}" = required ] && fail "$asset does not contain $1"
+        return 0
+    fi
+    chmod +x "$found"
+    # macOS: files downloaded by a browser are quarantined; curl doesn't do that, but a local archive might.
+    if [ "$os" = macos ] && command -v xattr >/dev/null 2>&1; then
+        xattr -d com.apple.quarantine "$found" 2>/dev/null || true
+    fi
+    cp "$found" "$bin/$1.new"
+    chmod 755 "$bin/$1.new"
+    mv -f "$bin/$1.new" "$bin/$1"
+}
+install_exe spark required
+install_exe spark-editor
 
 if [ -z "${SPARK_NO_PATH:-}" ]; then
     case ":$PATH:" in
@@ -95,4 +122,5 @@ fi
 
 "$bin/spark" --version
 echo "Spark $tag installed to $bin/spark"
+[ -x "$bin/spark-editor" ] && echo "Editor: spark editor"
 echo "Next:  spark new mygame   then   spark mygame"

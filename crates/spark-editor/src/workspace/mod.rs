@@ -594,11 +594,10 @@ impl Workspace {
             self.active_doc = Some(path.clone());
         }
         // The active document was closed by its tab button.
-        if let Some(p) = &self.active_doc {
-            if self.docs.get(p).is_none() {
+        if let Some(p) = &self.active_doc
+            && self.docs.get(p).is_none() {
                 self.active_doc = self.dock.iter_all_tabs().find_map(|(_, t)| if let Tab::Doc(p) = t { Some(p.clone()) } else { None });
             }
-        }
     }
 
     // ------------------------------------------------------------------ dialogs

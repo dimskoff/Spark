@@ -119,11 +119,10 @@ impl WelcomeScreen {
         ui.horizontal(|ui| {
             ui.add(egui::TextEdit::singleline(&mut self.search).hint_text(format!("{}  {}", icon::SEARCH, t("welcome.search"))).desired_width(280.0));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.button(t("welcome.open")).on_hover_text(t("welcome.open_hint")).clicked() {
-                    if let Some(dir) = rfd::FileDialog::new().set_title(t("welcome.open_title")).set_directory(settings.projects_dir()).pick_folder() {
+                if ui.button(t("welcome.open")).on_hover_text(t("welcome.open_hint")).clicked()
+                    && let Some(dir) = rfd::FileDialog::new().set_title(t("welcome.open_title")).set_directory(settings.projects_dir()).pick_folder() {
                         *action = Some(AppAction::OpenProject(dir));
                     }
-                }
                 if ui.add(theme::primary_button(t("welcome.new_project"))).clicked() {
                     self.new_project = Some(NewProject { name: unique_name(settings), location: settings.projects_dir().display().to_string(), error: None, focus: true });
                 }
@@ -184,11 +183,10 @@ impl WelcomeScreen {
                 ui.label(t("welcome.location"));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut np.location).desired_width(270.0));
-                    if ui.button(t("common.browse")).clicked() {
-                        if let Some(dir) = rfd::FileDialog::new().set_directory(&np.location).pick_folder() {
+                    if ui.button(t("common.browse")).clicked()
+                        && let Some(dir) = rfd::FileDialog::new().set_directory(&np.location).pick_folder() {
                             np.location = dir.display().to_string();
                         }
-                    }
                 });
                 ui.end_row();
             });
@@ -338,11 +336,10 @@ pub fn settings_page(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
                 if r.changed() {
                     settings.spark_path = (!text.trim().is_empty()).then(|| PathBuf::from(text.trim()));
                 }
-                if ui.button(t("common.browse")).clicked() {
-                    if let Some(p) = rfd::FileDialog::new().pick_file() {
+                if ui.button(t("common.browse")).clicked()
+                    && let Some(p) = rfd::FileDialog::new().pick_file() {
                         settings.spark_path = Some(p);
                     }
-                }
             });
             let found = process::find_spark(settings.spark_path.as_deref());
             match found {

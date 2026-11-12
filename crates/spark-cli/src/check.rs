@@ -140,8 +140,11 @@ pub fn check(path: &Path, frames: u32) -> Report {
             report.errors.push(parse_error(&e.to_string(), &name));
         }
     }
+    // 1b. Assets, whether a script loads them in the first N frames or not: WGSL shaders compile and validate,
+    // images and glTF models decode. (The GPU itself is not used, so pipeline-level failures still need a render.)
+    check_assets(&dir, &mut report);
     if !report.ok() {
-        // Running would only repeat the syntax error.
+        // Running would only repeat the static errors.
         return report;
     }
 
@@ -165,6 +168,48 @@ pub fn check(path: &Path, frames: u32) -> Report {
         let _ = std::fs::remove_file(&error_log);
     }
     report
+}
+
+/// Files below `dir` with one of `exts` (lowercase, no dot), relative to `root`, sorted, without hidden / build folders.
+fn files_with_ext(root: &Path, dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for path in entries {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if name.starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            if !SKIP_DIRS.contains(&name.as_str()) {
+                files_with_ext(root, &path, exts, out);
+            }
+        } else if path.extension().is_some_and(|e| exts.contains(&e.to_string_lossy().to_lowercase().as_str())) {
+            out.push(path.strip_prefix(root).unwrap_or(&path).to_path_buf());
+        }
+    }
+}
+
+/// Static checks of the game's assets: every `.wgsl` compiles and validates (the same check `Shader.load` runs),
+/// every `.png` / `.jpg` decodes, every `.gltf` / `.glb` parses.
+fn check_assets(dir: &Path, report: &mut Report) {
+    let mut files = Vec::new();
+    files_with_ext(dir, dir, &["wgsl", "png", "jpg", "jpeg", "gltf", "glb"], &mut files);
+    for rel in files {
+        let name = rel.to_string_lossy().replace('\\', "/");
+        let full = dir.join(&rel);
+        let ext = rel.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let result = match ext.as_str() {
+            "wgsl" => std::fs::read_to_string(&full)
+                .map_err(|e| format!("cannot read: {e}"))
+                .and_then(|code| engine::shader::ShaderData::compile(&name, &code).map(|_| ())),
+            "png" | "jpg" | "jpeg" => engine::ImageData::load(&full).map(|_| ()),
+            _ => engine::model::ModelData::load(&full, &mut engine::Assets::new()).map(|_| ()),
+        };
+        if let Err(e) = result {
+            report.errors.push(problem(&name, None, &e));
+        }
+    }
 }
 
 fn problem(file: &str, line: Option<u32>, message: &str) -> Problem {
@@ -326,6 +371,20 @@ mod tests {
         assert!(game.error().is_none(), "{:?}", game.error());
         assert!(world.quit_requested());
         assert_eq!(world.input.text, "", "cleared after the frame");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn finds_broken_assets_nobody_loads() {
+        let dir = game(&[
+            ("main.luau", "function start() end\n"),
+            ("assets/shaders/good.wgsl", "fn fragment(f: Fragment) -> vec4<f32> { return vec4<f32>(1.0, 0.0, 0.0, 1.0); }\n"),
+            ("assets/shaders/bad.wgsl", "fn fragment(f: Fragment) -> vec4<f32> { return nope; }\n"),
+            ("assets/textures/broken.png", "this is not a png"),
+        ]);
+        let r = check(&dir, 5);
+        let files: Vec<_> = r.errors.iter().map(|e| e.file.as_str()).collect();
+        assert_eq!(files, ["assets/shaders/bad.wgsl", "assets/textures/broken.png"], "{:?}", r.errors);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

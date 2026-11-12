@@ -249,11 +249,10 @@ impl Viewport {
         let mut game = ScriptGame::new(self.entry.clone()).hot_reload(play);
         let mut world = World::new();
         world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
-        if play && !self.mute {
-            if let Some(audio) = engine::audio::KiraBackend::new() {
+        if play && !self.mute
+            && let Some(audio) = engine::audio::KiraBackend::new() {
                 world.audio.set_backend(Box::new(audio));
             }
-        }
         if let Some(t) = &self.target {
             world.canvas.set_output_size(t.size.0, t.size.1);
         }
@@ -405,11 +404,10 @@ impl Viewport {
                 )
             });
         }
-        if self.focused && !focused {
-            if let Some(s) = &mut self.session {
+        if self.focused && !focused
+            && let Some(s) = &mut self.session {
                 s.world.input.release_all();
             }
-        }
         self.focused = focused;
 
         let now = Instant::now();
@@ -482,11 +480,10 @@ impl Viewport {
                 if self.mode == Mode::Edit { self.build(false) } else { self.play() }
             }
             ui.separator();
-            if ui.button("🎥").on_hover_text(t("viewport.camera_reset")).clicked() {
-                if let Some(s) = &self.session {
+            if ui.button("🎥").on_hover_text(t("viewport.camera_reset")).clicked()
+                && let Some(s) = &self.session {
                     self.cam = FlyCam::from_camera(&s.world.scene.camera, self.cam.speed);
                 }
-            }
             let sound = if self.mute { "🔇" } else { "🔊" };
             if ui.selectable_label(!self.mute, sound).on_hover_text(t("viewport.sound_hint")).clicked() {
                 self.mute = !self.mute;
@@ -590,12 +587,11 @@ impl Viewport {
             sync_modifier(input, i.modifiers.ctrl, SKey::LCtrl, SKey::RCtrl);
             sync_modifier(input, i.modifiers.alt, SKey::LAlt, SKey::RAlt);
         });
-        if !locked {
-            if let Some(p) = pointer_moved {
+        if !locked
+            && let Some(p) = pointer_moved {
                 let local = (p - rect.min) * ppp;
                 input.mouse_moved(Vec2::new(local.x, local.y));
             }
-        }
         if release_grab {
             // Esc frees the mouse (the game still sees the key, e.g. to open its menu).
             ui.ctx().memory_mut(|m| {
@@ -634,11 +630,10 @@ impl Viewport {
         match (want, self.grab) {
             (true, Grab::Game { .. }) => {
                 let d = self.pinned_motion(ctx, pointer_moved);
-                if d != egui::Vec2::ZERO {
-                    if let Some(s) = &mut self.session {
+                if d != egui::Vec2::ZERO
+                    && let Some(s) = &mut self.session {
                         s.world.input.mouse_motion(Vec2::new(d.x, d.y));
                     }
-                }
             }
             (true, _) => {
                 // Pin at the panel center (the first motion only takes the cursor there).

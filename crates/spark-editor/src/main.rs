@@ -10,7 +10,7 @@
 //! - [`app`]        screens (welcome / workspace), settings, global window state
 //! - [`welcome`]    project manager: recent projects, new project, open, settings
 //! - [`workspace`]  an open game: dockable panels (explorer, code editor, console, problems, debugger, scene,
-//!                  viewport)
+//!   viewport)
 //! - [`logcap`]     the logger; copies engine messages of the in-editor game to the console
 //! - [`process`]    child processes: the game (`spark --devtools`), `spark check`, `spark build`
 //! - devtools       the live link to the running game (crate `spark-devtools`)

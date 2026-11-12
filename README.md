@@ -98,8 +98,8 @@ spark build mygame        # dist/mygame(.exe) - one file with everything inside
 spark update              # later: install the newest Spark
 ```
 
-The prebuilt release archives and the install scripts contain only the `spark` command line. Spark Editor
-(`spark editor`) is a separate program: build it from source, see [Spark Editor](#spark-editor).
+The release archives and the install scripts put `spark` and `spark-editor` side by side; the installers verify the
+SHA-256 published next to each archive. `spark editor` starts [Spark Editor](#spark-editor).
 
 Or download the archive for your system from [Releases](https://github.com/AcelateOrg/Spark/releases) and put
 `spark` / `spark.exe` anywhere you like. The binaries are not code-signed yet: Windows SmartScreen may say
@@ -148,8 +148,8 @@ code, the editor helps you work with it.
 - F5 runs the game in its own process exactly as players get it; a live link (`spark-devtools`, TCP on localhost)
   shows stats and the scene of the running game and can pause, step and reload it
 
-It is a separate program installed next to `spark`: `spark editor [path/to/game]` starts it. The release archives
-do not include it yet, build it from source (needs Rust 1.95+):
+It is a separate program installed next to `spark` (the release archives include it): `spark editor [path/to/game]`
+starts it. To build it from source you need Rust 1.95+:
 
 ```
 cargo build --release -p spark-cli -p spark-editor

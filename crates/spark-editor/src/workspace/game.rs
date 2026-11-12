@@ -222,8 +222,8 @@ impl GameSession {
         let mut events = Vec::new();
 
         // The game connects back to our server shortly after it starts.
-        if self.link.is_none() {
-            if let Some(server) = &self.server {
+        if self.link.is_none()
+            && let Some(server) = &self.server {
                 match server.accept::<EditorCommand, GameMessage>() {
                     Some(Ok(link)) => {
                         link.send(EditorCommand::WatchScene { interval_ms: Some(SCENE_INTERVAL_MS) });
@@ -237,7 +237,6 @@ impl GameSession {
                     None => {}
                 }
             }
-        }
         if let Some(link) = &self.link {
             let messages: Vec<GameMessage> = link.drain().collect();
             let alive = link.is_alive();
@@ -386,11 +385,10 @@ impl GameSession {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new(format!("{} {}", icon::ERROR, t("game.script_error"))).color(theme::ERROR).strong());
                 ui.add(egui::Label::new(RichText::new(err).monospace().color(theme::TEXT)).wrap());
-                if let Some(loc) = find_location(err) {
-                    if ui.link(tf("console.open_at", &[("file", &loc.file), ("line", &loc.line)])).clicked() {
+                if let Some(loc) = find_location(err)
+                    && ui.link(tf("console.open_at", &[("file", &loc.file), ("line", &loc.line)])).clicked() {
                         actions.push(Action::OpenAt(PathBuf::from(&loc.file), loc.line));
                     }
-                }
             });
         }
 
@@ -477,8 +475,8 @@ impl GameSession {
 impl Drop for GameSession {
     /// Closing the project closes its game: politely first, then the hard way.
     fn drop(&mut self) {
-        if let (Some(job), Some(link)) = (self.run.as_mut(), self.link.as_ref()) {
-            if job.is_running() && link.send(EditorCommand::Quit) {
+        if let (Some(job), Some(link)) = (self.run.as_mut(), self.link.as_ref())
+            && job.is_running() && link.send(EditorCommand::Quit) {
                 let clock = Instant::now();
                 let until = Instant::now() + Duration::from_millis(800);
                 while Instant::now() < until && job.is_running() {
@@ -486,7 +484,6 @@ impl Drop for GameSession {
                     std::thread::sleep(Duration::from_millis(20));
                 }
             }
-        }
         // `Job::drop` kills whatever is still running.
     }
 }
@@ -509,7 +506,7 @@ fn group_digits(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(' ');
         }
         out.push(c);

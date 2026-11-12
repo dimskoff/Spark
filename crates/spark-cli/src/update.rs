@@ -106,6 +106,7 @@ mod tests {
         for a in ["spark-windows-x64.zip", "spark-linux-x64.tar.gz", "spark-macos-arm64.tar.gz"] {
             assert!(workflow.contains(a), "release.yml does not build {a}");
         }
+        assert!(workflow.contains(".sha256") && workflow.contains("spark-editor"), "release.yml must publish checksums and the editor");
         let sh = include_str!("../../../install.sh");
         assert!(sh.contains("spark-linux-x64.tar.gz") || sh.contains("spark-$os-$arch.tar.gz"));
     }

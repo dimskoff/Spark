@@ -134,12 +134,11 @@ impl Job {
             lines.push(parse_line(self.kind, stream, &text, clock.elapsed().as_secs_f64()));
         }
         let mut finished = None;
-        if self.state == JobState::Running {
-            if let Ok(Some(status)) = self.child.try_wait() {
+        if self.state == JobState::Running
+            && let Ok(Some(status)) = self.child.try_wait() {
                 self.state = JobState::Exited(exit_code(status));
                 finished = Some(self.state.clone());
             }
-        }
         (lines, finished)
     }
 
@@ -196,10 +195,11 @@ pub fn editor_line(job: JobKind, level: Level, text: impl Into<String>, clock: &
 
 /// Understands env_logger lines (`[INFO ] text`, `[WARN  spark] text`) and Spark error lines.
 pub fn parse_line(job: JobKind, stream: Stream, raw: &str, time: f64) -> LogLine {
-    let mut level = if stream == Stream::Stderr { Level::Info } else { Level::Info };
+    let _ = stream; // stderr and stdout lines are classified the same way
+    let mut level = Level::Info;
     let mut text = raw;
-    if let Some(rest) = raw.strip_prefix('[') {
-        if let Some(end) = rest.find(']') {
+    if let Some(rest) = raw.strip_prefix('[')
+        && let Some(end) = rest.find(']') {
             let tag = rest[..end].split_whitespace().next().unwrap_or("");
             let parsed = match tag {
                 "TRACE" => Some(Level::Trace),
@@ -214,7 +214,6 @@ pub fn parse_line(job: JobKind, stream: Stream, raw: &str, time: f64) -> LogLine
                 text = rest[end + 1..].trim_start();
             }
         }
-    }
     let lower = text.to_ascii_lowercase();
     if level < Level::Warn && (lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error")) {
         level = Level::Error;

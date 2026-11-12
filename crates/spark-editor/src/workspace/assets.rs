@@ -49,6 +49,8 @@ pub fn icon_for(path: &Path) -> &'static str {
     }
 }
 
+// Boxing `ModelPreview` (it owns a renderer) would only add an indirection for a handful of open previews.
+#[allow(clippy::large_enum_variant)]
 enum Preview {
     Image(ImagePreview),
     Sound(SoundPreview),
@@ -158,7 +160,7 @@ fn fmt_count(n: usize) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(' ');
         }
         out.push(c);
@@ -859,11 +861,10 @@ impl ModelPreview {
                     self.paused = !self.paused;
                 }
                 ui.label(t("asset.speed"));
-                if ui.add(egui::DragValue::new(&mut self.speed).speed(0.02).range(0.0..=5.0).suffix("×")).changed() {
-                    if let (Some(world), Some(root)) = (&mut self.world, self.root) {
+                if ui.add(egui::DragValue::new(&mut self.speed).speed(0.02).range(0.0..=5.0).suffix("×")).changed()
+                    && let (Some(world), Some(root)) = (&mut self.world, self.root) {
                         engine::animation::set_speed(world, root, self.speed);
                     }
-                }
             }
             ui.separator();
             ui.toggle_value(&mut self.spin, "⟲").on_hover_text(t("asset.spin_hint"));
@@ -922,11 +923,10 @@ impl ModelPreview {
         }
 
         let animating = self.clip.is_some() && !self.paused;
-        if let Some(world) = &mut self.world {
-            if animating {
+        if let Some(world) = &mut self.world
+            && animating {
                 engine::animation::update(world, dt);
             }
-        }
         if self.spin && !response.dragged() {
             self.orbit.yaw += dt * 0.6;
         }

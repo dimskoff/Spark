@@ -2,13 +2,13 @@
 #
 #   irm https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.ps1 | iex
 #
-# Downloads spark.exe from the latest GitHub release into %LOCALAPPDATA%\Spark\bin and adds it to the user PATH.
+# Downloads spark.exe (and spark-editor.exe, when the archive has it) from the latest GitHub release into\n# %LOCALAPPDATA%\Spark\bin, verifies the SHA-256 published next to the archive and adds the folder to the user PATH.
 # Run it again (or `spark update`) to update. Options (environment variables):
 #   SPARK_VERSION = v0.1.0     install this release instead of the latest
 #   SPARK_BIN     = C:\tools   install into this folder
 #   SPARK_NO_PATH = 1          do not touch PATH
 #   SPARK_ZIP     = file.zip   install from a local spark-windows-x64.zip (testing)
-#   SPARK_REPO    = owner/repo download from a fork (default AcelateOrg/Spark)
+#   SPARK_REPO    = owner/repo download from a fork (default AcelateOrg/Spark)\n#   SPARK_ALLOW_UNVERIFIED = 1 install a release that has no .sha256 file
 #
 # Linux / macOS: curl -fsSL https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.sh | sh
 
@@ -36,19 +36,34 @@ try {
         $tag = $release.tag_name
         Write-Host "Downloading Spark $tag ..."
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing
+        $sumAsset = $release.assets | Where-Object { $_.name -eq "$assetName.sha256" } | Select-Object -First 1
+        if ($sumAsset) {
+            $sumFile = Join-Path $tmp 'spark.sha256'
+            Invoke-WebRequest -Uri $sumAsset.browser_download_url -OutFile $sumFile -UseBasicParsing
+            $expected = ((Get-Content $sumFile -TotalCount 1) -split '\s+')[0].ToLower()
+            $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+            if ($actual -ne $expected) { throw "checksum mismatch for $assetName (expected $expected, got $actual)" }
+        } elseif (-not $env:SPARK_ALLOW_UNVERIFIED) {
+            throw "release $tag has no $assetName.sha256, so the download cannot be verified (older release? set SPARK_ALLOW_UNVERIFIED=1 to install anyway)"
+        }
     }
     Expand-Archive -Path $zip -DestinationPath (Join-Path $tmp 'x') -Force
-    $new = Join-Path $tmp 'x\spark.exe'
-    if (-not (Test-Path $new)) { throw "$assetName does not contain spark.exe" }
 
+    function Install-Exe([string]$name, [bool]$required) {
+        $src = Join-Path $tmp "x\$name"
+        if (-not (Test-Path $src)) { if ($required) { throw "$assetName does not contain $name" } else { return } }
+        $dst = Join-Path $bin $name
+        # Leftovers of earlier updates (deleted once they are no longer running).
+        Get-ChildItem $bin -Filter "$name.old*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        # A running spark.exe (`spark update`) can't be overwritten, but it can be renamed.
+        if (Test-Path $dst) { Move-Item $dst "$dst.old-$([DateTime]::Now.Ticks)" -Force }
+        Copy-Item $src $dst -Force
+        # Not running (fresh install, installer started by hand): remove it right away.
+        Get-ChildItem $bin -Filter "$name.old*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    }
     $exe = Join-Path $bin 'spark.exe'
-    # Leftovers of earlier updates (deleted once they are no longer running).
-    Get-ChildItem $bin -Filter 'spark.exe.old*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-    # A running spark.exe (`spark update`) can't be overwritten, but it can be renamed.
-    if (Test-Path $exe) { Move-Item $exe "$exe.old-$([DateTime]::Now.Ticks)" -Force }
-    Copy-Item $new $exe -Force
-    # Not running (fresh install, installer started by hand): remove it right away.
-    Get-ChildItem $bin -Filter 'spark.exe.old*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    Install-Exe 'spark.exe' $true
+    Install-Exe 'spark-editor.exe' $false
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
@@ -65,4 +80,5 @@ if (-not $env:SPARK_NO_PATH) {
 
 & $exe --version
 Write-Host "Spark $tag installed to $exe"
+if (Test-Path (Join-Path $bin 'spark-editor.exe')) { Write-Host "Editor: spark editor" }
 Write-Host "Next:  spark new mygame   then   spark mygame"
