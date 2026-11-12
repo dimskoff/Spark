@@ -20,8 +20,9 @@ fn sky_vs(@builtin(vertex_index) i: u32) -> SkyOut {
 
 @fragment
 fn sky_fs(o: SkyOut) -> @location(0) vec4<f32> {
-    let far = frame.inv_view_proj * vec4<f32>(o.ndc, 1.0, 1.0);
-    let near = frame.inv_view_proj * vec4<f32>(o.ndc, 0.0, 1.0);
+    // Reversed-Z (see `Camera::render_projection`): the near plane is depth 1, the far plane depth 0.
+    let far = frame.inv_view_proj * vec4<f32>(o.ndc, 0.0, 1.0);
+    let near = frame.inv_view_proj * vec4<f32>(o.ndc, 1.0, 1.0);
     let dir = far.xyz / far.w - near.xyz / near.w;
     return vec4<f32>(sky_color(dir, 0.0), 1.0);
 }
