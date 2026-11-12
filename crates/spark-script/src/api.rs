@@ -14,6 +14,9 @@ use crate::types::*;
 /// Primitive meshes are created once per unique parameter set.
 struct MeshCache(RefCell<HashMap<String, MeshId>>);
 
+/// `Mesh.custom(positions, indices, uvs?, normals?)`.
+type CustomMeshArgs = (Vec<Value>, Vec<u32>, Option<Vec<f32>>, Option<Vec<Value>>);
+
 fn cached_mesh(lua: &Lua, key: String, make: impl FnOnce() -> MeshData) -> LuaResult<LuaMesh> {
     if let Some(id) = lua.app_data_ref::<MeshCache>().and_then(|c| c.0.borrow().get(&key).copied()) {
         return Ok(LuaMesh(id));
@@ -237,7 +240,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     mesh.set(
         "custom",
         lua.create_function(
-            |lua, (positions, indices, uvs, normals): (Vec<Value>, Vec<u32>, Option<Vec<f32>>, Option<Vec<Value>>)| {
+            |lua, (positions, indices, uvs, normals): CustomMeshArgs| {
                 let n = positions.len();
                 if n == 0 || indices.len() < 3 || indices.len() % 3 != 0 {
                     return Err(rt(format!("Mesh.custom: need positions and 3*k indices, got {} / {}", n, indices.len())));

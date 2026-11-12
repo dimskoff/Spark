@@ -51,7 +51,10 @@ SPARK не пытается тягаться с Unity, Unreal Engine или Godo
 - **Ошибки сразу говорят, как чинить.** Неизвестные ключи, опции и имена падают с `file:line`, списком допустимых
   значений и подсказкой. Headless-запуск с ошибкой завершается с кодом 1.
 - **Горячая перезагрузка.** Сохранил `.luau` или шейдер — игра тут же перезапускается.
-- **Code-first.** Никакого GUI-редактора, файлов сцен и скрытого состояния: сцена, логика, UI и ассеты описываются кодом.
+- **Сценарные тесты.** `spark test` проигрывает игру headless со скриптовым вводом (`test.tap`, `test.wait`,
+  `test.find`, снимки мира) — агент доказывает баг и его исправление, а не гадает.
+- **Code-first.** Никакого редактора сцен, файлов сцен и скрытого состояния: сцена, логика, UI и ассеты описываются кодом.
+  Необязательный [Spark Editor](#spark-editor) — менеджер проектов, редактор кода, запуск и живой отладчик; сценой он не владеет.
 
 ## Возможности
 
@@ -65,6 +68,7 @@ SPARK не пытается тягаться с Unity, Unreal Engine или Godo
 | **Events** | события с приоритетами, одноразовые подписчики, события объектов, отложенные события, столкновения |
 | **Physics** | rapier3d: динамические / кинематические / статические тела, контроллер персонажа, рейкасты, события столкновений, пикинг по отрисованным мешам |
 | **Ship** | `spark build` упаковывает игру в **один exe** (+ zip). Сохранения, полноэкранный режим, иконка окна, сплэш |
+| **Tools** | `spark check` (headless-отчёт об ошибках, `--json`), `spark test` (сценарные тесты со снимками), `spark new --template 3d\|2d\|empty`, `spark docs`, [Spark Editor](#spark-editor), Discord Rich Presence |
 
 ## Установка
 
@@ -87,12 +91,16 @@ curl -fsSL https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.sh | 
 Открой новый терминал:
 
 ```
-spark new mygame          # рабочая игра в рекомендуемой структуре
+spark new mygame          # рабочая игра в рекомендуемой структуре (--template 3d|2d|empty)
 spark mygame              # запуск; правишь любой файл — игра перезагружается
 spark check mygame        # найти ошибки в скриптах без окна (CI / ИИ-агенты; --json)
+spark test mygame         # сценарные тесты tests/*.luau, headless
 spark build mygame        # dist/mygame(.exe) — один файл, всё внутри
 spark update              # потом: поставить свежую версию Spark
 ```
+
+В готовых релизах и установочных скриптах есть только консольная команда `spark`. Spark Editor (`spark editor`) —
+отдельная программа: пока он собирается из исходников, см. [Spark Editor](#spark-editor).
 
 Или скачай архив для своей системы со страницы [Releases](https://github.com/AcelateOrg/Spark/releases) и положи
 `spark` / `spark.exe` куда угодно. Бинарники пока не подписаны: Windows SmartScreen может написать «Неизвестный
@@ -108,11 +116,13 @@ spark update              # потом: поставить свежую верс
 | остальные (Linux arm64, Intel Mac, ...) | - | | сборка из исходников |
 
 `spark build` собирает исполняемый файл для той ОС, на которой запущен: `Name.exe` + `Name.zip` на Windows, `Name`
-(с флагом исполнения) + `Name.tar.gz` на Linux, `Name` + `Name.zip` (и по желанию `Name.app`) на macOS.
+(с флагом исполнения) + `Name.tar.gz` на Linux, `Name` + `Name.zip` (и по желанию `Name.app`) на macOS. Чтобы выпустить
+игру на все три системы, запусти `spark build` на каждой (или в CI). CI собирает и тестирует каждый коммит на всех трёх.
 
 ### Сборка из исходников
 
-Нужен [Rust](https://rustup.rs) 1.85+. На Linux ещё dev-пакеты для звука, геймпадов и клавиатуры:
+Для движка и команды `spark` нужен [Rust](https://rustup.rs) 1.85+ (для Spark Editor — 1.95+, см. ниже).
+На Linux ещё dev-пакеты для звука, геймпадов и клавиатуры:
 
 ```sh
 sudo apt install libasound2-dev libudev-dev libxkbcommon-dev libdbus-1-dev pkg-config   # Debian / Ubuntu
@@ -124,6 +134,26 @@ git clone https://github.com/AcelateOrg/Spark.git
 cd Spark
 cargo build --release -p spark-cli
 target/release/spark new mygame
+```
+
+## Spark Editor
+
+Необязательное десктопное приложение для работы над игрой (egui). Это **не** редактор сцен: игра остаётся обычным
+кодом, редактор лишь помогает с ней работать.
+
+- менеджер проектов (недавние проекты, новая игра из шаблона, открыть папку), интерфейс на русском и английском
+- стыкуемые панели: проводник, редактор кода с подсветкой Luau, консоль, проблемы (`spark check`), отладчик,
+  дерево сцены и вьюпорт, который рисует игру на GPU редактора (свободная камера, Play / Pause / Step / Stop)
+- предпросмотр картинок (зум, перемещение, пипетка), звуков (форма волны, воспроизведение) и моделей glTF (орбитальный вид, анимации)
+- F5 запускает игру в отдельном процессе — ровно так, как её получат игроки; живая связь (`spark-devtools`, TCP на localhost)
+  показывает статистику и сцену запущенной игры, умеет ставить на паузу, шагать и перезагружать
+
+Это отдельная программа рядом с `spark`: `spark editor [path/to/game]` её запускает. В архивы релизов она пока не входит —
+собери из исходников (нужен Rust 1.95+):
+
+```
+cargo build --release -p spark-cli -p spark-editor
+target/release/spark editor mygame
 ```
 
 ## Быстрый старт
@@ -155,8 +185,11 @@ cargo run -p hello                        # то же самое на чисто
 ## Как работать с ИИ-агентом
 
 1. `spark new mygame` и открыть папку в своём агенте.
-2. Описать игру. Агент читает `AGENTS.md` и `docs/SPARK_API.md` и пишет код.
-3. Он сам проверяет себя: `spark . --headless --frames 120 --screenshot shot.png` — и смотрит на картинку.
+2. Описать игру. Агент читает `AGENTS.md` и `docs/SPARK_API.md` (внутри папки игры; в этом репозитории тот же файл лежит как
+   [docs/LUAU_API.md](docs/LUAU_API.md)) и пишет код.
+3. Он сам проверяет себя: `spark check . --json` (ошибки как `file:line`), `spark test .` (сценарные тесты: сначала
+   воспроизвести баг, потом чинить) и `spark . --headless --frames 120 --screenshot shot.png` — и смотрит на картинку.
+   Редакторы с luau-lsp проверяют типы по `docs/spark.d.luau`.
 4. Ты играешь через `spark .` — каждое сохранение перезагружает игру.
 5. `spark build .` — и у тебя один `.exe`, который можно скинуть друзьям или залить на itch.io.
 
@@ -166,9 +199,12 @@ cargo run -p hello                        # то же самое на чисто
 
 ```
 spark path/to/game [флаги]          запустить игру (папка с main.luau)
-spark new path/to/game               новая игра: main.luau, src/, assets/, game.toml, AGENTS.md, docs/
-spark docs path/to/game              обновить docs/ и AGENTS.md
-spark build path/to/game [--out DIR] [--loose] [--no-zip]
+spark editor [path/to/game]          открыть Spark Editor (отдельная программа, см. выше)
+spark new path/to/game [--template 3d|2d|empty]   новая игра: main.luau, src/, assets/, game.toml, AGENTS.md, docs/
+spark docs path/to/game              обновить docs/ (справка по API, spark.d.luau) и AGENTS.md
+spark check path/to/game [--frames N] [--json]   проверка ошибок без окна и GPU; код выхода 1 при ошибках
+spark test path/to/game [NAME...] [--update] [--json] [--max-time SECONDS]   сценарные тесты (tests/*.luau)
+spark build path/to/game [--out DIR] [--loose] [--no-zip] [--app]
 spark update [VERSION]               поставить последний (или указанный) релиз поверх этого spark.exe
 spark --version
 ```
@@ -176,9 +212,11 @@ spark --version
 `spark = "0.1"` в `game.toml` игры — версия движка, под которую она сделана; при другой минорной версии
 (до 1.0) движок предупредит и подскажет, что делать.
 
-Флаги любой игры: `--headless`, `--frames N`, `--screenshot PATH`, `--dump-scene`, `--size WxH`, `--fixed-dt S`,
-`--no-vsync`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
-В окне: F1 — отладочный оверлей, F12 — скриншот, F11 / Alt+Enter — полный экран. Переменные окружения: `RUST_LOG=debug`, `WGPU_BACKEND=dx12|vulkan|gl`.
+Флаги любой игры: `--headless`, `--frames N`, `--screenshot PATH`, `--screenshot-every N`, `--dump-scene`,
+`--dump-scene-json PATH`, `--input FILE`, `--timeout S`, `--size WxH`, `--fixed-dt S`, `--max-fps N`, `--mute`,
+`--no-vsync`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--devtools ADDR` (ставит Spark Editor),
+`--help`.
+В окне: F1 — отладочный оверлей, F12 — скриншот, F11 / Alt+Enter — полный экран. Переменные окружения: `RUST_LOG=debug`, `WGPU_BACKEND=dx12|vulkan|metal|gl`.
 
 ## Архитектура
 
@@ -186,13 +224,16 @@ spark --version
 |---|---|
 | `spark` | фасад: `App`, prelude, реэкспорты — его подключать из Rust |
 | `spark-core` | данные мира без GPU: сцена, ассеты, материалы, небо, состояние UI-виджетов, ввод, время, события, планировщик, очередь звука, виртуальная файловая система, WGSL-прелюдии шейдеров |
-| `spark-render` | рендер на wgpu: шейдеры поверхностей и пост-процесса, PBR, небо, встроенные пост-эффекты, 2D-канва, окно и headless, скриншоты |
+| `spark-render` | рендер на wgpu: шейдеры поверхностей и пост-процесса, PBR, небо, встроенные пост-эффекты, 2D-канва, окно и headless, скриншоты. Модули: `renderer` (API, поверхность, восстановление), `init`, `assets`, `scene`, `lighting` (тени), `scene_target`, `post`, `canvas`, `shaders`, `capture` |
 | `spark-window` | окно и ввод через winit, геймпады (gilrs) |
 | `spark-audio` | звук на kira |
 | `spark-physics` | физика на rapier3d |
-| `spark-script` | Luau API, модули и горячая перезагрузка (`ScriptGame`) |
+| `spark-script` | Luau API, модули, горячая перезагрузка (`ScriptGame`), рантайм сценарных тестов `spark test` |
 | `spark-discord` | Discord Rich Presence через локальный IPC в отдельном потоке (опциональная фича `discord` у `spark-script`, включена по умолчанию) |
-| `spark-cli` | исполняемый файл `spark`: run, new, docs, build, update |
+| `spark-project` | проекты игр, общие для CLI и редактора: манифест `game.toml`, определение «это игра Spark?», шаблоны `spark new` и документация, которая кладётся в каждую игру |
+| `spark-devtools` | живая связь запущенной игры со Spark Editor: JSON-строки по TCP на localhost, версионируемый протокол |
+| `spark-editor` | Spark Editor, исполняемый файл `spark-editor` (egui / eframe; Rust 1.95+) |
+| `spark-cli` | исполняемый файл `spark`: run, editor (запуск), new, docs, check, test, build, update |
 
 Соглашения: Y вверх, правая система координат, 1 единица = 1 метр, объекты смотрят вдоль -Z, радианы (FOV в градусах),
 цвета в sRGB.

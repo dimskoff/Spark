@@ -1,8 +1,8 @@
 //! Spark game projects, shared by the `spark` runner and Spark Editor:
 //!
-//! - [`manifest`]: `game.toml` (title, window, build settings, target engine version)
-//! - [`detect`]: "is this folder really a Spark game?" + finding the project root
-//! - [`template`]: the `spark new` game and the engine docs shipped into every game
+//! - [`manifest`] - `game.toml` (title, window, build settings, target engine version)
+//! - [`detect`] - "is this folder really a Spark game?" + finding the project root
+//! - [`template`] - the `spark new` games (3d / 2d / empty) and the engine docs shipped into every game
 
 pub mod detect;
 pub mod manifest;

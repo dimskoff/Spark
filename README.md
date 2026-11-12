@@ -49,7 +49,11 @@ Spark does not try to compete with Unity, Unreal or Godot. It has a different jo
 - **Errors that say how to fix them.** Unknown keys, options and names fail loudly with `file:line`, the allowed
   values and a hint. A headless run with an error exits with code 1.
 - **Hot reload.** Save any `.luau` file or shader and the game restarts instantly.
-- **Code-first.** No editor, no scene files, no hidden state: the scene, logic, UI and assets are all code.
+- **Scenario tests.** `spark test` plays the game headless with scripted input (`test.tap`, `test.wait`,
+  `test.find`, snapshots of the world), so an agent proves a bug and its fix instead of guessing.
+- **Code-first.** No scene editor, no scene files, no hidden state: the scene, logic, UI and assets are all code.
+  The optional [Spark Editor](#spark-editor) is a project manager, code editor, runner and live debugger - it never
+  owns your scene.
 
 ## Features
 
@@ -63,6 +67,7 @@ Spark does not try to compete with Unity, Unreal or Godot. It has a different jo
 | **Events** | events with priorities, one-shot listeners, per-object events, deferred events, collision events |
 | **Physics** | rapier3d: dynamic / kinematic / static bodies, character controller, raycasts, collision events, picking against rendered meshes |
 | **Ship** | `spark build` packs the game into **one executable** (+ zip). Save files, fullscreen, window icon, splash |
+| **Tools** | `spark check` (headless error report, `--json`), `spark test` (scenario tests with snapshots), `spark new --template 3d\|2d\|empty`, `spark docs`, [Spark Editor](#spark-editor), Discord Rich Presence |
 
 ## Install
 
@@ -85,12 +90,16 @@ Installs into `~/.local/bin` (`SPARK_BIN=/usr/local/bin` to change it) and print
 Open a new terminal, then:
 
 ```
-spark new mygame          # a working game in the recommended layout
+spark new mygame          # a working game in the recommended layout (--template 3d|2d|empty)
 spark mygame              # run it; edit any file and it reloads
 spark check mygame        # find script errors without a window (CI / AI agents; --json)
+spark test mygame         # scenario tests in tests/*.luau, headless
 spark build mygame        # dist/mygame(.exe) - one file with everything inside
 spark update              # later: install the newest Spark
 ```
+
+The prebuilt release archives and the install scripts contain only the `spark` command line. Spark Editor
+(`spark editor`) is a separate program: build it from source, see [Spark Editor](#spark-editor).
 
 Or download the archive for your system from [Releases](https://github.com/AcelateOrg/Spark/releases) and put
 `spark` / `spark.exe` anywhere you like. The binaries are not code-signed yet: Windows SmartScreen may say
@@ -112,7 +121,8 @@ system (or in CI). CI builds and tests every commit on all three systems.
 
 ### Build from source
 
-Requires [Rust](https://rustup.rs) 1.85+. On Linux also the development packages for audio, gamepads and keyboard:
+The engine and the `spark` command line need [Rust](https://rustup.rs) 1.85+ (Spark Editor needs 1.95+, see below).
+On Linux also the development packages for audio, gamepads and keyboard:
 
 ```sh
 sudo apt install libasound2-dev libudev-dev libxkbcommon-dev libdbus-1-dev pkg-config   # Debian / Ubuntu
@@ -124,6 +134,26 @@ git clone https://github.com/AcelateOrg/Spark.git
 cd Spark
 cargo build --release -p spark-cli
 target/release/spark new mygame
+```
+
+## Spark Editor
+
+An optional desktop app for working on a game, built with egui. It is **not** a scene editor: the game stays plain
+code, the editor helps you work with it.
+
+- project manager (recent projects, new game from a template, open folder), English and Russian UI
+- dockable panels: file explorer, code editor with Luau highlighting, console, problems (`spark check`), debugger,
+  scene tree and a viewport that draws the game on the editor's GPU (fly camera, Play / Pause / Step / Stop)
+- previews of images (zoom, pan, pixel picker), sounds (waveform, playback) and glTF models (orbit view, animations)
+- F5 runs the game in its own process exactly as players get it; a live link (`spark-devtools`, TCP on localhost)
+  shows stats and the scene of the running game and can pause, step and reload it
+
+It is a separate program installed next to `spark`: `spark editor [path/to/game]` starts it. The release archives
+do not include it yet, build it from source (needs Rust 1.95+):
+
+```
+cargo build --release -p spark-cli -p spark-editor
+target/release/spark editor mygame
 ```
 
 ## Quick start
@@ -155,8 +185,10 @@ cargo run -p hello                        # the same idea in pure Rust
 ## Working with an AI agent
 
 1. `spark new mygame` and open the folder in your agent.
-2. Describe the game. The agent reads `AGENTS.md` and `docs/SPARK_API.md` and writes the code.
-3. It checks itself with `spark check . --json` (errors as `file:line`) and
+2. Describe the game. The agent reads `AGENTS.md` and `docs/SPARK_API.md` (inside the game folder; this repo keeps
+   the same file as [docs/LUAU_API.md](docs/LUAU_API.md)) and writes the code.
+3. It checks itself with `spark check . --json` (errors as `file:line`),
+   `spark test .` (scenario tests: reproduce a bug first, then fix it) and
    `spark . --headless --frames 120 --screenshot shot.png` (looks at the picture).
    Editors with luau-lsp type-check the code against `docs/spark.d.luau`.
 4. You play with `spark .` - every save reloads the game.
@@ -168,9 +200,11 @@ After updating the engine, `spark docs mygame` refreshes the API reference insid
 
 ```
 spark path/to/game [flags]           run a game (folder with main.luau)
-spark new path/to/game               new game: main.luau, src/, assets/, game.toml, AGENTS.md, docs/
+spark editor [path/to/game]          open Spark Editor (a separate program, see above)
+spark new path/to/game [--template 3d|2d|empty]   new game: main.luau, src/, assets/, game.toml, AGENTS.md, docs/
 spark docs path/to/game              refresh docs/ (API reference, spark.d.luau) and AGENTS.md
 spark check path/to/game [--frames N] [--json]   headless error check, no GPU; exit code 1 on errors
+spark test path/to/game [NAME...] [--update] [--json] [--max-time SECONDS]   scenario tests (tests/*.luau)
 spark build path/to/game [--out DIR] [--loose] [--no-zip] [--app]
 spark update [VERSION]               install the latest (or given) release over this spark executable
 spark --version
@@ -179,8 +213,10 @@ spark --version
 `spark = "0.1"` in a game's `game.toml` records the engine version it was made for; a different minor version
 (before 1.0) prints a warning with what to do.
 
-Flags for every game: `--headless`, `--frames N`, `--screenshot PATH`, `--dump-scene`, `--size WxH`, `--fixed-dt S`,
-`--no-vsync`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
+Flags for every game: `--headless`, `--frames N`, `--screenshot PATH`, `--screenshot-every N`, `--dump-scene`,
+`--dump-scene-json PATH`, `--input FILE`, `--timeout S`, `--size WxH`, `--fixed-dt S`, `--max-fps N`, `--mute`,
+`--no-vsync`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--devtools ADDR` (set by Spark Editor),
+`--help`.
 In a window: F1 = debug overlay, F12 = screenshot, F11 / Alt+Enter = fullscreen. Environment: `RUST_LOG=debug`, `WGPU_BACKEND=dx12|vulkan|metal|gl`.
 
 ## Architecture
@@ -189,13 +225,16 @@ In a window: F1 = debug overlay, F12 = screenshot, F11 / Alt+Enter = fullscreen.
 |---|---|
 | `spark` | facade: `App`, prelude, re-exports - use this one from Rust |
 | `spark-core` | world data without GPU: scene, assets, materials, sky, UI widget state, input, time, events, scheduler, audio queue, virtual file system, WGSL shader preludes |
-| `spark-render` | wgpu renderer: surface / post shaders, PBR, sky, built-in post effects, 2D canvas, windowed and headless, screenshots |
+| `spark-render` | wgpu renderer: surface / post shaders, PBR, sky, built-in post effects, 2D canvas, windowed and headless, screenshots. Modules: `renderer` (API, surface, recovery), `init`, `assets`, `scene`, `lighting` (shadows), `scene_target`, `post`, `canvas`, `shaders`, `capture` |
 | `spark-window` | winit window and input mapping, gamepads (gilrs) |
 | `spark-audio` | kira audio backend |
 | `spark-physics` | rapier3d backend |
-| `spark-script` | the Luau API, modules and hot reload (`ScriptGame`) |
+| `spark-script` | the Luau API, modules, hot reload (`ScriptGame`), `spark test` scenario runtime |
 | `spark-discord` | Discord Rich Presence over local IPC, on its own thread (optional `discord` feature of `spark-script`, on by default) |
-| `spark-cli` | the `spark` executable: run, new, docs, build, update |
+| `spark-project` | game projects shared by the CLI and the editor: `game.toml` manifest, "is this a Spark game?" detection, the `spark new` templates and the docs written into every game |
+| `spark-devtools` | the live link between a running game and Spark Editor: JSON lines over localhost TCP, versioned protocol |
+| `spark-editor` | Spark Editor, the `spark-editor` executable (egui / eframe; Rust 1.95+) |
+| `spark-cli` | the `spark` executable: run, editor (launcher), new, docs, check, test, build, update |
 
 Conventions: Y-up, right-handed, 1 unit = 1 meter, objects look along -Z, radians (FOV in degrees), sRGB colors.
 

@@ -7,16 +7,19 @@ If something is not listed here, it does not exist.
 
 ```
 spark new path/to/game        # creates a new game in the recommended layout (see "Game structure")
+                              #   --template 3d (default) | 2d (draw.* game) | empty (only the skeleton)
 spark docs path/to/game       # (re)writes this reference into the game: docs/SPARK_API.md (+ AGENTS.md if missing)
 spark path/to/game            # runs path/to/game/main.luau in a window, hot-reloads on save
 spark game --headless --frames 120 --screenshot shot.png --dump-scene   # no window: check result as PNG + text
 spark check path/to/game      # finds script errors without a window / GPU (see "Type checking"; --json for tools)
+spark test path/to/game       # scenario tests in tests/*.luau, headless (see "Scenario tests")
+spark editor [path/to/game]   # opens Spark Editor (a separate program; only if it is installed next to spark)
 spark update [0.2.0]          # installs the latest (or given) Spark release over this spark executable
 spark --version
 ```
 
 Flags: `--headless`, `--frames N`, `--screenshot PATH`, `--dump-scene`, `--size WxH`, `--fixed-dt S`,
-`--no-vsync`, `--max-fps N`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
+`--no-vsync`, `--max-fps N`, `--mute`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
 Headless testing: `--dump-scene-json PATH|-` (scene as JSON), `--screenshot-every N` (`shot-00060.png`, ...),
 `--timeout S` (fail when the run takes longer), `--input FILE` (scripted input, one event per line):
 

@@ -14,7 +14,7 @@
 
 use std::path::PathBuf;
 
-use spark_project::template::{write_docs, write_template};
+use spark_project::template::{Template, write_docs, write_template_kind};
 
 /// `spark docs path/to/game`
 pub fn run_docs(args: &[String]) -> i32 {
@@ -57,7 +57,19 @@ pub fn run(args: &[String]) -> i32 {
 }
 
 fn create(args: &[String]) -> Result<PathBuf, String> {
-    let [path] = args else { return Err("usage: spark new path/to/game".into()) };
+    const USAGE: &str = "usage: spark new path/to/game [--template 3d|2d|empty]";
+    let mut kind = Template::default();
+    let mut path = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--template" => kind = Template::parse(it.next().ok_or_else(|| format!("--template needs a value (3d, 2d or empty)\n{USAGE}"))?)?,
+            f if f.starts_with("--") => return Err(format!("unknown flag '{f}'\n{USAGE}")),
+            p if path.is_none() => path = Some(p),
+            _ => return Err(USAGE.into()),
+        }
+    }
+    let Some(path) = path else { return Err(USAGE.into()) };
     let dir = PathBuf::from(path);
     if dir.join("main.luau").exists() {
         return Err(format!("'{}' already has a main.luau", dir.display()));
@@ -67,13 +79,14 @@ fn create(args: &[String]) -> Result<PathBuf, String> {
         .map(|n| n.to_string_lossy().into_owned())
         .filter(|n| !n.is_empty() && n != ".")
         .unwrap_or_else(|| "My Game".into());
-    write_template(&dir, &title)?;
+    write_template_kind(&dir, &title, kind)?;
     Ok(dir)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spark_project::template::write_template;
 
     #[test]
     fn template_is_complete() {
@@ -103,6 +116,28 @@ mod tests {
         write_docs(&dir).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(".luaurc")).unwrap(), "{}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn every_template_passes_spark_check() {
+        for (flag, extra) in [("3d", "src/player.luau"), ("2d", "game.toml"), ("empty", "game.toml")] {
+            let dir = std::env::temp_dir().join(format!("spark-new-{flag}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let args = vec!["--template".to_string(), flag.to_string(), dir.to_string_lossy().into_owned()];
+            let made = create(&args).unwrap_or_else(|e| panic!("{flag}: {e}"));
+            assert!(made.join("main.luau").is_file() && made.join(extra).is_file(), "{flag}");
+            assert!(made.join("AGENTS.md").is_file(), "{flag}: docs are written for every template");
+            let report = crate::check::check(&dir, 60);
+            assert!(report.ok(), "{flag}: {:?}", report.errors);
+            if flag == "3d" {
+                // The starter scenario test passes against the starter game.
+                assert_eq!(crate::test::run(&[dir.to_string_lossy().into_owned()]), 0, "spark test on the 3d template");
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+        assert!(create(&["--template".into(), "4d".into(), "x".into()]).is_err());
+        assert!(create(&["--template".into()]).is_err());
+        assert!(create(&[]).is_err());
     }
 
     #[test]

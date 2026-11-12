@@ -119,12 +119,24 @@ height = 720
 exclude = ["AGENTS.md", "docs"]  # not packed into the build
 "##;
 
-const GITIGNORE: &str = "dist/\nscreenshots/\nerror.log\n";
+/// The starter scenario test of the 3D template (`spark test .`): shows an agent what a test looks like.
+const TEST_3D: &str = r##"-- Scenario test: plays the game headless and checks the result. Run: spark test .
+-- Add one test per fixed bug / finished feature; see "Scenario tests" in docs/SPARK_API.md.
+
+test.step("the player walks right and the camera follows")
+test.wait(0.2)
+local start_x = camera.position.x
+test.hold("d", 1)
+test.expect(camera.position.x > start_x + 3, "the camera should follow the player to the right")
+"##;
+
+const GITIGNORE: &str ="dist/\nscreenshots/\nerror.log\n";
 
 const AGENTS: &str = r##"# AGENTS.md - working on this game
 
 This is a game for **Spark Engine**: a native runtime (Rust + wgpu) where all game code is **Luau**.
-There is no editor - the scene, logic, UI and assets are all described in code.
+There is no scene editor - the scene, logic, UI and assets are all described in code
+(the optional Spark Editor is only a project manager, code editor, runner and live debugger).
 
 ## Read first
 
@@ -253,16 +265,115 @@ pub fn engine_minor() -> String {
     spark_core::VERSION.split('.').take(2).collect::<Vec<_>>().join(".")
 }
 
+/// Which starter game `spark new` writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Template {
+    /// A small 3D scene with a player, a level and a HUD, one module per system (the default).
+    #[default]
+    D3,
+    /// A 2D game drawn only with `draw.*`.
+    D2,
+    /// Only the skeleton: `main.luau` with the callbacks, `game.toml`, the folders and the docs.
+    Empty,
+}
+
+impl Template {
+    /// `3d`, `2d` or `empty` (the values of `spark new --template`).
+    pub fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "3d" => Ok(Self::D3),
+            "2d" => Ok(Self::D2),
+            "empty" => Ok(Self::Empty),
+            other => Err(format!("unknown template '{other}' (use 3d, 2d or empty)")),
+        }
+    }
+}
+
+const MAIN_2D: &str = r##"-- {TITLE}: a 2D game drawn with draw.* only. Coordinates are virtual pixels: origin top-left, Y down.
+-- Run:   spark .          (saving any file reloads the game instantly)
+-- Ship:  spark build .    (one .exe with everything inside)
+
+local SPEED = 420
+local player = { x = 640, y = 560, size = 40 }
+local score = 0
+local coin = { x = 300, y = 300, r = 14 }
+
+local function move_coin()
+    coin.x = 60 + math.random() * (screen.width - 120)
+    coin.y = 60 + math.random() * (screen.height - 200)
+end
+
+function update(dt)
+    local dx, dy = 0, 0
+    if input.down("a") or input.down("left") then dx -= 1 end
+    if input.down("d") or input.down("right") then dx += 1 end
+    if input.down("w") or input.down("up") then dy -= 1 end
+    if input.down("s") or input.down("down") then dy += 1 end
+    dx += input.pad_axis("left_x")
+    dy -= input.pad_axis("left_y")
+    player.x = math.clamp(player.x + dx * SPEED * dt, 0, screen.width)
+    player.y = math.clamp(player.y + dy * SPEED * dt, 0, screen.height)
+    local ox, oy = player.x - coin.x, player.y - coin.y
+    if ox * ox + oy * oy < (player.size * 0.5 + coin.r) ^ 2 then
+        score += 1
+        move_coin()
+    end
+end
+
+function render()
+    draw.rect(player.x, player.y, player.size, player.size, "#5ad1ff", { align = "center" })
+    draw.circle(coin.x, coin.y, coin.r, "#ffd34d")
+    draw.text("Coins: " .. score, 20, 20, { size = 32, shadow = true })
+    draw.text("WASD / arrows / left stick - move", 20, 62, { size = 18, color = "#ffffffaa" })
+end
+"##;
+
+const MAIN_EMPTY: &str = r##"-- {TITLE}: entry point. Keep this file short - move systems into src/ modules (require("./src/name")).
+-- Run:   spark .          (saving any file reloads the game instantly)
+-- Ship:  spark build .    (one .exe with everything inside)
+
+function start()
+    -- build the world here: spawn(...), camera, lights
+end
+
+function update(dt)
+    -- game logic, once per frame
+end
+
+function render()
+    -- 2D overlay: draw.text(...), draw.rect(...)
+end
+"##;
+
+/// Writes the default (3D) starter game; see [`write_template_kind`].
 pub fn write_template(dir: &Path, title: &str) -> Result<(), String> {
+    write_template_kind(dir, title, Template::D3)
+}
+
+pub fn write_template_kind(dir: &Path, title: &str, kind: Template) -> Result<(), String> {
     let t = title.replace('"', "'");
-    let files: [(&str, String); 6] = [
-        ("main.luau", MAIN.replace("{TITLE}", &t)),
-        ("game.toml", TOML.replace("{TITLE}", &t).replace("{SPARK}", &engine_minor())),
-        ("src/level.luau", LEVEL.into()),
-        ("src/player.luau", PLAYER.into()),
-        ("src/hud.luau", HUD.into()),
-        (".gitignore", GITIGNORE.into()),
-    ];
+    let toml = TOML.replace("{TITLE}", &t).replace("{SPARK}", &engine_minor());
+    let files: Vec<(&str, String)> = match kind {
+        Template::D3 => vec![
+            ("main.luau", MAIN.replace("{TITLE}", &t)),
+            ("game.toml", toml),
+            ("src/level.luau", LEVEL.into()),
+            ("src/player.luau", PLAYER.into()),
+            ("src/hud.luau", HUD.into()),
+            ("tests/smoke.luau", TEST_3D.into()),
+            (".gitignore", GITIGNORE.into()),
+        ],
+        Template::D2 => vec![
+            ("main.luau", MAIN_2D.replace("{TITLE}", &t)),
+            ("game.toml", toml),
+            (".gitignore", GITIGNORE.into()),
+        ],
+        Template::Empty => vec![
+            ("main.luau", MAIN_EMPTY.replace("{TITLE}", &t)),
+            ("game.toml", toml),
+            (".gitignore", GITIGNORE.into()),
+        ],
+    };
     for (rel, text) in files {
         let p = dir.join(rel);
         if !p.exists() {
