@@ -1,6 +1,6 @@
 
 // ================= Spark prelude (added by the engine after your code) =================
-// Everything below is available in every Spark shader. See docs/SHADERS.md.
+// Everything below is available in every Spark shader. See docs/SPARK_SHADERS.md.
 
 struct Light {
     position: vec4<f32>,   // xyz = world position, w = range

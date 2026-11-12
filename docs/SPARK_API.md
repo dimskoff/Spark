@@ -11,7 +11,7 @@ spark new path/to/game        # creates a new game in the recommended layout (se
 spark docs path/to/game       # (re)writes this reference into the game: docs/SPARK_API.md (+ AGENTS.md if missing)
 spark path/to/game            # runs path/to/game/main.luau in a window, hot-reloads on save
 spark game --headless --frames 120 --screenshot shot.png --dump-scene   # no window: check result as PNG + text
-spark check path/to/game      # finds script errors without a window / GPU (see "Type checking"; --json for tools)
+spark check path/to/game      # finds script errors without a window / GPU (see "Type checking"; --json for tools, --types for luau-lsp)
 spark test path/to/game       # scenario tests in tests/*.luau, headless (see "Scenario tests")
 spark editor [path/to/game]   # opens Spark Editor (a separate program; only if it is installed next to spark)
 spark update [0.2.0]          # installs the latest (or given) Spark release over this spark executable
@@ -403,7 +403,7 @@ t:cancel()
 ## Render settings and shaders
 
 The default is plain lit rendering. Built-in post effects (below) are all off by default; anything else is your own
-WGSL. Full shader reference with examples: [SHADERS.md](SHADERS.md).
+WGSL. Full shader reference with examples: [SPARK_SHADERS.md](SPARK_SHADERS.md).
 
 ```lua
 graphics.height = 240                -- render the 3D scene 240 px tall (width keeps the aspect), nil = native
@@ -697,18 +697,22 @@ object fields and key names, and underlines wrong names and arguments while you 
 `spark check` finds errors at runtime, without a window or GPU (CI, AI agents):
 
 ```
-spark check path/to/game [--frames N] [--json]
+spark check path/to/game [--frames N] [--json] [--types]
 ```
 
-1. compiles **every** `.luau` file of the game (syntax errors also in modules nothing requires yet);
+1. compiles **every** `.luau` file of the game (syntax errors also in modules nothing requires yet) and checks every
+   `.wgsl` shader, `.png` / `.jpg` image and `.gltf` / `.glb` model in the folder, even those no script loads;
 2. runs `main.luau` headless for N frames (default 60): `start()`, `update`, `fixed_update`, `render`, timers, tasks,
    physics and every required module. No audio, no rendering.
 
 Prints `file:line: message` per error and exits with code 1 (0 = ok). `--json` prints one line:
 
 ```json
-{"ok":false,"errors":[{"file":"src/player.luau","line":12,"message":"attempt to index nil with 'x'"}],"frames":4,"objects":17,"files":5}
+{"ok":false,"errors":[{"file":"src/player.luau","line":12,"message":"attempt to index nil with 'x'"}],"frames":4,"objects":17,"files":5,"notes":[]}
 ```
+
+`--types` also runs luau-lsp (if it is on PATH) with `docs/spark.d.luau` and reports its type errors the same way:
+unknown globals, misspelled fields, wrong argument types. Without luau-lsp it only adds a note (`notes`) and changes nothing.
 
 `line` is `null` when the error has no location (e.g. a `game.toml` mistake). Input is empty during the check:
 code behind `input.pressed(...)` only runs in a real session (`spark . --headless` with a script that drives it, or a window).
@@ -749,8 +753,12 @@ test.snapshot("door_open", { quest = Quest.state })  -- the world + your state v
 | `test.wait_event(name, timeout?)` | wait for an event, fail on timeout; returns its arguments |
 | `test.find(name, timeout?)` | wait for an object by name (default 5 s) |
 | `test.expect(cond, msg?)` / `test.eq(actual, expected, msg?)` / `test.near(a, b, eps?, msg?)` / `test.fail(msg)` | checks (`near` works on numbers and vectors, eps 0.01) |
+| `test.texts()` / `test.sees(s)` | strings the game drew last frame (`draw.text`, `ui.label`, ...) / whether one contains `s` |
+| `test.expect_text(s, msg?)` / `test.wait_text(s, timeout?)` | check the screen shows `s` now / wait up to `timeout` s (default 5) for it |
 | `test.step(name)` | name of the current step, printed on failure |
 | `test.snapshot(name, state?)` | compare the world (+ `state` table) with `tests/snapshots/<test>.<name>.snap` |
+
+Tests need no GPU, so they cannot see pixels, shaders or post effects: for looks use `spark . --headless --frames N --screenshot shot.png`\n(that one needs a GPU or software Vulkan). 2D games and UI are testable through what they draw: `test.sees("Score: 3")`.
 
 Snapshots list every **named** object (position, rotation, scale, parent, body, hidden; rounded to 0.01), the camera,
 the number of unnamed objects and the `state` table flattened to `state.key = value` lines. The first run writes the

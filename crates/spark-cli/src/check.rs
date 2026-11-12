@@ -13,7 +13,7 @@ use engine::{Game, World, run_frame};
 
 use crate::manifest::Manifest;
 
-const USAGE: &str = "usage: spark check path/to/game [--frames N] [--json]";
+const USAGE: &str = "usage: spark check path/to/game [--frames N] [--json] [--types]";
 /// Folders whose `.luau` files are not part of the game.
 const SKIP_DIRS: &[&str] = &["dist", "target", "node_modules", "screenshots"];
 
@@ -31,6 +31,8 @@ pub struct Report {
     pub objects: usize,
     /// `.luau` files compiled.
     pub files: usize,
+    /// Things that did not fail the check but the reader should know (e.g. `--types` without luau-lsp).
+    pub notes: Vec<String>,
 }
 
 impl Report {
@@ -47,13 +49,15 @@ impl Report {
                 format!("{{\"file\":{},\"line\":{line},\"message\":{}}}", json_str(&e.file), json_str(&e.message))
             })
             .collect();
+        let notes: Vec<String> = self.notes.iter().map(|n| json_str(n)).collect();
         format!(
-            "{{\"ok\":{},\"errors\":[{}],\"frames\":{},\"objects\":{},\"files\":{}}}",
+            "{{\"ok\":{},\"errors\":[{}],\"frames\":{},\"objects\":{},\"files\":{},\"notes\":[{}]}}",
             self.ok(),
             errors.join(","),
             self.frames,
             self.objects,
-            self.files
+            self.files,
+            notes.join(",")
         )
     }
 }
@@ -62,10 +66,12 @@ pub fn run(args: &[String]) -> i32 {
     let mut game: Option<PathBuf> = None;
     let mut frames = 60u32;
     let mut json = false;
+    let mut types = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--json" => json = true,
+            "--types" => types = true,
             "--frames" => match it.next().and_then(|n| n.parse().ok()) {
                 Some(n) => frames = n,
                 None => {
@@ -85,7 +91,10 @@ pub fn run(args: &[String]) -> i32 {
         }
     }
     let game = game.unwrap_or_else(|| PathBuf::from("."));
-    let report = check(&game, frames);
+    let mut report = check(&game, frames);
+    if types {
+        check_types(&game, &mut report);
+    }
     if json {
         println!("{}", report.to_json());
     } else {
@@ -94,6 +103,9 @@ pub fn run(args: &[String]) -> i32 {
                 Some(l) => eprintln!("{}:{l}: {}", e.file, e.message),
                 None => eprintln!("{}: {}", e.file, e.message),
             }
+        }
+        for n in &report.notes {
+            eprintln!("spark check: note: {n}");
         }
         if report.ok() {
             println!("spark check: ok ({} files, {} frames, {} objects)", report.files, report.frames, report.objects);
@@ -210,6 +222,69 @@ fn check_assets(dir: &Path, report: &mut Report) {
             report.errors.push(problem(&name, None, &e));
         }
     }
+}
+
+/// `--types`: type-checks the game with luau-lsp against `docs/spark.d.luau` (wrong API names, arguments and
+/// field types that only fail at runtime otherwise). luau-lsp is optional: without it a note says how to get it.
+fn check_types(path: &Path, report: &mut Report) {
+    let dir = if path.is_dir() { path.to_path_buf() } else { path.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from(".")) };
+    let defs = dir.join("docs/spark.d.luau");
+    if !defs.is_file() {
+        report.notes.push("--types: docs/spark.d.luau is missing (run `spark docs .` first)".into());
+        return;
+    }
+    let mut files = Vec::new();
+    luau_files(&dir, &dir, &mut files);
+    let files: Vec<String> = files.iter().map(|f| f.to_string_lossy().replace('\\', "/")).collect();
+    let output = std::process::Command::new("luau-lsp")
+        .current_dir(&dir)
+        .args(["analyze", "--definitions=@spark=docs/spark.d.luau", "--formatter=gcc"])
+        .args(&files)
+        .output();
+    let output = match output {
+        Ok(o) => o,
+        Err(_) => {
+            report.notes.push(
+                "--types needs luau-lsp (https://github.com/JohnnyMorganz/luau-lsp/releases) on PATH; skipped the type check".into(),
+            );
+            return;
+        }
+    };
+    let text = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let mut found = parse_lsp_output(&text);
+    if found.is_empty() && !output.status.success() {
+        let tail: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).take(3).collect();
+        report.notes.push(format!("luau-lsp failed without a diagnostic: {}", tail.join(" | ")));
+    }
+    report.errors.append(&mut found);
+}
+
+/// Errors from `luau-lsp analyze` output: `file.luau:12:5: error: message` (gcc) or `file.luau(12,5): TypeError: message`.
+/// Warnings and hints are ignored.
+pub fn parse_lsp_output(text: &str) -> Vec<Problem> {
+    let mut out = Vec::new();
+    for raw in text.lines() {
+        let line = raw.trim();
+        let Some(at) = line.find(".luau") else { continue };
+        let lower = line.to_lowercase();
+        if !(lower.contains("error:") || lower.contains("typeerror") || lower.contains("syntaxerror")) {
+            continue;
+        }
+        let file_end = at + 5;
+        let rest = &line[file_end..];
+        let Some(open) = rest.chars().next().filter(|c| matches!(c, ':' | '(')) else { continue };
+        let digits: String = rest[open.len_utf8()..].chars().take_while(|c| c.is_ascii_digit()).collect();
+        let Ok(number) = digits.parse::<u32>() else { continue };
+        let file = line[..file_end].replace('\\', "/");
+        // The message is whatever follows the last "error:" / "TypeError:" marker.
+        let message = ["TypeError:", "SyntaxError:", "error:"]
+            .iter()
+            .filter_map(|m| line.find(m).map(|i| line[i + m.len()..].trim()))
+            .next()
+            .unwrap_or(line);
+        out.push(Problem { file, line: Some(number), message: message.to_string() });
+    }
+    out
 }
 
 fn problem(file: &str, line: Option<u32>, message: &str) -> Problem {
@@ -385,6 +460,32 @@ mod tests {
         let r = check(&dir, 5);
         let files: Vec<_> = r.errors.iter().map(|e| e.file.as_str()).collect();
         assert_eq!(files, ["assets/shaders/bad.wgsl", "assets/textures/broken.png"], "{:?}", r.errors);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parses_luau_lsp_output() {
+        let text = "src/player.luau:12:5: error: Type 'string' could not be converted into 'number'\n\
+                    src/hud.luau:3:1: warning: unused local\n\
+                    main.luau(7,2): TypeError: Unknown global 'spwan'\n\
+                    some unrelated line\n";
+        let p = parse_lsp_output(text);
+        assert_eq!(p.len(), 2, "{p:?}");
+        assert_eq!((p[0].file.as_str(), p[0].line), ("src/player.luau", Some(12)));
+        assert!(p[0].message.starts_with("Type 'string'"), "{}", p[0].message);
+        assert_eq!((p[1].file.as_str(), p[1].line), ("main.luau", Some(7)));
+        assert_eq!(p[1].message, "Unknown global 'spwan'");
+    }
+
+    #[test]
+    fn types_without_luau_lsp_is_a_note_not_a_failure() {
+        let dir = game(&[("main.luau", "function start() end\n")]);
+        std::fs::create_dir_all(dir.join("docs")).unwrap();
+        std::fs::write(dir.join("docs/spark.d.luau"), "").unwrap();
+        let mut r = check(&dir, 3);
+        check_types(&dir, &mut r);
+        // luau-lsp is usually absent on CI; either way the check must not invent errors for a clean game.
+        assert!(r.ok() || r.errors.iter().all(|e| e.line.is_some()), "{:?}", r.errors);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

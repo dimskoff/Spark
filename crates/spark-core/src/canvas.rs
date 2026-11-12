@@ -189,6 +189,9 @@ pub struct Canvas {
     transform: Affine2,
     stack: Vec<Affine2>,
     layers: [LayerData; 2],
+    /// Strings drawn with [`Canvas::text`] in the frame being drawn (`texts`) / in the last completed frame (`last_texts`).
+    texts: Vec<String>,
+    last_texts: Vec<String>,
 }
 
 impl Default for Canvas {
@@ -203,6 +206,8 @@ impl Default for Canvas {
             transform: Affine2::IDENTITY,
             stack: Vec::new(),
             layers: Default::default(),
+            texts: Vec::new(),
+            last_texts: Vec::new(),
         }
     }
 }
@@ -232,6 +237,13 @@ impl Canvas {
         self.stack.clear();
         self.layer = Layer::Ui;
         self.fonts.begin_frame();
+        self.last_texts = std::mem::take(&mut self.texts);
+    }
+
+    /// Every string drawn in the last completed frame, in draw order (both layers). Scripts and timers run before
+    /// `render()` in a frame, so this is what the player saw just before: scenario tests read it (`test.texts()`).
+    pub fn drawn_texts(&self) -> &[String] {
+        &self.last_texts
     }
 
     /// Settings back to defaults (hot reload). Keeps loaded fonts.
@@ -503,6 +515,7 @@ impl Canvas {
 
     /// Draws text and returns the size of the block in virtual pixels.
     pub fn text(&mut self, text: &str, pos: Vec2, p: &TextParams) -> Vec2 {
+        self.texts.push(text.to_string());
         let (lines, block, px, k) = self.layout(text, p);
         let m = self.fonts.line_metrics(p.font, px);
         let line_h = m.line_height / k * p.line_height;

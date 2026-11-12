@@ -37,7 +37,8 @@ const USAGE: &str = "Usage:
     [--template 3d|2d|empty]              3d (default): small 3D scene, 2d: draw.* game, empty: only the skeleton
   spark docs path/to/game                 write the API docs + AGENTS.md (for AI agents) into a game
   spark check path/to/game [--frames N]   find script errors without a window or GPU (default 60 frames)
-                           [--json]       machine-readable report: {ok, errors:[{file,line,message}], frames, objects}
+                           [--json]       machine-readable report: {ok, errors:[{file,line,message}], frames, objects, files, notes}
+                           [--types]      also type-check with luau-lsp + docs/spark.d.luau (when luau-lsp is installed)
   spark test path/to/game [NAME...]       run scenario tests (tests/*.luau) headless; snapshots in tests/snapshots/
                           [--update]      accept changed snapshots   [--json]   [--max-time SECONDS]
   spark update [version]                  download the latest (or given) Spark release from GitHub

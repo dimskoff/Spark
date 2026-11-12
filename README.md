@@ -41,7 +41,7 @@ Spark does not try to compete with Unity, Unreal or Godot. It has a different jo
 ## Built for AI agents
 
 - **Small, imperative API with one way to do things.** The whole Luau API fits in one file:
-  [docs/LUAU_API.md](docs/LUAU_API.md). Give it to your model.
+  [docs/SPARK_API.md](docs/SPARK_API.md). Give it to your model.
 - **Every project carries its own docs.** `spark new` writes `AGENTS.md` and the API reference of the exact engine
   version into the game folder, so any coding agent (Claude Code, Codex, Cursor, ...) knows the rules without setup.
 - **The agent can see what it made.** Headless runs render frames to PNG and dump the scene as text
@@ -59,7 +59,7 @@ Spark does not try to compete with Unity, Unreal or Godot. It has a different jo
 
 | Module | What you get |
 |---|---|
-| **Render** | wgpu (Vulkan / DirectX 12 / Metal / OpenGL fallback). 3D meshes and primitives, glTF 2.0 models with skins and animations, sun / point / spot lights, optional PBR materials (metallic / roughness, normal maps, emissive), mesh LOD, gradient or cubemap sky with image-based lighting, fog, HDR scene, built-in post effects (bloom, tonemapping, SSAO, depth of field, motion blur, color grading, FXAA, vignette, film grain, chromatic aberration; all off by default), your own WGSL surface and full-screen post shaders with hot reload ([docs/SHADERS.md](docs/SHADERS.md)), low internal resolution for weak PCs |
+| **Render** | wgpu (Vulkan / DirectX 12 / Metal / OpenGL fallback). 3D meshes and primitives, glTF 2.0 models with skins and animations, sun / point / spot lights, optional PBR materials (metallic / roughness, normal maps, emissive), mesh LOD, gradient or cubemap sky with image-based lighting, fog, HDR scene, built-in post effects (bloom, tonemapping, SSAO, depth of field, motion blur, color grading, FXAA, vignette, film grain, chromatic aberration; all off by default), your own WGSL surface and full-screen post shaders with hot reload ([docs/SPARK_SHADERS.md](docs/SPARK_SHADERS.md)), low internal resolution for weak PCs |
 | **2D** | immediate-mode drawing: sprites and sprite sheets, text with any TTF/OTF font, shapes, transforms, UI and in-scene layers, immediate-mode UI widgets (buttons, sliders, checkboxes, panels, progress bars) |
 | **Script** | Luau runtime with hot reload, modules (`require`), timers, coroutine tasks with `wait`, tweens |
 | **Input** | full keyboard (punctuation, numpad, F1-F24), text input with IME, key repeat, mouse with side buttons and FPS mouse lock, gamepads with hot-plug |
@@ -185,8 +185,8 @@ cargo run -p hello                        # the same idea in pure Rust
 ## Working with an AI agent
 
 1. `spark new mygame` and open the folder in your agent.
-2. Describe the game. The agent reads `AGENTS.md` and `docs/SPARK_API.md` (inside the game folder; this repo keeps
-   the same file as [docs/LUAU_API.md](docs/LUAU_API.md)) and writes the code.
+2. Describe the game. The agent reads `AGENTS.md` and `docs/SPARK_API.md` (inside the game folder; the same file lives in this repo as
+   [docs/SPARK_API.md](docs/SPARK_API.md)) and writes the code.
 3. It checks itself with `spark check . --json` (errors as `file:line`),
    `spark test .` (scenario tests: reproduce a bug first, then fix it) and
    `spark . --headless --frames 120 --screenshot shot.png` (looks at the picture).
@@ -203,7 +203,7 @@ spark path/to/game [flags]           run a game (folder with main.luau)
 spark editor [path/to/game]          open Spark Editor (a separate program, see above)
 spark new path/to/game [--template 3d|2d|empty]   new game: main.luau, src/, assets/, game.toml, AGENTS.md, docs/
 spark docs path/to/game              refresh docs/ (API reference, spark.d.luau) and AGENTS.md
-spark check path/to/game [--frames N] [--json]   headless error check, no GPU; exit code 1 on errors
+spark check path/to/game [--frames N] [--json] [--types]   headless error check, no GPU; exit code 1 on errors
 spark test path/to/game [NAME...] [--update] [--json] [--max-time SECONDS]   scenario tests (tests/*.luau)
 spark build path/to/game [--out DIR] [--loose] [--no-zip] [--app]
 spark update [VERSION]               install the latest (or given) release over this spark executable

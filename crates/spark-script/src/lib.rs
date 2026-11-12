@@ -284,7 +284,7 @@ impl ScriptGame {
             if lines > BIG_MAIN && !split && !BIG_HINT.swap(true, std::sync::atomic::Ordering::Relaxed) {
                 log::info!(
                     "hint: {name} has {lines} lines. Split the game into modules, e.g. src/player.luau with \
-                     `return Player` and `local Player = require(\"./src/player\")` (docs/LUAU_API.md, \"Game structure\")"
+                     `return Player` and `local Player = require(\"./src/player\")` (docs/SPARK_API.md, \"Game structure\")"
                 );
             }
         }

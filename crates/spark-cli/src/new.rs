@@ -129,9 +129,9 @@ mod tests {
             assert!(made.join("AGENTS.md").is_file(), "{flag}: docs are written for every template");
             let report = crate::check::check(&dir, 60);
             assert!(report.ok(), "{flag}: {:?}", report.errors);
-            if flag == "3d" {
+            if flag != "empty" {
                 // The starter scenario test passes against the starter game.
-                assert_eq!(crate::test::run(&[dir.to_string_lossy().into_owned()]), 0, "spark test on the 3d template");
+                assert_eq!(crate::test::run(&[dir.to_string_lossy().into_owned()]), 0, "spark test on the {flag} template");
             }
             let _ = std::fs::remove_dir_all(&dir);
         }
@@ -156,9 +156,9 @@ mod tests {
         for g in ["input", "time", "camera", "graphics", "physics", "sound", "draw", "screen", "save", "window", "Mesh", "Texture", "Material", "Color", "Model", "Shader", "Font"] {
             assert!(defs.contains(&format!("declare {g}:")), "docs/spark.d.luau misses `declare {g}:`");
         }
-        let api = include_str!("../../../docs/LUAU_API.md");
+        let api = include_str!("../../../docs/SPARK_API.md");
         for f in ["input.text()", "input.repeated(", "spark check"] {
-            assert!(api.contains(f), "docs/LUAU_API.md does not document {f}");
+            assert!(api.contains(f), "docs/SPARK_API.md does not document {f}");
         }
     }
 }

@@ -1,4 +1,4 @@
-//! Registers every Spark global (see docs/LUAU_API.md).
+//! Registers every Spark global (see docs/SPARK_API.md).
 
 use std::cell::RefCell;
 use std::collections::HashMap;

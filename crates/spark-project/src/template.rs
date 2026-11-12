@@ -107,7 +107,7 @@ end
 return Hud
 "##;
 
-const TOML: &str = r##"# Spark game manifest (all keys optional, see docs/LUAU_API.md).
+const TOML: &str = r##"# Spark game manifest (all keys optional, see docs/SPARK_API.md).
 title = "{TITLE}"
 spark = "{SPARK}"         # engine version the game is made for
 width = 1280
@@ -117,6 +117,16 @@ height = 720
 # splash = false          # "Powered by Spark" intro
 # build_name = "MyGame"   # exe name of `spark build`
 exclude = ["AGENTS.md", "docs"]  # not packed into the build
+"##;
+
+/// The starter scenario test of the 2D template: a 2D game is tested through what it draws.
+const TEST_2D: &str = r##"-- Scenario test: plays the game headless and checks what it drew. Run: spark test .
+
+test.step("the HUD shows the score")
+test.wait_text("Coins: 0")
+test.step("the player moves right")
+test.hold("d", 0.5)
+test.expect_text("Coins:")
 "##;
 
 /// The starter scenario test of the 3D template (`spark test .`): shows an agent what a test looks like.
@@ -160,6 +170,7 @@ There is no scene editor - the scene, logic, UI and assets are all described in 
 ```
 spark check .                    # compiles every .luau file and runs 60 frames headless (no GPU): file:line: message
 spark check . --frames 300 --json   # {"ok":false,"errors":[{"file":"src/player.luau","line":12,"message":"..."}],...}
+spark check . --types           # also type-checks every file with luau-lsp (wrong API names / arguments), if installed
 spark . --headless --frames 120 --screenshot shot.png   # render a frame, then look at shot.png
 spark . --headless --frames 60 --dump-scene            # every object: position, rotation, bounds
 ```
@@ -201,8 +212,8 @@ colors as `"#rrggbb"` strings or `Color`.
 
 /// Engine docs shipped into every game, so the AI agent always has the API of this exact version.
 const DOCS: &[(&str, &str)] = &[
-    ("docs/SPARK_API.md", include_str!("../../../docs/LUAU_API.md")),
-    ("docs/SPARK_SHADERS.md", include_str!("../../../docs/SHADERS.md")),
+    ("docs/SPARK_API.md", include_str!("../../../docs/SPARK_API.md")),
+    ("docs/SPARK_SHADERS.md", include_str!("../../../docs/SPARK_SHADERS.md")),
     ("docs/spark.d.luau", include_str!("../../../docs/spark.d.luau")),
 ];
 
@@ -366,6 +377,7 @@ pub fn write_template_kind(dir: &Path, title: &str, kind: Template) -> Result<()
         Template::D2 => vec![
             ("main.luau", MAIN_2D.replace("{TITLE}", &t)),
             ("game.toml", toml),
+            ("tests/smoke.luau", TEST_2D.into()),
             (".gitignore", GITIGNORE.into()),
         ],
         Template::Empty => vec![

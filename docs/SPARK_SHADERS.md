@@ -1,7 +1,7 @@
 # Spark Engine - shaders
 
 Out of the box you get one plain lit shader (sun + ambient + up to 32 point / spot lights + fog) and a set of built-in
-post effects that are off by default (`graphics.bloom`, `graphics.tonemap`, ... - see LUAU_API.md). Everything else -
+post effects that are off by default (`graphics.bloom`, `graphics.tonemap`, ... - see SPARK_API.md). Everything else -
 toon, PS1, pixel art, VHS, outlines, CRT - is a small WGSL file in your game.
 
 You write **only your function**. The engine adds uniforms, bindings, entry points and helpers before compiling

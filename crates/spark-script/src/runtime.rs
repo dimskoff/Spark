@@ -1,6 +1,6 @@
 //! Timers, tasks (coroutines) and events for scripts, on top of `spark_core::{Scheduler, EventBus}`.
 //!
-//! Frame order (also documented in docs/LUAU_API.md):
+//! Frame order (also documented in docs/SPARK_API.md):
 //! 1. input events  2. fixed_update xN  3. update  4. timers + tasks  5. emit_later events  6. late_update  7. render
 
 use std::cell::{Cell, RefCell};

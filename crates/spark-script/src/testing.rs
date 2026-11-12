@@ -107,6 +107,18 @@ function t.click(x, y, button)
     t.button(button, true) wait_frames(1) t.button(button, false) wait_frames(1)
 end
 function t.type(text) t.text(text) wait_frames(1) end
+function t.sees(s)
+    for _, x in ipairs(t.texts()) do
+        if string.find(x, s, 1, true) then return true end
+    end
+    return false
+end
+function t.expect_text(s, msg)
+    if not t.sees(s) then fail((msg and (msg .. ": ") or "") .. "text " .. show(s) .. " is not on screen (drawn: " .. table.concat(t.texts(), " | ") .. ")", 2) end
+end
+function t.wait_text(s, timeout)
+    t.wait_until(function() return t.sees(s) end, timeout or 5, "text " .. show(s) .. " on screen")
+end
 function t.find(name, timeout)
     local o
     t.wait_until(function() o = find(name) return o ~= nil end, timeout or 5, "object '" .. name .. "'")
@@ -142,6 +154,8 @@ pub(crate) fn install(lua: &Lua, shared: SharedTest) -> LuaResult<()> {
     )?;
     t.set("mouse", lua.create_function(|lua, (x, y): (f32, f32)| push(lua, TestInput::Move(x, y)))?)?;
     t.set("text", lua.create_function(|lua, s: String| push(lua, TestInput::Text(s)))?)?;
+    // Strings the game drew (draw.text, ui.label, ...) in the last frame, in draw order.
+    t.set("texts", lua.create_function(|lua, ()| with(lua, |w| Ok(w.canvas.drawn_texts().to_vec())))?)?;
     t.set(
         "step",
         lua.create_function(|lua, name: String| {

@@ -1,5 +1,5 @@
 -- Spark Engine - Luau type definitions for luau-lsp (autocomplete + type checking in VS Code / Zed / Neovim).
--- Generated for the API in docs/LUAU_API.md (in a game: docs/SPARK_API.md). Do not edit inside a game:
+-- Generated for the API in docs/SPARK_API.md. Do not edit inside a game:
 -- `spark docs .` overwrites it with the version that matches the engine.
 --
 -- VS Code: install "Luau Language Server" (JohnnyMorganz.luau-lsp); `spark new` writes .vscode/settings.json:
