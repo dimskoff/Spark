@@ -20,6 +20,7 @@ pub mod input;
 pub mod material;
 pub mod math;
 pub mod mesh;
+pub mod fbx;
 pub mod model;
 pub mod physics;
 pub mod pick;

@@ -217,7 +217,7 @@ fn files_with_ext(root: &Path, dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>
 /// every `.png` / `.jpg` decodes, every `.gltf` / `.glb` parses.
 fn check_assets(dir: &Path, report: &mut Report) {
     let mut files = Vec::new();
-    files_with_ext(dir, dir, &["wgsl", "png", "jpg", "jpeg", "gltf", "glb"], &mut files);
+    files_with_ext(dir, dir, &["wgsl", "png", "jpg", "jpeg", "gltf", "glb", "fbx"], &mut files);
     for rel in files {
         let name = rel.to_string_lossy().replace('\\', "/");
         let full = dir.join(&rel);

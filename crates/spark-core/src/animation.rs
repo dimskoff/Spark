@@ -95,6 +95,12 @@ impl Animator {
 /// Spawns a model as a tree of objects. Returns the root object (named after the file).
 /// `material` replaces every part's material.
 pub fn spawn_model(world: &mut World, model_id: ModelId, material: Option<Material>) -> Option<ObjectId> {
+    spawn_model_node(world, model_id, material, None)
+}
+
+/// Like [`spawn_model`], but only the node called `only` (and everything below it) is created, moved to the origin
+/// in X / Z: models that hold a whole kit of parts (a tree pack, a prop sheet) are spawned one part at a time.
+pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<Material>, only: Option<&str>) -> Option<ObjectId> {
     let model = world.assets.model(model_id)?.clone();
     let mut root_obj = Object::empty();
     root_obj.name = model.name.clone();
@@ -102,8 +108,37 @@ pub fn spawn_model(world: &mut World, model_id: ModelId, material: Option<Materi
     let mut nodes = vec![root; model.nodes.len()];
     let mut parts = Vec::new();
     // Create in hierarchy order so parents exist first.
-    let mut stack: Vec<(usize, ObjectId)> = model.roots.iter().rev().map(|&n| (n, root)).collect();
     let mut seen = vec![false; model.nodes.len()];
+    let mut only_node = None;
+    let mut stack: Vec<(usize, ObjectId)> = match only {
+        None => model.roots.iter().rev().map(|&n| (n, root)).collect(),
+        Some(name) => {
+            let ni = model.nodes.iter().position(|n| n.name == name)?;
+            only_node = Some(ni);
+            let mut chain = Vec::new();
+            let mut c = model.nodes[ni].parent;
+            while let Some(p) = c {
+                chain.push(p);
+                c = model.nodes[p].parent;
+            }
+            chain.reverse();
+            let mut parent = root;
+            for a in chain {
+                let n = &model.nodes[a];
+                let mut o = Object::empty();
+                o.name = n.name.clone();
+                o.position = n.translation;
+                o.rotation = n.rotation;
+                o.scale = n.scale;
+                let id = world.scene.add(o);
+                let _ = world.scene.set_parent(id, Some(parent));
+                nodes[a] = id;
+                seen[a] = true;
+                parent = id;
+            }
+            vec![(ni, parent)]
+        }
+    };
     while let Some((ni, parent)) = stack.pop() {
         if ni >= model.nodes.len() || seen[ni] {
             continue;
@@ -112,7 +147,7 @@ pub fn spawn_model(world: &mut World, model_id: ModelId, material: Option<Materi
         let n = &model.nodes[ni];
         let mut o = Object::empty();
         o.name = n.name.clone();
-        o.position = n.translation;
+        o.position = if only_node == Some(ni) { Vec3::new(0.0, n.translation.y, 0.0) } else { n.translation };
         o.rotation = n.rotation;
         o.scale = n.scale;
         let id = world.scene.add(o);

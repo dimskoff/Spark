@@ -145,7 +145,7 @@ impl Renderer {
             }],
         );
         // Base texture, its sampler and the material normal map (2D canvas uses only the first two).
-        let texture_layout = bind_group_layout(&device, "spark texture", &[texture_entry(0, fs), sampler_entry(1, fs), texture_entry(2, fs)]);
+        let texture_layout = bind_group_layout(&device, "spark texture", &[texture_entry(0, fs), sampler_entry(1, fs), texture_entry(2, fs), texture_entry(3, fs)]);
         let shader_layout = bind_group_layout(
             &device,
             "spark shader resources",
@@ -336,6 +336,25 @@ impl Renderer {
                 &[128, 128, 255, 255],
             )
             .create_view(&Default::default());
+        // (255, 255, 255): no occlusion, roughness / metallic factors unchanged.
+        let flat_orm = device
+            .create_texture_with_data(
+                &queue,
+                &wgpu::TextureDescriptor {
+                    label: Some("spark flat orm"),
+                    size: extent((1, 1)),
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: COLOR_FORMAT,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                },
+                wgpu::util::TextureDataOrder::LayerMajor,
+                &[255, 255, 255, 255],
+            )
+            .create_view(&Default::default());
+        let flat_normal = crate::resources::FlatMaps { normal: flat_normal, orm: flat_orm };
         let white = upload_texture(
             &device,
             &queue,

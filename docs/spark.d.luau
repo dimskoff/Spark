@@ -103,6 +103,9 @@ type SpawnProps = {
     roughness: number?,
     emissive: ColorLike?,
     normal_map: (Texture | string | false)?,
+    orm_map: (Texture | string | false)?,
+    -- spawn(model, { node = "name" }): only that node of a model (and its children), moved to the origin in X / Z
+    node: string?,
     lod: { LodLevel }?,
 }
 
@@ -184,6 +187,7 @@ declare extern type Material with
 end
 
 declare extern type Model with
+    nodes: { string }
     name: string
     animations: { string }
     size: vector
@@ -279,6 +283,7 @@ declare extern type Object with
     roughness: number
     emissive: Color
     normal_map: Texture?
+    orm_map: Texture?
     lod: { LodLevel }
     color: Color
     material: Material?
@@ -436,18 +441,6 @@ declare function background(color: ColorLike): ()
 declare function fog(color: ColorLike?, near: number?, far: number?): ()
 type SkySpec = { top: ColorLike?, bottom: ColorLike?, cubemap: (string | false)?, blend: number?, lighting: number? }
 declare function sky(spec: (SkySpec | boolean)?): ()
-
-type BloomSettings = { threshold: number?, knee: number?, strength: number?, radius: number? } | boolean
-type SsaoSettings = { radius: number?, samples: number?, strength: number?, bias: number? } | boolean
-type MotionBlurSettings = { strength: number?, samples: number? } | boolean
-type DofSettings = { focus: number?, aperture: number?, focal_range: number?, samples: number? } | boolean
-type ColorGradingSettings = {
-    exposure: number?, contrast: number?, saturation: number?, temperature: number?, tint: number?,
-    lift: (vector | { number })?, gamma: (vector | { number })?, gain: (vector | { number })?,
-} | boolean
-type ChromaticAberrationSettings = { amount: number?, radial: boolean? } | boolean
-type FilmGrainSettings = { strength: number?, size: number? } | boolean
-type VignetteSettings = { strength: number?, inner: number?, outer: number?, color: ColorLike? } | boolean
 
 type BloomSettings = { threshold: number?, knee: number?, strength: number?, radius: number? } | boolean
 type SsaoSettings = { radius: number?, samples: number?, strength: number?, bias: number? } | boolean

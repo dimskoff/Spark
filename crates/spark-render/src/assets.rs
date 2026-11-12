@@ -120,7 +120,7 @@ pub(crate) fn upload_texture(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     samplers: &[wgpu::Sampler; 4],
-    normal: &wgpu::TextureView,
+    flat: &crate::resources::FlatMaps,
     image: &ImageData,
     format: wgpu::TextureFormat,
     mipmaps: bool,
@@ -149,7 +149,8 @@ pub(crate) fn upload_texture(
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(normal) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&flat.normal) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&flat.orm) },
             ],
         })
     };

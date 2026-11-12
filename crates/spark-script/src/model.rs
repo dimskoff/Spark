@@ -20,6 +20,9 @@ impl UserData for LuaModel {
         f.add_field_method_get("animations", |lua, this| {
             with(lua, |w| Ok(w.assets.model(this.0).map(|m| m.clip_names()).unwrap_or_default()))
         });
+        f.add_field_method_get("nodes", |lua, this| {
+            with(lua, |w| Ok(w.assets.model(this.0).map(|m| m.nodes.iter().filter(|n| n.name != "__fbx_root").map(|n| n.name.clone()).collect::<Vec<_>>()).unwrap_or_default()))
+        });
         f.add_field_method_get("size", |lua, this| {
             with(lua, |w| Ok(vv(w.assets.model(this.0).map(|m| m.bounds.size()).unwrap_or_default())))
         });
@@ -40,7 +43,7 @@ impl UserData for LuaModel {
 
 pub(crate) fn is_model_path(s: &str) -> bool {
     let l = s.to_ascii_lowercase();
-    l.ends_with(".glb") || l.ends_with(".gltf")
+    l.ends_with(".glb") || l.ends_with(".gltf") || l.ends_with(".fbx")
 }
 
 /// A `Model` userdata or a `"file.glb"` path.
@@ -62,8 +65,19 @@ pub(crate) fn spawn_model(lua: &Lua, model: ModelId, second: Value, third: Optio
         Value::Table(t) => (None, Some(t)),
         other => (Some(to_material(&other, "spawn")?), third),
     };
+    let only: Option<String> = match &props {
+        Some(t) => {
+            let n: Option<String> = t.get("node")?;
+            if n.is_some() {
+                t.set("node", Value::Nil)?;
+            }
+            n
+        }
+        None => None,
+    };
     with(lua, |w| {
-        let id = animation::spawn_model(w, model, material).ok_or_else(|| rt("spawn: model was unloaded"))?;
+        let id = animation::spawn_model_node(w, model, material, only.as_deref())
+            .ok_or_else(|| rt(match &only { Some(n) => format!("spawn: the model has no node \"{n}\" (see model.nodes)"), None => "spawn: model was unloaded".to_string() }))?;
         if let Err(e) = crate::types::apply_props(w, id, props) {
             w.scene.destroy(id);
             return Err(e);

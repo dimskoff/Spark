@@ -112,6 +112,7 @@ pub(crate) struct Candidate {
     pub(crate) mesh: usize,
     pub(crate) texture: Option<usize>,
     pub(crate) normal_map: Option<usize>,
+    pub(crate) orm_map: Option<usize>,
     /// View-space distance (transparent sorting).
     pub(crate) depth: f32,
     pub(crate) in_view: bool,
@@ -131,6 +132,7 @@ pub(crate) struct Batch3 {
     pub(crate) mesh: usize,
     pub(crate) texture: Option<usize>,
     pub(crate) normal_map: Option<usize>,
+    pub(crate) orm_map: Option<usize>,
     /// Byte offset of the batch's first object (dynamic uniform offset).
     pub(crate) offset: u32,
     pub(crate) count: u32,
@@ -156,3 +158,9 @@ pub(crate) struct SurfaceState {
 }
 
 pub(crate) type SurfaceFactory = Box<dyn Fn(&wgpu::Instance) -> Option<wgpu::Surface<'static>>>;
+
+/// 1x1 default maps bound when a material has no normal / ORM map.
+pub(crate) struct FlatMaps {
+    pub(crate) normal: wgpu::TextureView,
+    pub(crate) orm: wgpu::TextureView,
+}

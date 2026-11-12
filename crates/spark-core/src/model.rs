@@ -175,6 +175,9 @@ impl ModelData {
     pub fn load(path: &Path, assets: &mut Assets) -> Result<Self, String> {
         let err = |e: String| format!("cannot load model '{}': {e}", path.display());
         let bytes = crate::vfs::read(path).map_err(err)?;
+        if path.extension().map(|e| e.eq_ignore_ascii_case("fbx")).unwrap_or(false) {
+            return crate::fbx::load(path, &bytes, assets);
+        }
         let gltf = gltf::Gltf::from_slice(&bytes).map_err(|e| err(e.to_string()))?;
         let dir = path.parent().unwrap_or(Path::new("."));
         let mut buffers: Vec<Vec<u8>> = Vec::new();

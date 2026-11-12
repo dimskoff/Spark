@@ -5,7 +5,7 @@ struct Object {
     color: vec4<f32>,  // material color, linear
     data: vec4<f32>,   // material.data: free for your shader
     info: vec4<f32>,   // tiling x, tiling y, unlit (0 / 1), pbr (0 / 1)
-    pbr: vec4<f32>,    // metallic, roughness, has normal map (0 / 1), -
+    pbr: vec4<f32>,    // metallic, roughness, has normal map (0 / 1), has orm map (0 / 1)
     emissive: vec4<f32>, // rgb, linear
 };
 
@@ -21,6 +21,8 @@ var<private> object: Object;
 @group(2) @binding(1) var base_sampler: sampler;
 // Material normal map (a flat 1x1 map when the material has none). See `surface_normal`.
 @group(2) @binding(2) var normal_texture: texture_2d<f32>;
+// Material ORM map: R = ambient occlusion, G = roughness, B = metallic (white when the material has none).
+@group(2) @binding(3) var orm_texture: texture_2d<f32>;
 @group(3) @binding(0) var<uniform> params: Params;
 @group(3) @binding(1) var texture1: texture_2d<f32>;
 @group(3) @binding(2) var texture2: texture_2d<f32>;
@@ -276,14 +278,23 @@ fn apply_fog(rgb: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
 
 fn default_fragment(f: Fragment) -> vec4<f32> {
     let base = surface_color(f.uv);
-    if (base.a < 0.01) {
+    if (base.a < 0.3) {
         discard;
     }
     let n = surface_normal(f.world_pos, f.normal, f.uv);
     var rgb = base.rgb;
     if (object.info.z < 0.5) {
         if (object.info.w > 0.5) {
-            rgb = pbr_lighting(f.world_pos, n, base.rgb, object.pbr.x, object.pbr.y);
+            var metal = object.pbr.x;
+            var rough = object.pbr.y;
+            var occlusion = 1.0;
+            if (object.pbr.w > 0.5) {
+                let orm = linear_to_srgb(textureSample(orm_texture, base_sampler, f.uv).rgb);
+                occlusion = orm.r;
+                rough = rough * orm.g;
+                metal = metal * orm.b;
+            }
+            rgb = pbr_lighting(f.world_pos, n, base.rgb * occlusion, metal, rough);
         } else {
             rgb = rgb * lighting(f.world_pos, n);
         }

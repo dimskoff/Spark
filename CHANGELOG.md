@@ -4,6 +4,13 @@ Spark is in 0.x: every minor version may change the Luau API. After `spark updat
 read the entries below for your old version and the new one, fix the code, then raise `spark = "..."` in `game.toml`.
 `spark check` reports a version mismatch under `notes`.
 
+## Unreleased
+
+- **FBX import** (`.fbx` in `Model.load` / `spawn`): binary and ASCII 7.x, hierarchy, meshes per material, skins, animation stacks,
+  unit / up-axis conversion, texture lookup next to the file with automatic PBR sets (`_Normal`, `_AO`, `_Roughness`, `_Metallic`, `_Opacity`).
+- `spawn(model, { node = "name" })` and `model.nodes`: use one part of a model that holds a whole kit.
+- **ORM maps** (`mat:with_orm_map`, `obj.orm_map`): ambient occlusion / roughness / metallic from one texture in PBR materials.
+- Opaque materials now cut out pixels with alpha < 0.3 (was 0.01): foliage no longer shows dark fringes.
 ## Unreleased (0.1.x)
 
 ### Luau API / tools

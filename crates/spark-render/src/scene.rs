@@ -204,6 +204,7 @@ impl Renderer {
                 _ => 0,
             } | if m.double_sided { VARIANT_DOUBLE_SIDED } else { 0 };
             let normal_map = m.normal_map.map(|t| t.0 as usize).filter(|&t| t < self.textures.len());
+            let orm_map = m.orm_map.map(|t| t.0 as usize).filter(|&t| t < self.textures.len());
             let emissive = m.emissive.to_linear();
             cands.push(Candidate {
                 id,
@@ -213,7 +214,7 @@ impl Renderer {
                     color: m.color.to_linear(),
                     data: m.data,
                     info: [m.tiling.x, m.tiling.y, flag(m.unlit), flag(m.pbr)],
-                    pbr: [m.metallic, m.roughness, flag(normal_map.is_some()), 0.0],
+                    pbr: [m.metallic, m.roughness, flag(normal_map.is_some()), flag(orm_map.is_some())],
                     emissive: [emissive[0], emissive[1], emissive[2], 0.0],
                 },
                 shader: self.asset_shader(m.shader, ShaderKind::Surface).unwrap_or(fallback),
@@ -221,6 +222,7 @@ impl Renderer {
                 mesh,
                 texture: m.texture.map(|t| t.0 as usize).filter(|&t| t < self.textures.len()),
                 normal_map,
+                orm_map,
                 depth: -view.transform_point3(center).z,
                 in_view,
                 caster,
@@ -259,7 +261,7 @@ impl Renderer {
         order.sort_by(|&a, &b| {
             let (a, b) = (&cands[a as usize], &cands[b as usize]);
             match (transparent(a), transparent(b)) {
-                (false, false) => (a.variant, a.shader, a.texture, a.normal_map, a.mesh).cmp(&(b.variant, b.shader, b.texture, b.normal_map, b.mesh)),
+                (false, false) => (a.variant, a.shader, a.texture, a.normal_map, a.orm_map, a.mesh).cmp(&(b.variant, b.shader, b.texture, b.normal_map, b.orm_map, b.mesh)),
                 (true, true) => b.depth.total_cmp(&a.depth),
                 (ta, tb) => ta.cmp(&tb),
             }
@@ -318,7 +320,7 @@ impl Renderer {
                     && b.mesh == c.mesh
                     && (!light_part || light_owner.last() == Some(&owner))
                     && (shadow_part
-                        || (b.shader == c.shader && b.variant == c.variant && b.texture == c.texture && b.normal_map == c.normal_map))
+                        || (b.shader == c.shader && b.variant == c.variant && b.texture == c.texture && b.normal_map == c.normal_map && b.orm_map == c.orm_map))
             });
             let faces = if light_part { cube_face_mask(c.center - light_render[owner].1, c.radius) } else { 0 };
             if same {
@@ -338,6 +340,7 @@ impl Renderer {
                     mesh: c.mesh,
                     texture: c.texture,
                     normal_map: c.normal_map,
+                    orm_map: c.orm_map,
                     offset: scratch.len() as u32,
                     count: 1,
                 });
@@ -365,8 +368,8 @@ impl Renderer {
 
         let nearest = rs.filter == TextureFilter::Nearest;
         for b in &batches {
-            if let Some(normal) = b.normal_map {
-                let key = (b.texture, normal, nearest);
+            if b.normal_map.is_some() || b.orm_map.is_some() {
+                let key = (b.texture, b.normal_map, b.orm_map, nearest);
                 if !self.normal_mapped_groups.contains_key(&key) {
                     let base = b.texture.map_or(&self.white.view, |t| &self.textures[t].view);
                     let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -380,7 +383,11 @@ impl Renderer {
                             },
                             wgpu::BindGroupEntry {
                                 binding: 2,
-                                resource: wgpu::BindingResource::TextureView(&self.textures[normal].view),
+                                resource: wgpu::BindingResource::TextureView(b.normal_map.map_or(&self.flat_normal.normal, |n| &self.textures[n].view)),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: wgpu::BindingResource::TextureView(b.orm_map.map_or(&self.flat_normal.orm, |n| &self.textures[n].view)),
                             },
                         ],
                     });
@@ -425,7 +432,7 @@ impl Renderer {
                 pass.draw(0..3, 0..1);
             }
             let (mut last_pipe, mut last_shader, mut last_mesh, mut last_texture) =
-                (None, None, usize::MAX, None::<(Option<usize>, Option<usize>)>);
+                (None, None, usize::MAX, None::<(Option<usize>, Option<usize>, Option<usize>)>);
             for b in &batches {
                 if last_pipe != Some((b.shader, b.variant)) {
                     pass.set_pipeline(self.pipeline(b.shader, (self.scene_format, b.variant, samples)));
@@ -437,16 +444,15 @@ impl Renderer {
                 }
                 pass.set_bind_group(1, &self.object_bind_group, &[b.offset]);
                 let mesh = self.meshes[b.mesh].as_ref().expect("uploaded mesh"); // candidates filtered to have uploaded meshes
-                if last_texture != Some((b.texture, b.normal_map)) {
-                    let group = match b.normal_map {
-                        Some(normal) => &self.normal_mapped_groups[&(b.texture, normal, nearest)], // created above
-                        None => {
-                            let tex = b.texture.map(|t| &self.textures[t]).unwrap_or(&self.white);
-                            if nearest { &tex.nearest } else { &tex.linear }
-                        }
+                if last_texture != Some((b.texture, b.normal_map, b.orm_map)) {
+                    let group = if b.normal_map.is_some() || b.orm_map.is_some() {
+                        &self.normal_mapped_groups[&(b.texture, b.normal_map, b.orm_map, nearest)] // created above
+                    } else {
+                        let tex = b.texture.map(|t| &self.textures[t]).unwrap_or(&self.white);
+                        if nearest { &tex.nearest } else { &tex.linear }
                     };
                     pass.set_bind_group(2, group, &[]);
-                    last_texture = Some((b.texture, b.normal_map));
+                    last_texture = Some((b.texture, b.normal_map, b.orm_map));
                 }
                 if last_mesh != b.mesh {
                     pass.set_vertex_buffer(0, mesh.vertices.slice(..));

@@ -14,6 +14,9 @@ use crate::resources::*;
 use crate::stats::*;
 use crate::uniforms::*;
 /// Draws a [`World`] to a window or to an image.
+/// Texture bind group key of materials with a normal / ORM map: (base texture, normal map, orm map, nearest).
+pub(crate) type MaterialMapsKey = (Option<usize>, Option<usize>, Option<usize>, bool);
+
 pub struct Renderer {
     pub(crate) instance: wgpu::Instance,
     pub(crate) device: wgpu::Device,
@@ -108,9 +111,9 @@ pub struct Renderer {
     pub(crate) textures: Vec<GpuTexture>,
     pub(crate) white: GpuTexture,
     /// Flat tangent-space normal (bound as `normal_texture` when a material has no normal map).
-    pub(crate) flat_normal: wgpu::TextureView,
+    pub(crate) flat_normal: crate::resources::FlatMaps,
     /// Texture bind groups of normal-mapped materials: (base texture, normal map, nearest).
-    pub(crate) normal_mapped_groups: HashMap<(Option<usize>, usize, bool), wgpu::BindGroup>,
+    pub(crate) normal_mapped_groups: HashMap<MaterialMapsKey, wgpu::BindGroup>,
     pub(crate) assets_generation: u64,
     /// `Assets::mesh_edits` already applied.
     pub(crate) mesh_edits: u64,

@@ -37,7 +37,7 @@ pub(crate) fn set_parent(w: &mut World, id: ObjectId, parent: Option<ObjectId>) 
 }
 
 const PROPS: &str =
-    "name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, lod";
+    "name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod";
 
 /// `nil` / `false` -> none, else a Texture or an image path.
 fn to_normal_map(w: &mut World, v: &Value, what: &str) -> LuaResult<Option<TextureId>> {
@@ -139,6 +139,10 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
                 let t = to_normal_map(w, &v, &what)?;
                 w.scene.get_mut(id).ok_or_else(dead)?.material.normal_map = t;
             }
+            "orm_map" => {
+                let t = to_normal_map(w, &v, &what)?;
+                w.scene.get_mut(id).ok_or_else(dead)?.material.orm_map = t;
+            }
             _ => {
                 let o = w.scene.get_mut(id).ok_or_else(dead)?;
                 match k.as_str() {
@@ -231,6 +235,15 @@ impl UserData for Obj {
             with(lua, |w| {
                 let t = to_normal_map(w, &v, "normal_map")?;
                 w.scene.get_mut(id).ok_or_else(dead)?.material.normal_map = t;
+                Ok(())
+            })
+        });
+        f.add_field_method_get("orm_map", |lua, this| read(lua, this.0, |_, o| o.material.orm_map.map(LuaTexture)));
+        f.add_field_method_set("orm_map", |lua, this, v: Value| {
+            let id = this.0;
+            with(lua, |w| {
+                let t = to_normal_map(w, &v, "orm_map")?;
+                w.scene.get_mut(id).ok_or_else(dead)?.material.orm_map = t;
                 Ok(())
             })
         });
@@ -423,6 +436,7 @@ impl UserData for LuaMaterial {
         f.add_field_method_get("roughness", |_, this| Ok(this.0.roughness));
         f.add_field_method_get("emissive", |_, this| Ok(LuaColor(this.0.emissive)));
         f.add_field_method_get("normal_map", |_, this| Ok(this.0.normal_map.map(LuaTexture)));
+        f.add_field_method_get("orm_map", |_, this| Ok(this.0.orm_map.map(LuaTexture)));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("tiling", |_, this, (x, y): (f32, Option<f32>)| Ok(LuaMaterial(this.0.with_tiling(x, y.unwrap_or(x)))));
@@ -443,6 +457,10 @@ impl UserData for LuaMaterial {
         m.add_method("with_normal_map", |lua, this, v: Value| {
             let t = with(lua, |w| to_normal_map(w, &v, "with_normal_map"))?;
             Ok(LuaMaterial(this.0.with_normal_map(t)))
+        });
+        m.add_method("with_orm_map", |lua, this, v: Value| {
+            let t = with(lua, |w| to_normal_map(w, &v, "with_orm_map"))?;
+            Ok(LuaMaterial(this.0.with_orm_map(t)))
         });
         m.add_method("with_shader", |_, this, s: Value| {
             Ok(LuaMaterial(this.0.with_shader(crate::shader::to_shader(&s, "with_shader")?)))

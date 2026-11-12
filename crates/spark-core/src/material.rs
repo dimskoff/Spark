@@ -70,6 +70,9 @@ pub struct Material {
     pub emissive: Color,
     /// Tangent-space normal map (OpenGL convention: green points along +V). Works with and without `pbr`.
     pub normal_map: Option<TextureId>,
+    /// Packed surface data (used when `pbr` is on): R = ambient occlusion, G = roughness, B = metallic; each is
+    /// multiplied with `roughness` / `metallic`. Like the normal map it holds data, not colors.
+    pub orm_map: Option<TextureId>,
 }
 
 impl Default for Material {
@@ -89,6 +92,7 @@ impl Default for Material {
             roughness: 0.5,
             emissive: Color::BLACK,
             normal_map: None,
+            orm_map: None,
         }
     }
 }
@@ -184,6 +188,11 @@ impl Material {
 
     pub fn with_emissive(mut self, emissive: Color) -> Self {
         self.emissive = emissive;
+        self
+    }
+
+    pub fn with_orm_map(mut self, orm_map: Option<TextureId>) -> Self {
+        self.orm_map = orm_map;
         self
     }
 

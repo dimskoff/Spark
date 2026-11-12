@@ -284,9 +284,10 @@ Primitives are centered at the origin (a cube of size 1 spans -0.5..0.5). Same p
 | `mat:with_blend("alpha")` | `"auto"` (default: alpha when color alpha < 1), `"opaque"`, `"alpha"` (glass, water, fades), `"additive"` (fire, glow) |
 | `mat:with_double_sided(true)`, `mat:with_cast_shadow(false)` | draw back faces (leaves, flags); no sun shadow |
 | `mat.blend`, `mat.double_sided`, `mat.cast_shadow` | read; objects also have `obj.blend`, `obj.double_sided`, `obj.cast_shadow` (read/write, also `spawn` props) |
-| `Material.pbr(c="white", metallic=0, roughness=0.5)` | physically based (Cook-Torrance GGX): metals reflect the ambient light and have tinted highlights |
+| `Material.pbr(c="white", metallic=0, roughness=0.5)` (pixels with alpha < 0.3 are cut out of opaque materials: foliage, fences) | physically based (Cook-Torrance GGX): metals reflect the ambient light and have tinted highlights |
 | `mat:with_metallic(m)`, `mat:with_roughness(r)` | 0..1 (clamped); either one turns PBR shading on |
 | `mat:with_emissive(c)` | light the surface gives off by itself (screens, lava, lamps); works in every mode, pairs well with bloom |
+| `mat:with_orm_map(tex_or_path)`, `mat.orm_map`, `obj.orm_map` | packed surface data for PBR: R = ambient occlusion, G = roughness (x `roughness`), B = metallic (x `metallic`); holds data, not colors (also a `spawn` prop `orm_map`) |
 | `mat:with_normal_map(tex_or_path)` | tangent-space normal map (OpenGL convention, green = up); `nil` removes it; works with and without PBR |
 | `mat.pbr`, `mat.metallic`, `mat.roughness`, `mat.emissive`, `mat.normal_map` | read; objects have the same names (read/write, also `spawn` props); setting `obj.metallic` / `obj.roughness` turns PBR on |
 | `obj.lod = { {20, mid}, {60, low} }` | level of detail: from 20 m away draw `mid`, from 60 m `low` (also a `spawn` prop; `{}` = off) |
@@ -336,7 +337,7 @@ wait_until(function() return not hero:is_playing("attack") end)
 spawn(Mesh.box(0.1, 0.1, 0.6), "gray", { parent = hero:find("hand.R") })   -- sword follows the hand bone
 ```
 
-- Formats: `.glb` (recommended) and `.gltf` (+ .bin / images next to it). Export from Blender: File > Export > glTF 2.0,
+- Formats: `.glb` (recommended), `.gltf` (+ .bin / images next to it) and **`.fbx`** (binary or ASCII 7.x; see "FBX" below). Export from Blender: File > Export > glTF 2.0,
   "+Y up", forward = -Z for Spark (models face -Z like every Spark object; `obj:look_at` turns -Z to the target).
 - Supported: meshes (triangles), node hierarchy, base color factor + base color texture, normal map, emissive
   factor, metallic / roughness factors (used once you set `pbr = true` on its objects), `KHR_materials_unlit`,
@@ -352,9 +353,22 @@ spawn(Mesh.box(0.1, 0.1, 0.6), "gray", { parent = hero:find("hand.R") })   -- sw
   A finished one-shot clip (`loop = false`) holds its last frame.
 - `obj:stop(fade = 0.2)`, `obj:is_playing(name?)` (finished one-shot = false), `obj:animation()` -> current clip name or nil,
   `obj:animation_time()` -> seconds, `obj:set_animation_speed(s)` (multiplies every clip; 0 freezes the pose), `obj:animations()` -> names
+- `model.nodes` -> names of all nodes; `spawn("pack.fbx", { node = "Oak_01" })` spawns only that node and its children,
+  moved to the origin in X / Z: models that hold a whole kit (a tree pack, a prop sheet) are used one part at a time
 - `obj:find(name)` -> first descendant with that name (any depth) or nil
 - `obj:paint(material_or_color)` - sets the material of the object and all its descendants that have a mesh
 - Without playing anything a model shows the first frame of its first clip.
+
+### FBX
+
+`Model.load("x.fbx")` / `spawn("x.fbx")` read Autodesk FBX 7.x (binary and ASCII; FBX 6.x ASCII is not supported): node
+hierarchy, polygon meshes (split per material), normals / UV0, unit scale and up axis (converted to meters, Y up), skins
+(4 influences per vertex) and animation stacks (translation / rotation / scale curves, one clip per stack, named like the stack).
+Pivots, blend shapes, cameras and lights are ignored. Textures are found next to the file (any folder written in the FBX is
+ignored; case, spaces vs underscores and the image extension do not matter) and PBR sets are discovered by name:
+next to `Oak_bark_Basecolor.png` the loader uses `_Normal`, `_AO`, `_Roughness`, `_Metallic`, `_Opacity` / `_alfa` when they exist
+(opacity is merged into the color alpha, AO / roughness / metallic into one ORM map). FBX materials are PBR (`mat.pbr`) by default.
+`SPARK_FBX_DEBUG=1` logs axes, skin bind-pose deviation and every mesh / material found.
 
 ## Tweens
 
@@ -444,38 +458,6 @@ graphics.post = { vhs }                            -- chain of full-screen passe
   everything drawn with it; `false` = the engine's vertex stage and plain depth (faster, e.g. a "PS1 wobble" option)
 - Per material / object: `mat:with_shader(s)`, `mat:with_data(a, b, c, d)`; `obj.shader`, `obj.data` (read/write);
   spawn props `shader = s`, `data = {a, b, c, d}`. `data` arrives in WGSL as `object.data` (per-object values, e.g. a hit flash).
-
-### Built-in post effects
-
-Each effect is `nil` / `false` (off, default), `true` (default settings) or a table: missing keys keep their defaults,
-unknown keys and wrong types are errors. Reading an effect gives its current settings table (or `nil`).
-They run before your `graphics.post` passes, in this fixed order:
-SSAO -> motion blur -> depth of field -> bloom -> color grading -> tonemap -> FXAA -> chromatic aberration -> film grain -> vignette.
-
-```lua
-graphics.tonemap = "aces"                          -- "off" (default) | "aces" | "reinhard" | "hejl"
-graphics.bloom = { strength = 0.6 }                -- glow around bright pixels
-graphics.vignette = true                           -- defaults
-graphics.color_grading = { saturation = 1.2, gain = vec3(1, 0.95, 0.9) }
-graphics.fxaa = true
-graphics.bloom = nil                               -- off again
-```
-
-| effect | settings (defaults) |
-|---|---|
-| `tonemap` | `"off"` / `"aces"` / `"reinhard"` / `"hejl"` - maps bright (HDR) colors into the screen range |
-| `bloom` | `threshold` 0.8 (brightness where glow starts), `knee` 0.2, `strength` 0.4, `radius` 8 (pixels) |
-| `ssao` | `radius` 0.5 (meters), `samples` 16 (1-64), `strength` 1, `bias` 0.05 (meters) |
-| `motion_blur` | `strength` 1 (fraction of the frame the shutter is open), `samples` 8 (1-32); camera motion only |
-| `dof` | `focus` 10 (meters), `aperture` 2, `focal_range` 3 (meters in focus around `focus`), `samples` 16 |
-| `color_grading` | `exposure` 1, `contrast` 1, `saturation` 1, `temperature` 0 (-1 warm .. 1 cool), `tint` 0 (-1 green .. 1 magenta), `lift` vec3(0) / `gamma` vec3(1) / `gain` vec3(1) (per channel, vec3 or `{r, g, b}`) |
-| `fxaa` | `true` / `false` - smooths edges MSAA misses (shader / alpha edges) |
-| `chromatic_aberration` | `amount` 2 (pixels at the screen edge), `radial` true (false = horizontal split) |
-| `film_grain` | `strength` 0.05, `size` 2 (pixels) |
-| `vignette` | `strength` 0.5, `inner` 0.3, `outer` 0.85 (0 = center, 1 = screen edge), `color` black |
-
-The 3D scene is rendered in HDR (16-bit float) where the GPU supports it, so lights brighter than 1 survive until
-`tonemap` / `bloom`. With `tonemap = "off"` such values are clipped, as before.
 
 ### Built-in post effects
 
