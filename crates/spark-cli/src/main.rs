@@ -13,13 +13,18 @@
 //! every game file packed inside, plus a .zip. When such an executable starts it runs its packed game.
 #![cfg_attr(all(feature = "gui", windows), windows_subsystem = "windows")]
 
+mod api_cmd;
 mod check;
 mod dist;
+mod doctor;
 mod editor;
 mod icon;
+mod mcp;
 mod new;
 mod test;
 mod update;
+mod util;
+mod visual;
 
 use spark_project::manifest;
 
@@ -41,6 +46,13 @@ const USAGE: &str = "Usage:
                            [--types]      also type-check with luau-lsp + docs/spark.d.luau (when luau-lsp is installed)
   spark test path/to/game [NAME...]       run scenario tests (tests/*.luau) headless; snapshots in tests/snapshots/
                           [--update]      accept changed snapshots   [--json]   [--max-time SECONDS]
+  spark api search <words>|show <name>|list   look the Luau API up [--json]
+  spark doctor [path/to/game]             check this machine (GPU, editor, luau-lsp) and the game's docs [--json]
+  spark screenshot path/to/game           render a PNG headless [--frames N] [--size WxH] [--out FILE] [--json]
+  spark inspect path/to/game              dump the scene (objects, positions, bounds) [--frames N] [--json]
+  spark golden path/to/game               compare a render with tests/golden.png [--update] [--tolerance T] [--json]
+  spark diff a.png b.png                  compare two images [--tolerance T] [--out diff.png] [--json]
+  spark mcp                               Model Context Protocol server on stdio (for AI agents)
   spark update [version]                  download the latest (or given) Spark release from GitHub
   spark --version
   spark build path/to/game [--out DIR]    make a player build: one executable with everything inside (+ .zip / .tar.gz)
@@ -55,7 +67,19 @@ fn main() {
         return;
     }
     let raw: Vec<String> = std::env::args().skip(1).collect();
+    let rest: Vec<String> = raw.iter().skip(1).cloned().collect();
     match raw.first().map(String::as_str) {
+        Some("--help" | "-h" | "help") => {
+            println!("{USAGE}\n\n{HELP}");
+            return;
+        }
+        Some(cmd @ ("build" | "new" | "docs" | "update")) if rest.iter().any(|a| a == "--json") => {
+            // These print human text; with --json the text is wrapped in one JSON object.
+            let mut args = rest.clone();
+            util::take_flag(&mut args, "--json");
+            let path = args.iter().find(|a| !a.starts_with("--")).cloned();
+            std::process::exit(util::envelope(cmd, &args, serde_json::json!({ "path": path })));
+        }
         Some("build") => std::process::exit(dist::run(&raw[1..])),
         Some("editor") => std::process::exit(editor::run(&raw[1..])),
         Some("new") => std::process::exit(new::run(&raw[1..])),
@@ -63,6 +87,13 @@ fn main() {
         Some("check") => std::process::exit(check::run(&raw[1..])),
         Some("test") => std::process::exit(test::run(&raw[1..])),
         Some("update") => std::process::exit(update::run(&raw[1..])),
+        Some("api") => std::process::exit(api_cmd::run(rest)),
+        Some("doctor") => std::process::exit(doctor::run(rest)),
+        Some("mcp") => std::process::exit(mcp::run(rest)),
+        Some("screenshot") => std::process::exit(visual::screenshot(rest)),
+        Some("inspect") => std::process::exit(visual::inspect(rest)),
+        Some("diff") => std::process::exit(visual::diff(rest)),
+        Some("golden") => std::process::exit(visual::golden(rest)),
         Some("--version" | "-V") => {
             println!("spark {}", engine::VERSION);
             return;

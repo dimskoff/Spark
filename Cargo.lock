@@ -4042,6 +4042,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "spark-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "spark-audio"
 version = "0.1.0"
 dependencies = [
@@ -4056,7 +4064,9 @@ version = "0.1.0"
 dependencies = [
  "image",
  "mlua",
+ "serde_json",
  "spark",
+ "spark-api",
  "spark-project",
  "windows-sys 0.61.2",
 ]
@@ -4151,6 +4161,7 @@ dependencies = [
  "log",
  "mlua",
  "serde_json",
+ "spark-api",
  "spark-core",
  "spark-discord",
  "spark-physics",

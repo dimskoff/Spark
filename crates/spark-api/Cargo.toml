@@ -1,0 +1,14 @@
+[package]
+name = "spark-api"
+description = "Spark Engine Luau API registry: parsed from docs/spark.d.luau, generates the reference, llms.txt and JSON."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
