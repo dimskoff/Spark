@@ -35,10 +35,10 @@ fn body_from_table(t: &Table, what: &str) -> LuaResult<Body> {
             "type" | "kind" => body.kind = kind_of(&v, &w)?,
             "shape" => shape = Some(to_str(&v, &w)?),
             "size" => size = Some(to_scale(&v, &w)?),
-            "radius" => radius = Some(to_num(&v, &w)?),
-            "height" => height = Some(to_num(&v, &w)?),
-            "mass" => body.mass = Some(to_num(&v, &w)?),
-            "friction" => body.friction = to_num(&v, &w)?,
+            "radius" => radius = Some(positive(to_num(&v, &w)?, &w)?),
+            "height" => height = Some(positive(to_num(&v, &w)?, &w)?),
+            "mass" => body.mass = Some(positive(to_num(&v, &w)?, &w)?),
+            "friction" => body.friction = non_negative(to_num(&v, &w)?, &w)?,
             "bounciness" | "bounce" => body.bounciness = to_num(&v, &w)?,
             "sensor" => body.sensor = to_bool(&v, &w)?,
             "lock_rotation" => body.lock_rotation = to_bool(&v, &w)?,
@@ -108,7 +108,12 @@ pub(crate) fn add_object_fields<F: UserDataFields<Obj>>(f: &mut F) {
         body_mut(lua, this.0, "obj.angular_velocity", |b| b.angular_velocity = v)
     });
     f.add_field_method_get("mass", |lua, this| body_ref(lua, this.0, |b| b.and_then(|b| b.mass)));
-    f.add_field_method_set("mass", |lua, this, ONum(v): ONum| body_mut(lua, this.0, "obj.mass", |b| b.mass = v));
+    f.add_field_method_set("mass", |lua, this, ONum(v): ONum| {
+        if let Some(m) = v {
+            positive(m, "obj.mass")?;
+        }
+        body_mut(lua, this.0, "obj.mass", |b| b.mass = v)
+    });
     f.add_field_method_get("gravity_scale", |lua, this| body_ref(lua, this.0, |b| b.map(|b| b.gravity_scale)));
     f.add_field_method_set("gravity_scale", |lua, this, Num(v): Num| body_mut(lua, this.0, "obj.gravity_scale", |b| b.gravity_scale = v));
     f.add_field_method_get("sensor", |lua, this| body_ref(lua, this.0, |b| b.is_some_and(|b| b.sensor)));
@@ -155,14 +160,14 @@ impl UserData for PhysicsRef {
         f.add_field_method_set("gravity", |lua, _, v: Value| {
             let g = to_vec3(&v, "physics.gravity")?;
             with(lua, |w| {
-                let _: () = w.physics.gravity = g;
+                w.physics.gravity = g;
                 Ok(())
             })
         });
         f.add_field_method_get("enabled", |lua, _| with(lua, |w| Ok(w.physics.enabled)));
         f.add_field_method_set("enabled", |lua, _, v: bool| {
             with(lua, |w| {
-                let _: () = w.physics.enabled = v;
+                w.physics.enabled = v;
                 Ok(())
             })
         });

@@ -590,7 +590,7 @@ function render()
 end
 ```
 
-Full 2D game: `examples/starfall/main.luau`.
+Full 2D example: `examples/04-draw-2d/main.luau`.
 
 ## UI widgets (ui)
 

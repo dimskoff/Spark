@@ -178,7 +178,6 @@ Examples in this repo:
 
 ```
 target/release/spark examples/demo        # 3D: physics, custom shaders, sound
-target/release/spark examples/starfall    # 2D game made only with draw.* (keyboard, mouse or gamepad)
 cargo run -p hello                        # the same idea in pure Rust
 ```
 

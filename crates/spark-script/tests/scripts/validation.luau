@@ -28,6 +28,18 @@ function start()
     fails("sun intensity NaN", function() sun(vec3(0, -1, 0), "white", nan) end, "finite")
     fails("fog NaN", function() fog("white", nan, 10) end, "finite")
 
+    -- ranges
+    fails("fov 0", function() camera.fov = 0 end, "between 1 and 179")
+    fails("fov 200", function() camera.fov = 200 end, "between 1 and 179")
+    fails("near 0", function() camera.near = 0 end, "greater than 0")
+    fails("far below near", function() camera.far = camera.near / 2 end, "greater than camera.near")
+    fails("Mesh.cube(-1)", function() Mesh.cube(-1) end, "greater than 0")
+    fails("Mesh.sphere(0)", function() Mesh.sphere(0) end, "greater than 0")
+    fails("Mesh.box width", function() Mesh.box(0, 1, 1) end, "greater than 0")
+    fails("body mass 0", function() spawn(Mesh.cube(), "red", { body = { mass = 0 } }) end, "greater than 0")
+    fails("body friction -1", function() spawn(Mesh.cube(), "red", { body = { friction = -1 } }) end, "0 or more")
+    camera.fov = 60
+
     local cube = spawn(Mesh.cube(), "red", { body = "dynamic" })
     fails("mass NaN", function() cube.mass = nan end, "finite")
     fails("velocity NaN", function() cube.velocity = vec3(0, nan, 0) end, "finite")

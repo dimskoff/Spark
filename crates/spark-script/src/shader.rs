@@ -228,14 +228,14 @@ impl UserData for LuaRender {
                 _ => Some(to_num(&v, "graphics.height")?.max(1.0) as u32),
             };
             with(lua, |w| {
-                let _: () = w.render.height = h;
+                w.render.height = h;
                 Ok(())
             })
         });
         f.add_field_method_get("scale", |lua, _| with(lua, |w| Ok(w.render.scale)));
         f.add_field_method_set("scale", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.render.scale = v.clamp(0.05, 2.0);
+                w.render.scale = v.clamp(0.05, 2.0);
                 Ok(())
             })
         });
@@ -243,7 +243,7 @@ impl UserData for LuaRender {
         f.add_field_method_set("upscale", |lua, _, v: Value| {
             let f = to_filter(&v, "graphics.upscale")?;
             with(lua, |w| {
-                let _: () = w.render.upscale = f;
+                w.render.upscale = f;
                 Ok(())
             })
         });
@@ -260,56 +260,56 @@ impl UserData for LuaRender {
                 _ => to_num(&v, "graphics.msaa")?.clamp(1.0, 8.0) as u32,
             };
             with(lua, |w| {
-                let _: () = w.render.msaa = n;
+                w.render.msaa = n;
                 Ok(())
             })
         });
         f.add_field_method_get("shadows", |lua, _| with(lua, |w| Ok(w.render.shadows)));
         f.add_field_method_set("shadows", |lua, _, v: bool| {
             with(lua, |w| {
-                let _: () = w.render.shadows = v;
+                w.render.shadows = v;
                 Ok(())
             })
         });
         f.add_field_method_get("shadow_distance", |lua, _| with(lua, |w| Ok(w.render.shadow_distance)));
         f.add_field_method_set("shadow_distance", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.render.shadow_distance = v.max(1.0);
+                w.render.shadow_distance = v.max(1.0);
                 Ok(())
             })
         });
         f.add_field_method_get("shadow_size", |lua, _| with(lua, |w| Ok(w.render.shadow_size)));
         f.add_field_method_set("shadow_size", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.render.shadow_size = v.clamp(256.0, 8192.0) as u32;
+                w.render.shadow_size = v.clamp(256.0, 8192.0) as u32;
                 Ok(())
             })
         });
         f.add_field_method_get("light_shadows", |lua, _| with(lua, |w| Ok(w.render.light_shadows)));
         f.add_field_method_set("light_shadows", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.render.light_shadows = v.clamp(0.0, spark_core::Light::MAX_SHADOWED as f32) as u32;
+                w.render.light_shadows = v.clamp(0.0, spark_core::Light::MAX_SHADOWED as f32) as u32;
                 Ok(())
             })
         });
         f.add_field_method_get("light_shadow_soft", |lua, _| with(lua, |w| Ok(w.render.light_shadow_soft)));
         f.add_field_method_set("light_shadow_soft", |lua, _, v: bool| {
             with(lua, |w| {
-                let _: () = w.render.light_shadow_soft = v;
+                w.render.light_shadow_soft = v;
                 Ok(())
             })
         });
         f.add_field_method_get("light_shadow_size", |lua, _| with(lua, |w| Ok(w.render.light_shadow_size)));
         f.add_field_method_set("light_shadow_size", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.render.light_shadow_size = v.clamp(64.0, 2048.0) as u32;
+                w.render.light_shadow_size = v.clamp(64.0, 2048.0) as u32;
                 Ok(())
             })
         });
         f.add_field_method_get("light_shadow_updates", |lua, _| with(lua, |w| Ok(w.render.light_shadow_updates)));
         f.add_field_method_set("light_shadow_updates", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.render.light_shadow_updates = v.max(0.0) as u32;
+                w.render.light_shadow_updates = v.max(0.0) as u32;
                 Ok(())
             })
         });
@@ -317,7 +317,7 @@ impl UserData for LuaRender {
         f.add_field_method_set("filter", |lua, _, v: Value| {
             let f = to_filter(&v, "graphics.filter")?;
             with(lua, |w| {
-                let _: () = w.render.filter = f;
+                w.render.filter = f;
                 Ok(())
             })
         });
@@ -330,7 +330,7 @@ impl UserData for LuaRender {
                         return Err(rt(format!("graphics.shader: {} is a post shader; use graphics.post = {{ shader }}", d.name)));
                     }
                 }
-                let _: () = w.render.shader = s;
+                w.render.shader = s;
                 Ok(())
             })
         });
@@ -345,7 +345,7 @@ impl UserData for LuaRender {
         f.add_field_method_set("post", |lua, _, v: Value| {
             with(lua, |w| {
                 let p = to_post(w, &v)?;
-                let _: () = w.render.post = p;
+                w.render.post = p;
                 Ok(())
             })
         });
@@ -386,7 +386,7 @@ impl UserData for LuaRender {
                 s => return Err(rt(format!("graphics.tonemap: unknown '{s}' (use \"off\", \"aces\", \"reinhard\", \"hejl\")"))),
             };
             with(lua, |w| {
-                let _: () = w.render.postfx.tonemap = t;
+                w.render.postfx.tonemap = t;
                 Ok(())
             })
         });
@@ -394,7 +394,7 @@ impl UserData for LuaRender {
         f.add_field_method_set("fxaa", |lua, _, v: Value| {
             let on = to_bool(&v, "graphics.fxaa")?;
             with(lua, |w| {
-                let _: () = w.render.postfx.fxaa = on;
+                w.render.postfx.fxaa = on;
                 Ok(())
             })
         });

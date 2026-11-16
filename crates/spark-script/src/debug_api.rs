@@ -37,7 +37,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
         lua.create_function(|lua, (text, color): (String, Value)| {
             let c = if color.is_nil() { spark_core::Color::WHITE } else { to_color(&color, "debug.add_line")? };
             with(lua, |w| {
-                let _: () = w.debug.add_line(text, c);
+                w.debug.add_line(text, c);
                 Ok(())
             })
         })?,
@@ -47,7 +47,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
         "clear_lines",
         lua.create_function(|lua, ()| {
             with(lua, |w| {
-                let _: () = w.debug.clear_lines();
+                w.debug.clear_lines();
                 Ok(())
             })
         })?,
@@ -97,27 +97,27 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
             let on = || to_bool(&value, &what);
             match key.as_str() {
                 "enabled" => with(lua, |w| {
-                    let _: () = w.debug.set_enabled(on()?);
+                    w.debug.set_enabled(on()?);
                     Ok(())
                 }),
                 "hotkey" => with(lua, |w| {
-                    let _: () = w.debug.hotkey = on()?;
+                    w.debug.hotkey = on()?;
                     Ok(())
                 }),
                 "show_fps" => with(lua, |w| {
-                    let _: () = w.debug.set_show_fps(on()?);
+                    w.debug.set_show_fps(on()?);
                     Ok(())
                 }),
                 "show_gpu" => with(lua, |w| {
-                    let _: () = w.debug.set_show_gpu(on()?);
+                    w.debug.set_show_gpu(on()?);
                     Ok(())
                 }),
                 "show_scene" => with(lua, |w| {
-                    let _: () = w.debug.set_show_scene(on()?);
+                    w.debug.set_show_scene(on()?);
                     Ok(())
                 }),
                 "show_physics" => with(lua, |w| {
-                    let _: () = w.debug.set_show_physics(on()?);
+                    w.debug.set_show_physics(on()?);
                     Ok(())
                 }),
                 "fps" | "frame_time" => Err(mlua::Error::runtime(format!("{what} is read-only"))),

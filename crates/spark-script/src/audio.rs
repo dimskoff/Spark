@@ -18,25 +18,25 @@ impl UserData for LuaSound {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("stop", |lua, this, ONum(fade): ONum| {
             with(lua, |w| {
-                let _: () = w.audio.stop(this.0, fade.unwrap_or(0.0));
+                w.audio.stop(this.0, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
         m.add_method("set_volume", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
             with(lua, |w| {
-                let _: () = w.audio.set_volume(this.0, v, fade.unwrap_or(0.0));
+                w.audio.set_volume(this.0, v, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
         m.add_method("set_pitch", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
             with(lua, |w| {
-                let _: () = w.audio.set_pitch(this.0, v, fade.unwrap_or(0.0));
+                w.audio.set_pitch(this.0, v, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
         m.add_method("set_pan", |lua, this, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.audio.set_pan(this.0, v);
+                w.audio.set_pan(this.0, v);
                 Ok(())
             })
         });
@@ -46,7 +46,7 @@ impl UserData for LuaSound {
                 if !w.audio.is_spatial(this.0) {
                     return Err(rt("sound:set_position: only for 3D sounds (play with { at = position_or_object })"));
                 }
-                let _: () = w.audio.set_source(this.0, src);
+                w.audio.set_source(this.0, src);
                 Ok(())
             })
         });
@@ -64,14 +64,14 @@ impl UserData for LuaBus {
         f.add_field_method_get("volume", |lua, this| with(lua, |w| Ok(w.audio.bus_volume(this.0))));
         f.add_field_method_set("volume", |lua, this, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.audio.set_bus_volume(this.0, v, 0.0);
+                w.audio.set_bus_volume(this.0, v, 0.0);
                 Ok(())
             })
         });
         f.add_field_method_get("paused", |lua, this| with(lua, |w| Ok(w.audio.bus_paused(this.0))));
         f.add_field_method_set("paused", |lua, this, v: bool| {
             with(lua, |w| {
-                let _: () = w.audio.pause_bus(this.0, v, 0.0);
+                w.audio.pause_bus(this.0, v, 0.0);
                 Ok(())
             })
         });
@@ -80,25 +80,25 @@ impl UserData for LuaBus {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("set_volume", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
             with(lua, |w| {
-                let _: () = w.audio.set_bus_volume(this.0, v, fade.unwrap_or(0.0));
+                w.audio.set_bus_volume(this.0, v, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
         m.add_method("stop", |lua, this, ONum(fade): ONum| {
             with(lua, |w| {
-                let _: () = w.audio.stop_bus(this.0, fade.unwrap_or(0.0));
+                w.audio.stop_bus(this.0, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
         m.add_method("pause", |lua, this, ONum(fade): ONum| {
             with(lua, |w| {
-                let _: () = w.audio.pause_bus(this.0, true, fade.unwrap_or(0.0));
+                w.audio.pause_bus(this.0, true, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
         m.add_method("resume", |lua, this, ONum(fade): ONum| {
             with(lua, |w| {
-                let _: () = w.audio.pause_bus(this.0, false, fade.unwrap_or(0.0));
+                w.audio.pause_bus(this.0, false, fade.unwrap_or(0.0));
                 Ok(())
             })
         });
@@ -179,7 +179,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "stop_all",
         lua.create_function(|lua, ONum(fade): ONum| {
             with(lua, |w| {
-                let _: () = w.audio.stop_all(fade.unwrap_or(0.0));
+                w.audio.stop_all(fade.unwrap_or(0.0));
                 Ok(())
             })
         })?,
@@ -207,7 +207,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
             "volume" => {
                 let v = to_num(&v, "sound.volume")?;
                 with(lua, |w| {
-                    let _: () = w.audio.set_master_volume(v);
+                    w.audio.set_master_volume(v);
                     Ok(())
                 })
             }

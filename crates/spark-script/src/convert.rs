@@ -87,6 +87,21 @@ impl mlua::FromLua for ONum {
     }
 }
 
+/// Range check with a message that says what is allowed (what = camera.fov).
+pub(crate) fn in_range(v: f32, lo: f32, hi: f32, what: &str, unit: &str) -> LuaResult<f32> {
+    if (lo..=hi).contains(&v) { Ok(v) } else { Err(rt(format!("{what}: must be between {lo} and {hi}{unit}, got {v}"))) }
+}
+
+/// Must be strictly positive (sizes, radii, masses).
+pub(crate) fn positive(v: f32, what: &str) -> LuaResult<f32> {
+    if v > 0.0 { Ok(v) } else { Err(rt(format!("{what}: must be greater than 0, got {v}"))) }
+}
+
+/// Must be zero or more.
+pub(crate) fn non_negative(v: f32, what: &str) -> LuaResult<f32> {
+    if v >= 0.0 { Ok(v) } else { Err(rt(format!("{what}: must be 0 or more, got {v}"))) }
+}
+
 /// Checks every component of a vector.
 pub(crate) fn finite_vec(v: Vec3, what: &str) -> LuaResult<Vec3> {
     for (c, x) in ["x", "y", "z"].iter().zip(v.to_array()) {

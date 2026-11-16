@@ -173,7 +173,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     mesh.set(
         "cube",
         lua.create_function(|lua, ONum(size): ONum| {
-            let s = size.unwrap_or(1.0);
+            let s = positive(size.unwrap_or(1.0), "Mesh.cube: size")?;
             cached_mesh(lua, format!("cube {s}"), || MeshData::cube(s))
         })?,
     )?;
@@ -181,6 +181,9 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
         "box",
         lua.create_function(|lua, (ONum(w), ONum(h), ONum(d), o): (ONum, ONum, ONum, Option<Table>)| {
             let (w, h, d) = (w.unwrap_or(1.0), h.unwrap_or(1.0), d.unwrap_or(1.0));
+            for (v, n) in [(w, "width"), (h, "height"), (d, "depth")] {
+                positive(v, &format!("Mesh.box: {n}"))?;
+            }
             match surface_opts(o, "Mesh.box")? {
                 Some(o) => cached_mesh(lua, format!("box {w} {h} {d} {o:?}"), || MeshData::cuboid_with(w, h, d, o)),
                 None => cached_mesh(lua, format!("box {w} {h} {d}"), || MeshData::cuboid(w, h, d)),
@@ -192,6 +195,8 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, (ONum(w), ONum(d), o): (ONum, ONum, Option<Table>)| {
             let w = w.unwrap_or(10.0);
             let d = d.unwrap_or(w);
+            positive(w, "Mesh.plane: width")?;
+            positive(d, "Mesh.plane: depth")?;
             match surface_opts(o, "Mesh.plane")? {
                 Some(o) => cached_mesh(lua, format!("plane {w} {d} {o:?}"), || MeshData::plane_with(w, d, o)),
                 None => cached_mesh(lua, format!("plane {w} {d}"), || MeshData::plane(w, d)),
@@ -203,6 +208,8 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, (ONum(w), ONum(h), o): (ONum, ONum, Option<Table>)| {
             let w = w.unwrap_or(1.0);
             let h = h.unwrap_or(w);
+            positive(w, "Mesh.quad: width")?;
+            positive(h, "Mesh.quad: height")?;
             match surface_opts(o, "Mesh.quad")? {
                 Some(o) => cached_mesh(lua, format!("quad {w} {h} {o:?}"), || MeshData::quad_with(w, h, o)),
                 None => cached_mesh(lua, format!("quad {w} {h}"), || MeshData::quad(w, h)),
@@ -212,14 +219,18 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     mesh.set(
         "sphere",
         lua.create_function(|lua, (ONum(r), seg): (ONum, Option<u32>)| {
-            let (r, seg) = (r.unwrap_or(0.5), seg.unwrap_or(24).clamp(3, 256));
+            let (r, seg) = (positive(r.unwrap_or(0.5), "Mesh.sphere: radius")?, seg.unwrap_or(24).clamp(3, 256));
             cached_mesh(lua, format!("sphere {r} {seg}"), || MeshData::sphere(r, seg))
         })?,
     )?;
     mesh.set(
         "cylinder",
         lua.create_function(|lua, (ONum(r), ONum(h), seg): (ONum, ONum, Option<u32>)| {
-            let (r, h, seg) = (r.unwrap_or(0.5), h.unwrap_or(1.0), seg.unwrap_or(24).clamp(3, 256));
+            let (r, h, seg) = (
+                positive(r.unwrap_or(0.5), "Mesh.cylinder: radius")?,
+                positive(h.unwrap_or(1.0), "Mesh.cylinder: height")?,
+                seg.unwrap_or(24).clamp(3, 256),
+            );
             cached_mesh(lua, format!("cylinder {r} {h} {seg}"), || MeshData::cylinder(r, h, seg))
         })?,
     )?;
@@ -435,7 +446,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, c: Value| {
             let c = to_color(&c, "ambient")?;
             with(lua, |w| {
-                let _: () = w.scene.ambient = c;
+                w.scene.ambient = c;
                 Ok(())
             })
         })?,
@@ -445,7 +456,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, c: Value| {
             let c = to_color(&c, "background")?;
             with(lua, |w| {
-                let _: () = w.scene.background = c;
+                w.scene.background = c;
                 Ok(())
             })
         })?,
@@ -458,7 +469,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
                 _ => Some(Fog { color: to_color(&c, "fog")?, near: near.unwrap_or(10.0), far: far.unwrap_or(60.0) }),
             };
             with(lua, |w| {
-                let _: () = w.scene.fog = fog;
+                w.scene.fog = fog;
                 Ok(())
             })
         })?,
@@ -468,7 +479,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, v: Value| {
             with(lua, |w| {
                 let sky = to_sky(w, &v)?;
-                let _: () = w.scene.sky = sky;
+                w.scene.sky = sky;
                 Ok(())
             })
         })?,
@@ -478,7 +489,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         "quit",
         lua.create_function(|lua, ()| {
             with(lua, |w| {
-                let _: () = w.quit();
+                w.quit();
                 Ok(())
             })
         })?,
@@ -487,7 +498,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         "restart",
         lua.create_function(|lua, ()| {
             with(lua, |w| {
-                let _: () = w.request_restart();
+                w.request_restart();
                 Ok(())
             })
         })?,
@@ -555,7 +566,7 @@ fn install_input(lua: &Lua, g: &Table) -> LuaResult<()> {
         "lock_mouse",
         lua.create_function(|lua, on: Option<bool>| {
             with(lua, |w| {
-                let _: () = w.input.lock_mouse = on.unwrap_or(true);
+                w.input.lock_mouse = on.unwrap_or(true);
                 Ok(())
             })
         })?,
@@ -583,14 +594,14 @@ impl mlua::UserData for LuaWindow {
         f.add_field_method_get("fullscreen", |lua, _| with(lua, |w| Ok(w.window.fullscreen)));
         f.add_field_method_set("fullscreen", |lua, _, on: bool| {
             with(lua, |w| {
-                let _: () = w.window.fullscreen = on;
+                w.window.fullscreen = on;
                 Ok(())
             })
         });
         f.add_field_method_get("title", |lua, _| with(lua, |w| Ok(w.window.title.clone())));
         f.add_field_method_set("title", |lua, _, t: Option<String>| {
             with(lua, |w| {
-                let _: () = w.window.title = t;
+                w.window.title = t;
                 Ok(())
             })
         });

@@ -246,7 +246,7 @@ fn install_screen(lua: &Lua, g: &Table) -> LuaResult<()> {
                     return Err(rt("screen.height must be > 0 (virtual pixels, default 720)"));
                 }
                 with(lua, |w| {
-                    let _: () = w.canvas.virtual_height = h;
+                    w.canvas.virtual_height = h;
                     Ok(())
                 })
             }
@@ -295,7 +295,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, (Num(x1), Num(y1), Num(x2), Num(y2), color, ONum(width)): (Num, Num, Num, Num, Value, ONum)| {
             let c = color_or_white(&color, "draw.line color")?;
             with(lua, |w| {
-                let _: () = w.canvas.line(Vec2::new(x1, y1), Vec2::new(x2, y2), width.unwrap_or(2.0), c);
+                w.canvas.line(Vec2::new(x1, y1), Vec2::new(x2, y2), width.unwrap_or(2.0), c);
                 Ok(())
             })
         })?,
@@ -393,7 +393,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "push",
         lua.create_function(|lua, ()| {
             with(lua, |w| {
-                let _: () = w.canvas.push();
+                w.canvas.push();
                 Ok(())
             })
         })?,
@@ -408,7 +408,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "translate",
         lua.create_function(|lua, (Num(x), Num(y)): (Num, Num)| {
             with(lua, |w| {
-                let _: () = w.canvas.translate(Vec2::new(x, y));
+                w.canvas.translate(Vec2::new(x, y));
                 Ok(())
             })
         })?,
@@ -417,7 +417,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "rotate",
         lua.create_function(|lua, Num(a): Num| {
             with(lua, |w| {
-                let _: () = w.canvas.rotate(a);
+                w.canvas.rotate(a);
                 Ok(())
             })
         })?,
@@ -426,7 +426,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "scale",
         lua.create_function(|lua, (Num(sx), ONum(sy)): (Num, ONum)| {
             with(lua, |w| {
-                let _: () = w.canvas.scale_by(Vec2::new(sx, sy.unwrap_or(sx)));
+                w.canvas.scale_by(Vec2::new(sx, sy.unwrap_or(sx)));
                 Ok(())
             })
         })?,
@@ -449,7 +449,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, v: Value| {
             let f = to_filter(&v, "draw.filter")?;
             with(lua, |w| {
-                let _: () = w.canvas.nearest = f == spark_core::TextureFilter::Nearest;
+                w.canvas.nearest = f == spark_core::TextureFilter::Nearest;
                 Ok(())
             })
         })?,

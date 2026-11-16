@@ -252,24 +252,24 @@ fn flatten(out: &mut String, prefix: &str, v: &Value, depth: usize) -> LuaResult
         Value::Table(t) => flatten_table(out, prefix, t, depth),
         Value::Nil => Ok(()),
         Value::Boolean(b) => {
-            let _: () = writeln!(out, "{prefix} = {b}").unwrap_or(());
+            writeln!(out, "{prefix} = {b}").unwrap_or(());
             Ok(())
         }
         Value::Integer(i) => {
-            let _: () = writeln!(out, "{prefix} = {i}").unwrap_or(());
+            writeln!(out, "{prefix} = {i}").unwrap_or(());
             Ok(())
         }
         Value::Number(n) => {
             let s = if n.fract() == 0.0 && n.abs() < 1e15 { format!("{}", *n as i64) } else { num(*n as f32) };
-            let _: () = writeln!(out, "{prefix} = {s}").unwrap_or(());
+            writeln!(out, "{prefix} = {s}").unwrap_or(());
             Ok(())
         }
         Value::String(s) => {
-            let _: () = writeln!(out, "{prefix} = {:?}", s.to_string_lossy()).unwrap_or(());
+            writeln!(out, "{prefix} = {:?}", s.to_string_lossy()).unwrap_or(());
             Ok(())
         }
         Value::Vector(x) => {
-            let _: () = writeln!(out, "{prefix} = {}", vec3(Vec3::new(x.x(), x.y(), x.z()))).unwrap_or(());
+            writeln!(out, "{prefix} = {}", vec3(Vec3::new(x.x(), x.y(), x.z()))).unwrap_or(());
             Ok(())
         }
         other => {
@@ -278,7 +278,7 @@ fn flatten(out: &mut String, prefix: &str, v: &Value, depth: usize) -> LuaResult
                 Value::UserData(_) => other.to_string().unwrap_or_else(|_| "<userdata>".into()),
                 _ => format!("<{}>", other.type_name()),
             };
-            let _: () = writeln!(out, "{prefix} = {s}").unwrap_or(());
+            writeln!(out, "{prefix} = {s}").unwrap_or(());
             Ok(())
         }
     }

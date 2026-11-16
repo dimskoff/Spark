@@ -479,7 +479,7 @@ impl UserData for Cam {
         f.add_field_method_set("position", |lua, _, v: Value| {
             let p = to_vec3(&v, "camera.position")?;
             with(lua, |w| {
-                let _: () = w.scene.camera.position = p;
+                w.scene.camera.position = p;
                 Ok(())
             })
         });
@@ -488,19 +488,19 @@ impl UserData for Cam {
         f.add_field_method_get("z", |lua, _| with(lua, |w| Ok(w.scene.camera.position.z)));
         f.add_field_method_set("x", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.scene.camera.position.x = v;
+                w.scene.camera.position.x = v;
                 Ok(())
             })
         });
         f.add_field_method_set("y", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.scene.camera.position.y = v;
+                w.scene.camera.position.y = v;
                 Ok(())
             })
         });
         f.add_field_method_set("z", |lua, _, Num(v): Num| {
             with(lua, |w| {
-                let _: () = w.scene.camera.position.z = v;
+                w.scene.camera.position.z = v;
                 Ok(())
             })
         });
@@ -508,28 +508,37 @@ impl UserData for Cam {
         f.add_field_method_set("rotation", |lua, _, v: Value| {
             let r = from_euler(to_vec3(&v, "camera.rotation")?);
             with(lua, |w| {
-                let _: () = w.scene.camera.rotation = r;
+                w.scene.camera.rotation = r;
                 Ok(())
             })
         });
         f.add_field_method_get("fov", |lua, _| with(lua, |w| Ok(w.scene.camera.fov)));
         f.add_field_method_set("fov", |lua, _, Num(v): Num| {
+            let v = in_range(v, 1.0, 179.0, "camera.fov", " degrees (vertical field of view)")?;
             with(lua, |w| {
-                let _: () = w.scene.camera.fov = v;
+                w.scene.camera.fov = v;
                 Ok(())
             })
         });
         f.add_field_method_get("near", |lua, _| with(lua, |w| Ok(w.scene.camera.near)));
         f.add_field_method_set("near", |lua, _, Num(v): Num| {
+            let v = positive(v, "camera.near")?;
             with(lua, |w| {
-                let _: () = w.scene.camera.near = v;
+                if v >= w.scene.camera.far {
+                    return Err(rt(format!("camera.near ({v}) must be smaller than camera.far ({})", w.scene.camera.far)));
+                }
+                w.scene.camera.near = v;
                 Ok(())
             })
         });
         f.add_field_method_get("far", |lua, _| with(lua, |w| Ok(w.scene.camera.far)));
         f.add_field_method_set("far", |lua, _, Num(v): Num| {
+            let v = positive(v, "camera.far")?;
             with(lua, |w| {
-                let _: () = w.scene.camera.far = v;
+                if v <= w.scene.camera.near {
+                    return Err(rt(format!("camera.far ({v}) must be greater than camera.near ({})", w.scene.camera.near)));
+                }
+                w.scene.camera.far = v;
                 Ok(())
             })
         });
@@ -541,7 +550,7 @@ impl UserData for Cam {
                 _ => Some(to_num(&v, "camera.ortho")?.max(0.001)),
             };
             with(lua, |w| {
-                let _: () = w.scene.camera.ortho = o;
+                w.scene.camera.ortho = o;
                 Ok(())
             })
         });
@@ -557,7 +566,7 @@ impl UserData for Cam {
         m.add_method("translate", |lua, _, v: Value| {
             let d = to_vec3(&v, "camera:translate")?;
             with(lua, |w| {
-                let _: () = w.scene.camera.position += d;
+                w.scene.camera.position += d;
                 Ok(())
             })
         });
@@ -610,7 +619,7 @@ impl UserData for TimeRef {
                 return Err(rt("time.scale must be a number >= 0 (0 = paused, 1 = normal)"));
             }
             with(lua, |w| {
-                let _: () = w.time.scale = v;
+                w.time.scale = v;
                 Ok(())
             })
         });
@@ -620,7 +629,7 @@ impl UserData for TimeRef {
                 return Err(rt("time.fixed_dt must be between 0.001 and 1 seconds (default 1/60)"));
             }
             with(lua, |w| {
-                let _: () = w.time.fixed_dt = v;
+                w.time.fixed_dt = v;
                 Ok(())
             })
         });
