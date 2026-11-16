@@ -488,6 +488,10 @@ fn norm_name(s: &str) -> String {
 /// underscores and the image extension.
 fn locate_texture(dir: &Path, model: &Path, file: &str, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
     let base = file.rsplit(['/', '\\']).next().unwrap_or(file);
+    // C:name.png joined to a folder is drive-relative on Windows: never leave the model's folder.
+    if base.is_empty() || base.contains([':', '\0']) || base == ".." {
+        return None;
+    }
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(base);
     let want = norm_name(stem);
     let model_stem = model.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();

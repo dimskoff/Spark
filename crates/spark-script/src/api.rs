@@ -153,7 +153,7 @@ fn opt_color(v: &Value, default: Color, what: &str) -> LuaResult<Color> {
 fn install_math(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set(
         "vec3",
-        lua.create_function(|_, (x, y, z): (Option<f32>, Option<f32>, Option<f32>)| {
+        lua.create_function(|_, (ONum(x), ONum(y), ONum(z)): (ONum, ONum, ONum)| {
             Ok(match (x, y, z) {
                 (Some(s), None, None) => Vector::new(s, s, s),
                 _ => Vector::new(x.unwrap_or(0.0), y.unwrap_or(0.0), z.unwrap_or(0.0)),
@@ -168,7 +168,7 @@ fn install_math(lua: &Lua, g: &Table) -> LuaResult<()> {
         "distance",
         lua.create_function(|_, (a, b): (Value, Value)| Ok(to_vec3(&a, "distance")?.distance(to_vec3(&b, "distance")?)))?,
     )?;
-    g.set("lerp", lua.create_function(|lua, (a, b, t): (Value, Value, f32)| lerp_values(lua, &a, &b, t))?)?;
+    g.set("lerp", lua.create_function(|lua, (a, b, Num(t)): (Value, Value, Num)| lerp_values(lua, &a, &b, t))?)?;
     Ok(())
 }
 
@@ -176,14 +176,14 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     let mesh = lua.create_table()?;
     mesh.set(
         "cube",
-        lua.create_function(|lua, size: Option<f32>| {
+        lua.create_function(|lua, ONum(size): ONum| {
             let s = size.unwrap_or(1.0);
             cached_mesh(lua, format!("cube {s}"), || MeshData::cube(s))
         })?,
     )?;
     mesh.set(
         "box",
-        lua.create_function(|lua, (w, h, d, o): (Option<f32>, Option<f32>, Option<f32>, Option<Table>)| {
+        lua.create_function(|lua, (ONum(w), ONum(h), ONum(d), o): (ONum, ONum, ONum, Option<Table>)| {
             let (w, h, d) = (w.unwrap_or(1.0), h.unwrap_or(1.0), d.unwrap_or(1.0));
             match surface_opts(o, "Mesh.box")? {
                 Some(o) => cached_mesh(lua, format!("box {w} {h} {d} {o:?}"), || MeshData::cuboid_with(w, h, d, o)),
@@ -193,7 +193,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     mesh.set(
         "plane",
-        lua.create_function(|lua, (w, d, o): (Option<f32>, Option<f32>, Option<Table>)| {
+        lua.create_function(|lua, (ONum(w), ONum(d), o): (ONum, ONum, Option<Table>)| {
             let w = w.unwrap_or(10.0);
             let d = d.unwrap_or(w);
             match surface_opts(o, "Mesh.plane")? {
@@ -204,7 +204,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     mesh.set(
         "quad",
-        lua.create_function(|lua, (w, h, o): (Option<f32>, Option<f32>, Option<Table>)| {
+        lua.create_function(|lua, (ONum(w), ONum(h), o): (ONum, ONum, Option<Table>)| {
             let w = w.unwrap_or(1.0);
             let h = h.unwrap_or(w);
             match surface_opts(o, "Mesh.quad")? {
@@ -215,14 +215,14 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     mesh.set(
         "sphere",
-        lua.create_function(|lua, (r, seg): (Option<f32>, Option<u32>)| {
+        lua.create_function(|lua, (ONum(r), seg): (ONum, Option<u32>)| {
             let (r, seg) = (r.unwrap_or(0.5), seg.unwrap_or(24).clamp(3, 256));
             cached_mesh(lua, format!("sphere {r} {seg}"), || MeshData::sphere(r, seg))
         })?,
     )?;
     mesh.set(
         "cylinder",
-        lua.create_function(|lua, (r, h, seg): (Option<f32>, Option<f32>, Option<u32>)| {
+        lua.create_function(|lua, (ONum(r), ONum(h), seg): (ONum, ONum, Option<u32>)| {
             let (r, h, seg) = (r.unwrap_or(0.5), h.unwrap_or(1.0), seg.unwrap_or(24).clamp(3, 256));
             cached_mesh(lua, format!("cylinder {r} {h} {seg}"), || MeshData::cylinder(r, h, seg))
         })?,
@@ -314,7 +314,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     material.set("unlit", lua.create_function(|_, c: Value| Ok(LuaMaterial(Material::unlit(to_color(&c, "Material.unlit")?))))?)?;
     material.set(
         "pbr",
-        lua.create_function(|_, (c, metallic, roughness): (Value, Option<f32>, Option<f32>)| {
+        lua.create_function(|_, (c, ONum(metallic), ONum(roughness)): (Value, ONum, ONum)| {
             let c = if c.is_nil() { Color::WHITE } else { to_color(&c, "Material.pbr")? };
             Ok(LuaMaterial(Material::pbr(c, metallic.unwrap_or(0.0), roughness.unwrap_or(0.5))))
         })?,
@@ -336,7 +336,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     material.set(
         "checker",
-        lua.create_function(|lua, (a, b, cells): (Value, Value, Option<f32>)| {
+        lua.create_function(|lua, (a, b, ONum(cells)): (Value, Value, ONum)| {
             let a = opt_color(&a, Color::WHITE, "Material.checker")?;
             let b = opt_color(&b, Color::GRAY, "Material.checker")?;
             let tex = with(lua, |w| Ok(w.assets.add_texture(ImageData::checker(64, 2, a, b))))?;
@@ -347,12 +347,12 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set("Material", material)?;
 
     let color = lua.create_table()?;
-    color.set("rgb", lua.create_function(|_, (r, g, b): (f32, f32, f32)| Ok(LuaColor(Color::rgb(r, g, b))))?)?;
-    color.set("rgba", lua.create_function(|_, (r, g, b, a): (f32, f32, f32, f32)| Ok(LuaColor(Color::rgba(r, g, b, a))))?)?;
+    color.set("rgb", lua.create_function(|_, (Num(r), Num(g), Num(b)): (Num, Num, Num)| Ok(LuaColor(Color::rgb(r, g, b))))?)?;
+    color.set("rgba", lua.create_function(|_, (Num(r), Num(g), Num(b), Num(a)): (Num, Num, Num, Num)| Ok(LuaColor(Color::rgba(r, g, b, a))))?)?;
     color.set("hex", lua.create_function(|_, v: Value| Ok(LuaColor(to_color(&v, "Color.hex")?)))?)?;
     color.set(
         "lerp",
-        lua.create_function(|_, (a, b, t): (Value, Value, f32)| Ok(LuaColor(to_color(&a, "Color.lerp")?.lerp(to_color(&b, "Color.lerp")?, t))))?,
+        lua.create_function(|_, (a, b, Num(t)): (Value, Value, Num)| Ok(LuaColor(to_color(&a, "Color.lerp")?.lerp(to_color(&b, "Color.lerp")?, t))))?,
     )?;
     for (name, c) in Color::NAMED {
         color.set(name.to_ascii_uppercase(), LuaColor(*c))?;
@@ -408,7 +408,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set("camera", lua.create_userdata(Cam)?)?;
     g.set(
         "sun",
-        lua.create_function(|lua, (dir, c, intensity): (Value, Value, Option<f32>)| {
+        lua.create_function(|lua, (dir, c, ONum(intensity)): (Value, Value, ONum)| {
             let dir = to_vec3(&dir, "sun direction")?;
             let c = if c.is_nil() { None } else { Some(to_color(&c, "sun color")?) };
             with(lua, |w| {
@@ -442,7 +442,7 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     g.set(
         "fog",
-        lua.create_function(|lua, (c, near, far): (Value, Option<f32>, Option<f32>)| {
+        lua.create_function(|lua, (c, ONum(near), ONum(far)): (Value, ONum, ONum)| {
             let fog = match c {
                 Value::Nil | Value::Boolean(false) => None,
                 _ => Some(Fog { color: to_color(&c, "fog")?, near: near.unwrap_or(10.0), far: far.unwrap_or(60.0) }),

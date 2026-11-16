@@ -100,6 +100,11 @@ fn stopped(script: &str) {
 }
 
 #[test]
+fn validation_contract() {
+    run_script("validation.luau", 10);
+}
+
+#[test]
 fn debug_contract() {
     run_script("debug.luau", 10);
 }

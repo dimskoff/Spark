@@ -30,6 +30,8 @@ struct Entry {
 pub struct Pack {
     file: Mutex<File>,
     start: u64,
+    /// Where the index begins: entry data must end before it.
+    index_start: u64,
     entries: HashMap<String, Entry>,
     names: Vec<String>,
 }
@@ -74,7 +76,7 @@ impl Pack {
             entries.insert(name.to_lowercase(), e);
             names.push(name);
         }
-        Ok(Some(Pack { file: Mutex::new(f), start, entries, names }))
+        Ok(Some(Pack { file: Mutex::new(f), start, index_start: index, entries, names }))
     }
 
     /// File names in the pack ('/' separated, as packed).
@@ -89,6 +91,11 @@ impl Pack {
     /// Contents of one packed file (`name` is case-insensitive, '/' separated).
     pub fn read(&self, name: &str) -> Option<Result<Vec<u8>, String>> {
         let e = self.entries.get(&name.to_lowercase())?;
+        // Sizes come from the file: check them before allocating.
+        let end = self.start.checked_add(e.offset).and_then(|o| o.checked_add(e.stored));
+        if e.stored > MAX_FILE_BYTES || e.size > MAX_FILE_BYTES || end.is_none_or(|end| end > self.index_start) {
+            return Some(Err(format!("'{name}' is damaged in the game pack (rebuild with spark build)")));
+        }
         let mut data = vec![0u8; e.stored as usize];
         let res = {
             let mut f = self.file.lock().unwrap_or_else(|p| p.into_inner());
@@ -278,12 +285,68 @@ fn from_pack(path: &Path) -> Option<Result<Vec<u8>, String>> {
     m.pack.read(&name)
 }
 
+/// Largest single game file the engine reads (scripts, images, models, sounds, fonts): 1 GiB.
+pub const MAX_FILE_BYTES: u64 = 1 << 30;
+
+/// A path written in game code (`"assets/hero.png"`, `"./sfx/hit.wav"`) as a game-relative path,
+/// '/' separated, with `.` / `..` resolved.
+///
+/// Game code may only reach files inside the game folder, so this rejects absolute paths (`/etc/x`,
+/// `C:\x`, `\\server\share`), drive-relative paths (`C:x`), anything with `:` (Windows drive letters and
+/// NTFS streams), NUL bytes and `..` that leaves the game folder. Both '/' and '\' separate folders.
+pub fn game_relative(path: &str) -> Result<String, String> {
+    let bad = |why: &str| {
+        Err(format!(
+            "'{path}': {why}. Game code can only open files inside the game folder; use a path relative to it, \
+             e.g. \"assets/hero.png\""
+        ))
+    };
+    if path.is_empty() {
+        return bad("empty path");
+    }
+    if path.contains('\0') {
+        return bad("contains a NUL byte");
+    }
+    if path.contains(':') {
+        return bad("drive letters, URLs and ':' are not allowed");
+    }
+    if path.starts_with('/') || path.starts_with('\\') {
+        return bad("absolute paths are not allowed");
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for p in path.split(['/', '\\']) {
+        match p {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    return bad("'..' goes above the game folder");
+                }
+            }
+            p => parts.push(p),
+        }
+    }
+    if parts.is_empty() {
+        return bad("needs a file name");
+    }
+    Ok(parts.join("/"))
+}
+
+/// [`game_relative`] joined to the game folder `root`.
+pub fn jail(root: &Path, path: &str) -> Result<PathBuf, String> {
+    Ok(root.join(game_relative(path)?))
+}
+
 /// Contents of a game file (pack first, then disk).
 pub fn read(path: &Path) -> Result<Vec<u8>, String> {
     if let Some(r) = from_pack(path) {
         return r;
     }
-    std::fs::read(path).map_err(|e| format!("cannot read '{}': {e}", path.display()))
+    let err = |e: std::io::Error| format!("cannot read '{}': {e}", path.display());
+    let len = std::fs::metadata(path).map_err(err)?.len();
+    if len > MAX_FILE_BYTES {
+        return Err(format!("'{}' is {} MiB; the limit is {} MiB per file", path.display(), len >> 20, MAX_FILE_BYTES >> 20));
+    }
+    std::fs::read(path).map_err(err)
 }
 
 /// A text file, without a UTF-8 BOM (Windows editors like to add one; Luau and TOML reject it).
@@ -343,6 +406,50 @@ mod tests {
         assert_eq!(pack.names().len(), 3);
         std::fs::write(dir.join("plain.exe"), &exe).unwrap();
         assert!(Pack::open(&dir.join("plain.exe")).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn game_relative_paths_stay_in_the_game_folder() {
+        assert_eq!(game_relative("assets/a.png").unwrap(), "assets/a.png");
+        assert_eq!(game_relative("./assets\\x/../b.png").unwrap(), "assets/b.png");
+        for bad in [
+            "/etc/passwd",
+            "../../../etc/passwd",
+            "a/../../x",
+            "C:/Windows/win.ini",
+            "C:x",
+            "./C:/Windows/win",
+            "\\\\server\\share\\x",
+            "\\x",
+            "a.png:stream",
+            "file:///etc/passwd",
+            "",
+            ".",
+            "a\0b",
+        ] {
+            let e = game_relative(bad).unwrap_err();
+            assert!(e.contains("inside the game folder"), "{bad}: {e}");
+        }
+        let root = Path::new("game");
+        assert_eq!(jail(root, "x/y.wav").unwrap(), root.join("x/y.wav"));
+    }
+
+    #[test]
+    fn damaged_pack_sizes_do_not_allocate() {
+        let mut w = PackWriter::new();
+        w.add("a.txt", b"hello");
+        let mut out = w.finish(b"EXE");
+        // Index entry: count(4) name_len(2) "a.txt"(5) offset(8) stored(8) size(8) method(1).
+        let index_start = u64::from_le_bytes(out[out.len() - 16..out.len() - 8].try_into().unwrap()) as usize;
+        let stored_at = index_start + 4 + 2 + 5 + 8;
+        out[stored_at..stored_at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+        let dir = std::env::temp_dir().join(format!("spark-vfs-bad-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("bad.exe");
+        std::fs::write(&file, &out).unwrap();
+        let pack = Pack::open(&file).unwrap().expect("has a pack");
+        assert!(pack.read("a.txt").unwrap().unwrap_err().contains("damaged"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

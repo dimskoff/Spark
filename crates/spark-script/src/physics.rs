@@ -106,9 +106,9 @@ pub(crate) fn add_object_fields<F: UserDataFields<Obj>>(f: &mut F) {
         body_mut(lua, this.0, "obj.angular_velocity", |b| b.angular_velocity = v)
     });
     f.add_field_method_get("mass", |lua, this| body_ref(lua, this.0, |b| b.and_then(|b| b.mass)));
-    f.add_field_method_set("mass", |lua, this, v: Option<f32>| body_mut(lua, this.0, "obj.mass", |b| b.mass = v));
+    f.add_field_method_set("mass", |lua, this, ONum(v): ONum| body_mut(lua, this.0, "obj.mass", |b| b.mass = v));
     f.add_field_method_get("gravity_scale", |lua, this| body_ref(lua, this.0, |b| b.map(|b| b.gravity_scale)));
-    f.add_field_method_set("gravity_scale", |lua, this, v: f32| body_mut(lua, this.0, "obj.gravity_scale", |b| b.gravity_scale = v));
+    f.add_field_method_set("gravity_scale", |lua, this, Num(v): Num| body_mut(lua, this.0, "obj.gravity_scale", |b| b.gravity_scale = v));
     f.add_field_method_get("sensor", |lua, this| body_ref(lua, this.0, |b| b.is_some_and(|b| b.sensor)));
     f.add_field_method_set("sensor", |lua, this, v: bool| body_mut(lua, this.0, "obj.sensor", |b| b.sensor = v));
 }

@@ -152,7 +152,7 @@ pub(crate) fn install(lua: &Lua, shared: SharedTest) -> LuaResult<()> {
             push(lua, TestInput::Button(btn, down))
         })?,
     )?;
-    t.set("mouse", lua.create_function(|lua, (x, y): (f32, f32)| push(lua, TestInput::Move(x, y)))?)?;
+    t.set("mouse", lua.create_function(|lua, (Num(x), Num(y)): (Num, Num)| push(lua, TestInput::Move(x, y)))?)?;
     t.set("text", lua.create_function(|lua, s: String| push(lua, TestInput::Text(s)))?)?;
     // Strings the game drew (draw.text, ui.label, ...) in the last frame, in draw order.
     t.set("texts", lua.create_function(|lua, ()| with(lua, |w| Ok(w.canvas.drawn_texts().to_vec())))?)?;

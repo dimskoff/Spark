@@ -228,7 +228,7 @@ impl UserData for LuaRender {
             with(lua, |w| Ok(w.render.height = h))
         });
         f.add_field_method_get("scale", |lua, _| with(lua, |w| Ok(w.render.scale)));
-        f.add_field_method_set("scale", |lua, _, v: f32| with(lua, |w| Ok(w.render.scale = v.clamp(0.05, 2.0))));
+        f.add_field_method_set("scale", |lua, _, Num(v): Num| with(lua, |w| Ok(w.render.scale = v.clamp(0.05, 2.0))));
         f.add_field_method_get("upscale", |lua, _| with(lua, |w| Ok(filter_name(w.render.upscale))));
         f.add_field_method_set("upscale", |lua, _, v: Value| {
             let f = to_filter(&v, "graphics.upscale")?;
@@ -245,19 +245,19 @@ impl UserData for LuaRender {
         f.add_field_method_get("shadows", |lua, _| with(lua, |w| Ok(w.render.shadows)));
         f.add_field_method_set("shadows", |lua, _, v: bool| with(lua, |w| Ok(w.render.shadows = v)));
         f.add_field_method_get("shadow_distance", |lua, _| with(lua, |w| Ok(w.render.shadow_distance)));
-        f.add_field_method_set("shadow_distance", |lua, _, v: f32| with(lua, |w| Ok(w.render.shadow_distance = v.max(1.0))));
+        f.add_field_method_set("shadow_distance", |lua, _, Num(v): Num| with(lua, |w| Ok(w.render.shadow_distance = v.max(1.0))));
         f.add_field_method_get("shadow_size", |lua, _| with(lua, |w| Ok(w.render.shadow_size)));
-        f.add_field_method_set("shadow_size", |lua, _, v: f32| with(lua, |w| Ok(w.render.shadow_size = v.clamp(256.0, 8192.0) as u32)));
+        f.add_field_method_set("shadow_size", |lua, _, Num(v): Num| with(lua, |w| Ok(w.render.shadow_size = v.clamp(256.0, 8192.0) as u32)));
         f.add_field_method_get("light_shadows", |lua, _| with(lua, |w| Ok(w.render.light_shadows)));
-        f.add_field_method_set("light_shadows", |lua, _, v: f32| {
+        f.add_field_method_set("light_shadows", |lua, _, Num(v): Num| {
             with(lua, |w| Ok(w.render.light_shadows = v.clamp(0.0, spark_core::Light::MAX_SHADOWED as f32) as u32))
         });
         f.add_field_method_get("light_shadow_soft", |lua, _| with(lua, |w| Ok(w.render.light_shadow_soft)));
         f.add_field_method_set("light_shadow_soft", |lua, _, v: bool| with(lua, |w| Ok(w.render.light_shadow_soft = v)));
         f.add_field_method_get("light_shadow_size", |lua, _| with(lua, |w| Ok(w.render.light_shadow_size)));
-        f.add_field_method_set("light_shadow_size", |lua, _, v: f32| with(lua, |w| Ok(w.render.light_shadow_size = v.clamp(64.0, 2048.0) as u32)));
+        f.add_field_method_set("light_shadow_size", |lua, _, Num(v): Num| with(lua, |w| Ok(w.render.light_shadow_size = v.clamp(64.0, 2048.0) as u32)));
         f.add_field_method_get("light_shadow_updates", |lua, _| with(lua, |w| Ok(w.render.light_shadow_updates)));
-        f.add_field_method_set("light_shadow_updates", |lua, _, v: f32| with(lua, |w| Ok(w.render.light_shadow_updates = v.max(0.0) as u32)));
+        f.add_field_method_set("light_shadow_updates", |lua, _, Num(v): Num| with(lua, |w| Ok(w.render.light_shadow_updates = v.max(0.0) as u32)));
         f.add_field_method_get("filter", |lua, _| with(lua, |w| Ok(filter_name(w.render.filter))));
         f.add_field_method_set("filter", |lua, _, v: Value| {
             let f = to_filter(&v, "graphics.filter")?;

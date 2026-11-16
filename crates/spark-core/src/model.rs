@@ -421,7 +421,8 @@ fn read_uri(dir: &Path, uri: &str) -> Result<Vec<u8>, String> {
 /// schemes or `..` climbing out). A downloaded model cannot read arbitrary files.
 fn safe_relative(uri: &str) -> Option<std::path::PathBuf> {
     use std::path::Component;
-    if uri.contains("://") || uri.starts_with('/') || uri.starts_with('\\') || uri.get(1..2) == Some(":") {
+    // Any ':' (drive letters anywhere in the path, NTFS streams, URLs): PathBuf::push of C:x replaces the base on Windows.
+    if uri.contains(':') || uri.contains('\0') || uri.starts_with('/') || uri.starts_with('\\') {
         return None;
     }
     let mut out = std::path::PathBuf::new();
@@ -489,7 +490,7 @@ mod tests {
     fn uri_sandbox() {
         assert_eq!(safe_relative("textures/a.png").unwrap(), std::path::PathBuf::from("textures/a.png"));
         assert_eq!(safe_relative("./x/../b.bin").unwrap(), std::path::PathBuf::from("b.bin"));
-        for bad in ["../secret.txt", "/etc/passwd", "C:/Windows/win.ini", "a/../../b", "http://x/y.png", "\\\\server\\share", ""] {
+        for bad in ["../secret.txt", "/etc/passwd", "C:/Windows/win.ini", "a/../../b", "http://x/y.png", "\\\\server\\share", "", "a/C:x.png", "tex/D:/y.png", "a.png:ads"] {
             assert!(safe_relative(bad).is_none(), "{bad}");
         }
         assert_eq!(percent_decode("a%20b%20"), "a b ");

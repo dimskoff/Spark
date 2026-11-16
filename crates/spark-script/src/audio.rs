@@ -16,14 +16,14 @@ impl UserData for LuaSound {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("stop", |lua, this, fade: Option<f32>| with(lua, |w| Ok(w.audio.stop(this.0, fade.unwrap_or(0.0)))));
-        m.add_method("set_volume", |lua, this, (v, fade): (f32, Option<f32>)| {
+        m.add_method("stop", |lua, this, ONum(fade): ONum| with(lua, |w| Ok(w.audio.stop(this.0, fade.unwrap_or(0.0)))));
+        m.add_method("set_volume", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
             with(lua, |w| Ok(w.audio.set_volume(this.0, v, fade.unwrap_or(0.0))))
         });
-        m.add_method("set_pitch", |lua, this, (v, fade): (f32, Option<f32>)| {
+        m.add_method("set_pitch", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
             with(lua, |w| Ok(w.audio.set_pitch(this.0, v, fade.unwrap_or(0.0))))
         });
-        m.add_method("set_pan", |lua, this, v: f32| with(lua, |w| Ok(w.audio.set_pan(this.0, v))));
+        m.add_method("set_pan", |lua, this, Num(v): Num| with(lua, |w| Ok(w.audio.set_pan(this.0, v))));
         m.add_method("set_position", |lua, this, v: Value| {
             let src = to_source(&v, "sound:set_position")?;
             with(lua, |w| {
@@ -45,18 +45,18 @@ impl UserData for LuaBus {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("name", |_, this| Ok(this.1.clone()));
         f.add_field_method_get("volume", |lua, this| with(lua, |w| Ok(w.audio.bus_volume(this.0))));
-        f.add_field_method_set("volume", |lua, this, v: f32| with(lua, |w| Ok(w.audio.set_bus_volume(this.0, v, 0.0))));
+        f.add_field_method_set("volume", |lua, this, Num(v): Num| with(lua, |w| Ok(w.audio.set_bus_volume(this.0, v, 0.0))));
         f.add_field_method_get("paused", |lua, this| with(lua, |w| Ok(w.audio.bus_paused(this.0))));
         f.add_field_method_set("paused", |lua, this, v: bool| with(lua, |w| Ok(w.audio.pause_bus(this.0, v, 0.0))));
     }
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("set_volume", |lua, this, (v, fade): (f32, Option<f32>)| {
+        m.add_method("set_volume", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
             with(lua, |w| Ok(w.audio.set_bus_volume(this.0, v, fade.unwrap_or(0.0))))
         });
-        m.add_method("stop", |lua, this, fade: Option<f32>| with(lua, |w| Ok(w.audio.stop_bus(this.0, fade.unwrap_or(0.0)))));
-        m.add_method("pause", |lua, this, fade: Option<f32>| with(lua, |w| Ok(w.audio.pause_bus(this.0, true, fade.unwrap_or(0.0)))));
-        m.add_method("resume", |lua, this, fade: Option<f32>| {
+        m.add_method("stop", |lua, this, ONum(fade): ONum| with(lua, |w| Ok(w.audio.stop_bus(this.0, fade.unwrap_or(0.0)))));
+        m.add_method("pause", |lua, this, ONum(fade): ONum| with(lua, |w| Ok(w.audio.pause_bus(this.0, true, fade.unwrap_or(0.0)))));
+        m.add_method("resume", |lua, this, ONum(fade): ONum| {
             with(lua, |w| Ok(w.audio.pause_bus(this.0, false, fade.unwrap_or(0.0))))
         });
         m.add_meta_method(MetaMethod::ToString, |_, this, ()| Ok(format!("Bus({})", this.1)));
@@ -121,7 +121,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, (path, opts): (String, Option<Table>)| {
             let (p, s) = params(lua, opts)?;
             with(lua, |w| {
-                let full = w.assets.resolve(&path);
+                let full = w.assets.resolve(&path).map_err(|e| rt(format!("sound.play: {e}")))?;
                 if !spark_core::vfs::is_file(&full) {
                     return Err(rt(format!("sound.play: file not found: '{path}' (looked at {})", full.display())));
                 }
@@ -134,7 +134,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     sound.set(
         "stop_all",
-        lua.create_function(|lua, fade: Option<f32>| with(lua, |w| Ok(w.audio.stop_all(fade.unwrap_or(0.0)))))?,
+        lua.create_function(|lua, ONum(fade): ONum| with(lua, |w| Ok(w.audio.stop_all(fade.unwrap_or(0.0)))))?,
     )?;
     sound.set("enabled", lua.create_function(|lua, ()| with(lua, |w| Ok(w.audio.has_backend())))?)?;
     sound.set(

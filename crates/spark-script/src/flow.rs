@@ -165,11 +165,14 @@ pub(crate) fn add_object_methods<M: UserDataMethods<Obj>>(m: &mut M) {
         let name = check_event_name(&name, "obj:emit_later")?;
         emit_queued(lua, &object_event(&name, this.0), args)
     });
-    m.add_method("after", |lua, this, (s, f): (f64, Function)| {
+    m.add_method("after", |lua, this, (Num64(s), f): (Num64, Function)| {
         let id = runtime(lua)?.borrow_mut().sched.after(s, Job::Call { f, owner: Some(this.0) });
         Ok(LuaTimer(id))
     });
-    m.add_method("every", |lua, this, (s, f, times): (f64, Function, Option<u32>)| {
+    m.add_method("every", |lua, this, (Num64(s), f, times): (Num64, Function, Option<u32>)| {
+            if s <= 0.0 {
+                return Err(rt("obj:every: interval must be > 0 seconds (for every frame use update())"));
+            }
         let id = runtime(lua)?.borrow_mut().sched.every(s, times, Job::Call { f, owner: Some(this.0) });
         Ok(LuaTimer(id))
     });
@@ -180,14 +183,14 @@ pub(crate) fn add_object_methods<M: UserDataMethods<Obj>>(m: &mut M) {
 pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set(
         "after",
-        lua.create_function(|lua, (s, f, opts): (f64, Function, Value)| {
+        lua.create_function(|lua, (Num64(s), f, opts): (Num64, Function, Value)| {
             let o = parse_opts(&opts, "after", &["owner"])?;
             Ok(LuaTimer(runtime(lua)?.borrow_mut().sched.after(s, Job::Call { f, owner: o.owner })))
         })?,
     )?;
     g.set(
         "every",
-        lua.create_function(|lua, (s, f, opts): (f64, Function, Value)| {
+        lua.create_function(|lua, (Num64(s), f, opts): (Num64, Function, Value)| {
             if s <= 0.0 {
                 return Err(rt("every: interval must be > 0 seconds (for every frame use update())"));
             }

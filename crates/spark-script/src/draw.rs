@@ -260,7 +260,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     let draw = lua.create_table()?;
     draw.set(
         "rect",
-        lua.create_function(|lua, (x, y, ww, h, color, opts): (f32, f32, f32, f32, Value, Option<Table>)| {
+        lua.create_function(|lua, (Num(x), Num(y), Num(ww), Num(h), color, opts): (Num, Num, Num, Num, Value, Option<Table>)| {
             let c = color_or_white(&color, "draw.rect color")?;
             let (align, line) = shape_opts(&opts, "draw.rect", Align::TOP_LEFT)?;
             with(lua, |w| {
@@ -275,7 +275,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     draw.set(
         "circle",
-        lua.create_function(|lua, (x, y, r, color, opts): (f32, f32, f32, Value, Option<Table>)| {
+        lua.create_function(|lua, (Num(x), Num(y), Num(r), color, opts): (Num, Num, Num, Value, Option<Table>)| {
             let c = color_or_white(&color, "draw.circle color")?;
             let (_, line) = shape_opts(&opts, "draw.circle", Align::CENTER)?;
             with(lua, |w| {
@@ -289,7 +289,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     draw.set(
         "line",
-        lua.create_function(|lua, (x1, y1, x2, y2, color, width): (f32, f32, f32, f32, Value, Option<f32>)| {
+        lua.create_function(|lua, (Num(x1), Num(y1), Num(x2), Num(y2), color, ONum(width)): (Num, Num, Num, Num, Value, ONum)| {
             let c = color_or_white(&color, "draw.line color")?;
             with(lua, |w| Ok(w.canvas.line(Vec2::new(x1, y1), Vec2::new(x2, y2), width.unwrap_or(2.0), c)))
         })?,
@@ -325,7 +325,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     draw.set("sprite", lua.create_function(sprite)?)?;
     draw.set(
         "text",
-        lua.create_function(|lua, (text, x, y, opts): (Value, f32, f32, Option<Table>)| {
+        lua.create_function(|lua, (text, Num(x), Num(y), opts): (Value, Num, Num, Option<Table>)| {
             let text = to_text(&text, "draw.text")?;
             let (p, shadow) = text_params(&opts, "draw.text")?;
             with(lua, |w| {
@@ -392,11 +392,11 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
             })
         })?,
     )?;
-    draw.set("translate", lua.create_function(|lua, (x, y): (f32, f32)| with(lua, |w| Ok(w.canvas.translate(Vec2::new(x, y)))))?)?;
-    draw.set("rotate", lua.create_function(|lua, a: f32| with(lua, |w| Ok(w.canvas.rotate(a))))?)?;
+    draw.set("translate", lua.create_function(|lua, (Num(x), Num(y)): (Num, Num)| with(lua, |w| Ok(w.canvas.translate(Vec2::new(x, y)))))?)?;
+    draw.set("rotate", lua.create_function(|lua, Num(a): Num| with(lua, |w| Ok(w.canvas.rotate(a))))?)?;
     draw.set(
         "scale",
-        lua.create_function(|lua, (sx, sy): (f32, Option<f32>)| with(lua, |w| Ok(w.canvas.scale_by(Vec2::new(sx, sy.unwrap_or(sx))))))?,
+        lua.create_function(|lua, (Num(sx), ONum(sy)): (Num, ONum)| with(lua, |w| Ok(w.canvas.scale_by(Vec2::new(sx, sy.unwrap_or(sx))))))?,
     )?;
     draw.set(
         "layer",
@@ -440,7 +440,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "load",
         lua.create_function(|lua, path: String| {
             with(lua, |w| {
-                let full = w.assets.resolve(&path);
+                let full = w.assets.resolve(&path).map_err(|e| rt(format!("Font.load: {e}")))?;
                 w.canvas.fonts.load(&full).map(LuaFont).map_err(rt)
             })
         })?,

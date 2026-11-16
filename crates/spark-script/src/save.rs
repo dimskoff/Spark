@@ -22,6 +22,8 @@ struct Store {
     data: RefCell<Map<String, Json>>,
     /// Changed since the last write. `save.set` in a loop costs one write per frame, not per call.
     dirty: std::cell::Cell<bool>,
+    /// After a failed end-of-frame write: do not try again before this time.
+    retry_at: std::cell::Cell<Option<std::time::Instant>>,
 }
 
 impl Drop for Store {
@@ -73,7 +75,7 @@ fn persist(store: &Store) -> LuaResult<()> {
     Ok(())
 }
 
-/// Writes the save file if something changed (atomic: temp file + rename).
+/// `save.flush()`: writes the save file now if something changed. A failed write is an error here.
 pub(crate) fn flush(lua: &Lua) -> LuaResult<()> {
     match lua.app_data_ref::<Store>() {
         Some(s) => write_file(&s).map_err(rt),
@@ -81,23 +83,75 @@ pub(crate) fn flush(lua: &Lua) -> LuaResult<()> {
     }
 }
 
+/// End of frame: writes the save file if something changed. A failed write (disk full, file locked by an
+/// antivirus...) does not stop the game: it is logged and retried after [`RETRY`], the data stays in memory.
+pub(crate) fn flush_frame(lua: &Lua) {
+    let Some(s) = lua.app_data_ref::<Store>() else { return };
+    if s.retry_at.get().is_some_and(|t| std::time::Instant::now() < t) {
+        return;
+    }
+    match write_file(&s) {
+        Ok(()) => s.retry_at.set(None),
+        Err(e) => {
+            log::error!("{e} (retrying in {} s; the data is kept in memory)", RETRY.as_secs());
+            s.retry_at.set(Some(std::time::Instant::now() + RETRY));
+        }
+    }
+}
+
+const RETRY: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Writes the file if dirty. Atomic and durable: temp file, fsync, rename (then fsync of the folder on Unix),
+/// so a crash or power loss leaves either the old or the new save, never a torn one. Stays dirty on failure.
 fn write_file(store: &Store) -> Result<(), String> {
-    if !store.dirty.replace(false) {
+    if !store.dirty.get() {
         return Ok(());
     }
-    let Some(path) = &store.path else { return Ok(()) };
+    let Some(path) = &store.path else {
+        store.dirty.set(false);
+        return Ok(());
+    };
     let text = serde_json::to_string_pretty(&*store.data.borrow()).map_err(|e| e.to_string())?;
+    write_atomic(path, text.as_bytes())?;
+    store.dirty.set(false);
+    Ok(())
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("save: cannot create '{}': {e}", dir.display()))?;
     }
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text).map_err(|e| format!("save: cannot write '{}': {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("save: cannot write '{}': {e}", path.display()))
+    let err = |e: std::io::Error| format!("save: cannot write '{}': {e}", tmp.display());
+    let mut f = std::fs::File::create(&tmp).map_err(err)?;
+    f.write_all(bytes).map_err(err)?;
+    f.sync_all().map_err(err)?;
+    drop(f);
+    std::fs::rename(&tmp, path).map_err(|e| format!("save: cannot write '{}': {e}", path.display()))?;
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        // Makes the rename itself durable.
+        let _ = std::fs::File::open(dir).and_then(|d| d.sync_all());
+    }
+    Ok(())
 }
 
-fn to_json(v: &Value, what: &str, depth: u32) -> LuaResult<Json> {
-    if depth > 32 {
-        return Err(rt(format!("{what}: table is nested too deeply (cycle?)")));
+/// Most values one `save.set` may store (a table that shares sub-tables would otherwise blow up).
+const MAX_VALUES: usize = 100_000;
+
+/// Converts a Luau value; `path` holds the tables being converted (cycle detection), `budget` counts values.
+fn to_json(v: &Value, what: &str) -> LuaResult<Json> {
+    to_json_inner(v, what, &mut Vec::new(), &mut 0)
+}
+
+fn to_json_inner(v: &Value, what: &str, path: &mut Vec<*const std::ffi::c_void>, budget: &mut usize) -> LuaResult<Json> {
+    *budget += 1;
+    if *budget > MAX_VALUES {
+        return Err(rt(format!("{what}: too much data (more than {MAX_VALUES} values); save less, or store ids instead of copies")));
+    }
+    if path.len() > 64 {
+        return Err(rt(format!("{what}: tables are nested more than 64 levels deep")));
     }
     Ok(match v {
         Value::Nil => Json::Null,
@@ -117,32 +171,14 @@ fn to_json(v: &Value, what: &str, depth: u32) -> LuaResult<Json> {
             Json::Object(m)
         }
         Value::Table(t) => {
-            let len = t.raw_len();
-            let mut count = 0usize;
-            for pair in t.clone().pairs::<Value, Value>() {
-                pair?;
-                count += 1;
+            let ptr = t.to_pointer();
+            if path.contains(&ptr) {
+                return Err(rt(format!("{what}: a table contains itself (cycle); save cannot store cycles")));
             }
-            if len > 0 && count == len {
-                let mut a = Vec::with_capacity(len);
-                for i in 1..=len {
-                    a.push(to_json(&t.raw_get::<Value>(i)?, what, depth + 1)?);
-                }
-                Json::Array(a)
-            } else {
-                let mut m = Map::new();
-                for pair in t.clone().pairs::<Value, Value>() {
-                    let (k, val) = pair?;
-                    let key = match &k {
-                        Value::String(s) => s.to_string_lossy(),
-                        Value::Integer(i) => i.to_string(),
-                        Value::Number(n) => n.to_string(),
-                        _ => return Err(rt(format!("{what}: table keys must be strings or numbers, got {}", k.type_name()))),
-                    };
-                    m.insert(key, to_json(&val, what, depth + 1)?);
-                }
-                Json::Object(m)
-            }
+            path.push(ptr);
+            let r = table_to_json(t, what, path, budget);
+            path.pop();
+            r?
         }
         other => {
             return Err(rt(format!(
@@ -151,6 +187,34 @@ fn to_json(v: &Value, what: &str, depth: u32) -> LuaResult<Json> {
             )));
         }
     })
+}
+
+fn table_to_json(t: &Table, what: &str, path: &mut Vec<*const std::ffi::c_void>, budget: &mut usize) -> LuaResult<Json> {
+    let len = t.raw_len();
+    let mut count = 0usize;
+    for pair in t.clone().pairs::<Value, Value>() {
+        pair?;
+        count += 1;
+    }
+    if len > 0 && count == len {
+        let mut a = Vec::with_capacity(len);
+        for i in 1..=len {
+            a.push(to_json_inner(&t.raw_get::<Value>(i)?, what, path, budget)?);
+        }
+        return Ok(Json::Array(a));
+    }
+    let mut m = Map::new();
+    for pair in t.clone().pairs::<Value, Value>() {
+        let (k, val) = pair?;
+        let key = match &k {
+            Value::String(s) => s.to_string_lossy(),
+            Value::Integer(i) => i.to_string(),
+            Value::Number(n) => n.to_string(),
+            _ => return Err(rt(format!("{what}: table keys must be strings or numbers, got {}", k.type_name()))),
+        };
+        m.insert(key, to_json_inner(&val, what, path, budget)?);
+    }
+    Ok(Json::Object(m))
 }
 
 fn to_lua(lua: &Lua, j: &Json) -> LuaResult<Value> {
@@ -190,7 +254,7 @@ fn store(lua: &Lua) -> LuaResult<mlua::AppDataRef<'_, Store>> {
 pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     let path = lua.app_data_ref::<SavePath>().map(|p| p.0.clone()).unwrap_or_default();
     let data = path.as_deref().map(load).unwrap_or_default();
-    lua.set_app_data(Store { path, data: RefCell::new(data), dirty: Default::default() });
+    lua.set_app_data(Store { path, data: RefCell::new(data), dirty: Default::default(), retry_at: Default::default() });
 
     let save = lua.create_table()?;
     save.set(
@@ -207,7 +271,7 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     save.set(
         "set",
         lua.create_function(|lua, (key, value): (String, Value)| {
-            let j = to_json(&value, &format!("save.set(\"{key}\")"), 0)?;
+            let j = to_json(&value, &format!("save.set(\"{key}\")"))?;
             let s = store(lua)?;
             if j.is_null() {
                 s.data.borrow_mut().remove(&key);

@@ -79,6 +79,9 @@ fn resolve_spec(from: &str, spec: &str) -> Result<String, String> {
                     return Err(format!("require(\"{spec}\"): goes above the game folder"));
                 }
             }
+            p if p.contains([':', '\0']) => {
+                return Err(format!("require(\"{spec}\"): drive letters and ':' are not allowed; modules live in the game folder"));
+            }
             p => parts.push(p),
         }
     }
@@ -155,5 +158,9 @@ mod tests {
         assert_eq!(resolve_spec("src/ui/hud.luau", "@game/config").unwrap(), "config");
         assert!(resolve_spec("main.luau", "player").unwrap_err().contains("require(\"./player\")"));
         assert!(resolve_spec("main.luau", "../x").is_err());
+        // A drive prefix would make PathBuf::join replace the game folder on Windows.
+        assert!(resolve_spec("main.luau", "./C:/Windows/win").is_err());
+        assert!(resolve_spec("main.luau", "@game/C:x").is_err());
+        assert!(resolve_spec("main.luau", "./a\\..\\..\\x").is_err());
     }
 }

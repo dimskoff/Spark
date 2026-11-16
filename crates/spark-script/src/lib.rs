@@ -250,6 +250,7 @@ impl ScriptGame {
         world.reset();
         let root = self.path.parent().map(Path::to_path_buf).unwrap_or_default();
         world.assets.root = root.clone();
+        world.assets.confine = true;
         let source = match spark_core::vfs::read_string(&self.path) {
             Ok(s) => s,
             Err(e) => return self.fail(e),
@@ -469,7 +470,8 @@ impl Game for ScriptGame {
             if let Some(f) = lua.globals().get::<Option<Function>>("render")? {
                 f.call::<()>(()).map_err(|e| e.context("in render()"))?;
             }
-            save::flush(lua)
+            save::flush_frame(lua);
+            Ok(())
         });
         if let Some(v) = &self.shader_view {
             error_screen::draw(world, v);

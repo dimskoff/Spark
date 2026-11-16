@@ -31,12 +31,70 @@ pub(crate) fn vv(v: Vec3) -> Vector {
     Vector::new(v.x, v.y, v.z)
 }
 
-pub(crate) fn to_num(v: &Value, what: &str) -> LuaResult<f32> {
-    match v {
-        Value::Number(n) => Ok(*n as f32),
-        Value::Integer(i) => Ok(*i as f32),
-        _ => Err(rt(format!("{what}: expected a number, got {}", v.type_name()))),
+/// Error for a NaN / infinite number passed to the API.
+pub(crate) fn not_finite(what: &str, n: f64) -> mlua::Error {
+    let hint = if n.is_nan() { "0/0 or math.sqrt(-1) somewhere?" } else { "a division by zero somewhere?" };
+    rt(format!("{what}: expected a finite number, got {n} ({hint})"))
+}
+
+/// Any Luau number as f64, NaN / infinity rejected.
+pub(crate) fn to_num64(v: &Value, what: &str) -> LuaResult<f64> {
+    let n = match v {
+        Value::Number(n) => *n,
+        Value::Integer(i) => *i as f64,
+        _ => return Err(rt(format!("{what}: expected a number, got {}", v.type_name()))),
+    };
+    if !n.is_finite() {
+        return Err(not_finite(what, n));
     }
+    Ok(n)
+}
+
+pub(crate) fn to_num(v: &Value, what: &str) -> LuaResult<f32> {
+    let n = to_num64(v, what)? as f32;
+    // A finite f64 can still overflow f32 (1e300).
+    if !n.is_finite() {
+        return Err(rt(format!("{what}: number is too large (max about 3.4e38)")));
+    }
+    Ok(n)
+}
+
+/// Function arguments: a finite number (`Num`), an optional finite number (`ONum`) and their f64 forms.
+/// Used as closure patterns, e.g. `|lua, this, Num(v): Num|`, so every number the API takes is checked
+/// in one place. The error names the argument position; the Luau error adds the function name and line.
+macro_rules! finite_args {
+    ($($num:ident, $opt:ident, $t:ty);*) => {$(
+        #[derive(Clone, Copy, Debug)]
+        pub(crate) struct $num(pub $t);
+        #[derive(Clone, Copy, Debug)]
+        pub(crate) struct $opt(pub Option<$t>);
+        impl mlua::FromLua for $num {
+            fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+                let n = to_num64(&v, "argument")?;
+                let x = n as $t;
+                if !x.is_finite() {
+                    return Err(rt("argument: number is too large"));
+                }
+                Ok(Self(x))
+            }
+        }
+        impl mlua::FromLua for $opt {
+            fn from_lua(v: Value, lua: &Lua) -> LuaResult<Self> {
+                if v.is_nil() { Ok(Self(None)) } else { $num::from_lua(v, lua).map(|n| Self(Some(n.0))) }
+            }
+        }
+    )*};
+}
+finite_args!(Num, ONum, f32; Num64, ONum64, f64);
+
+/// Checks every component of a vector.
+pub(crate) fn finite_vec(v: Vec3, what: &str) -> LuaResult<Vec3> {
+    for (c, x) in ["x", "y", "z"].iter().zip(v.to_array()) {
+        if !x.is_finite() {
+            return Err(not_finite(&format!("{what}.{c}"), x as f64));
+        }
+    }
+    Ok(v)
 }
 
 pub(crate) fn to_bool(v: &Value, what: &str) -> LuaResult<bool> {
@@ -56,7 +114,7 @@ pub(crate) fn to_str(v: &Value, what: &str) -> LuaResult<String> {
 
 pub(crate) fn to_vec3(v: &Value, what: &str) -> LuaResult<Vec3> {
     match v {
-        Value::Vector(v) => Ok(Vec3::new(v.x(), v.y(), v.z())),
+        Value::Vector(v) => finite_vec(Vec3::new(v.x(), v.y(), v.z()), what),
         Value::Table(t) => {
             let get = |a: &str, i: i64| -> LuaResult<f32> {
                 let v: Value = t.get(a)?;
@@ -113,7 +171,10 @@ pub(crate) fn to_color(v: &Value, what: &str) -> LuaResult<Color> {
                 rt(format!("{what}: unknown color '{s}' (use \"#rrggbb\", 0xrrggbb or a name: {})", color_names()))
             })
         }
-        Value::Vector(c) => Ok(Color::rgb(c.x(), c.y(), c.z())),
+        Value::Vector(c) => {
+            let c = finite_vec(Vec3::new(c.x(), c.y(), c.z()), what)?;
+            Ok(Color::rgb(c.x, c.y, c.z))
+        }
         Value::Table(t) => {
             let get = |a: &str, i: i64, d: f32| -> LuaResult<f32> {
                 let v: Value = t.get(a)?;

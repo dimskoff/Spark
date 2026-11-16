@@ -133,7 +133,7 @@ pub(crate) fn add_object_methods<M: UserDataMethods<Obj>>(m: &mut M) {
         let p = anim_params(opts)?;
         with(lua, |w| animation::play(w, this.0, &name, p).map_err(rt))
     });
-    m.add_method("stop", |lua, this, fade: Option<f32>| {
+    m.add_method("stop", |lua, this, ONum(fade): ONum| {
         with(lua, |w| {
             animation::stop(w, this.0, fade.unwrap_or(0.2));
             Ok(())
@@ -142,7 +142,7 @@ pub(crate) fn add_object_methods<M: UserDataMethods<Obj>>(m: &mut M) {
     m.add_method("is_playing", |lua, this, name: Option<String>| with(lua, |w| Ok(animation::is_playing(w, this.0, name.as_deref()))));
     m.add_method("animation", |lua, this, ()| with(lua, |w| Ok(animation::current(w, this.0))));
     m.add_method("animation_time", |lua, this, ()| with(lua, |w| Ok(animation::time(w, this.0))));
-    m.add_method("set_animation_speed", |lua, this, s: f32| {
+    m.add_method("set_animation_speed", |lua, this, Num(s): Num| {
         with(lua, |w| {
             animation::set_speed(w, this.0, s);
             Ok(())
