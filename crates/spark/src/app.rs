@@ -111,11 +111,45 @@ impl RunArgs {
                 "--windowed" => out.windowed = true,
                 "--devtools" => out.devtools = Some(value("--devtools")?),
                 "--help" | "-h" => out.help = true,
+                // A mistyped flag must not silently open a window (`--headles`): fail with a suggestion.
+                a if a.starts_with("--") => return Err(unknown_flag(a)),
                 _ => out.rest.push(arg),
             }
         }
         Ok(out)
     }
+}
+
+const FLAGS: &[&str] = &[
+    "--headless", "--frames", "--screenshot", "--dump-scene", "--dump-scene-json", "--screenshot-every", "--input",
+    "--timeout", "--max-fps", "--size", "--fixed-dt", "--no-vsync", "--mute", "--splash", "--no-splash",
+    "--fullscreen", "--windowed", "--devtools", "--help",
+];
+
+fn unknown_flag(flag: &str) -> String {
+    let near = FLAGS
+        .iter()
+        .map(|f| (edit_distance(flag, f), *f))
+        .min()
+        .filter(|(d, f)| *d <= 2.max(f.len() / 4));
+    match near {
+        Some((_, f)) => format!("unknown flag '{flag}' (did you mean '{f}'?)"),
+        None => format!("unknown flag '{flag}'"),
+    }
+}
+
+/// Levenshtein distance (flags are short).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut cur = vec![i + 1];
+        for (j, cb) in b.iter().enumerate() {
+            cur.push((prev[j] + usize::from(ca != cb)).min(prev[j + 1] + 1).min(cur[j] + 1));
+        }
+        prev = cur;
+    }
+    prev[b.len()]
 }
 
 /// Runs a [`Game`] in a window (or headless with `--headless`).
@@ -873,6 +907,19 @@ impl<G: Game> ApplicationHandler for Runner<G> {
 #[cfg(test)]
 mod input_script_tests {
     use super::*;
+
+    #[test]
+    fn mistyped_flags_are_errors_with_a_suggestion() {
+        let args = |a: &[&str]| RunArgs::parse(a.iter().map(|s| s.to_string()));
+        assert!(args(&["game", "--headless", "--frames", "5"]).unwrap().headless);
+        assert_eq!(args(&["game"]).unwrap().rest, vec!["game".to_string()]);
+        let e = args(&["game", "--headles"]).unwrap_err();
+        assert!(e.contains("did you mean '--headless'"), "{e}");
+        let e = args(&["--frame", "3"]).unwrap_err();
+        assert!(e.contains("'--frames'"), "{e}");
+        let e = args(&["--zzzzzzzzzz"]).unwrap_err();
+        assert!(!e.contains("did you mean"), "{e}");
+    }
 
     #[test]
     fn parses_events() {

@@ -152,7 +152,7 @@ pub fn check(path: &Path, frames: u32) -> Report {
     let lua = mlua::Lua::new();
     for rel in &files {
         let name = rel.to_string_lossy().replace('\\', "/");
-        let source = match std::fs::read_to_string(dir.join(rel)) {
+        let source = match engine::vfs::read_string(&dir.join(rel)) {
             Ok(s) => s,
             Err(e) => {
                 report.errors.push(problem(&name, None, &format!("cannot read: {e}")));

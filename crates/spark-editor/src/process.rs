@@ -195,8 +195,10 @@ pub fn editor_line(job: JobKind, level: Level, text: impl Into<String>, clock: &
 
 /// Understands env_logger lines (`[INFO ] text`, `[WARN  spark] text`) and Spark error lines.
 pub fn parse_line(job: JobKind, stream: Stream, raw: &str, time: f64) -> LogLine {
-    let _ = stream; // stderr and stdout lines are classified the same way
-    let mut level = Level::Info;
+    // Logger lines carry a tag. An untagged line on stderr is not a log record: a panic, a crash message or raw
+    // output from a native library. It must not look like a plain Info line.
+    let mut level = if stream == Stream::Stderr { Level::Warn } else { Level::Info };
+    let mut tagged = false;
     let mut text = raw;
     if let Some(rest) = raw.strip_prefix('[')
         && let Some(end) = rest.find(']') {
@@ -211,11 +213,14 @@ pub fn parse_line(job: JobKind, stream: Stream, raw: &str, time: f64) -> LogLine
             };
             if let Some(l) = parsed {
                 level = l;
+                tagged = true;
                 text = rest[end + 1..].trim_start();
             }
         }
     let lower = text.to_ascii_lowercase();
-    if level < Level::Warn && (lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error")) {
+    if !tagged && (lower.contains("panicked at") || lower.starts_with("fatal") || lower.contains("stack overflow")) {
+        level = Level::Error;
+    } else if level < Level::Warn && (lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error")) {
         level = Level::Error;
     } else if level < Level::Warn && lower.contains("warning:") {
         level = Level::Warn;
@@ -306,6 +311,18 @@ mod tests {
         assert_eq!(l.location, Some(Location { file: "src/player.luau".into(), line: 12 }));
         let l = parse_line(JobKind::Run, Stream::Stdout, "hello", 0.0);
         assert_eq!((l.level, l.location), (Level::Info, None));
+    }
+
+    #[test]
+    fn untagged_stderr_is_not_info() {
+        let p = parse_line(JobKind::Run, Stream::Stderr, "thread 'main' panicked at src/lib.rs:5:9:", 0.0);
+        assert_eq!(p.level, Level::Error);
+        let w = parse_line(JobKind::Run, Stream::Stderr, "something odd on stderr", 0.0);
+        assert_eq!(w.level, Level::Warn);
+        let i = parse_line(JobKind::Run, Stream::Stdout, "hello", 0.0);
+        assert_eq!(i.level, Level::Info);
+        let t = parse_line(JobKind::Run, Stream::Stderr, "[INFO ] script loaded", 0.0);
+        assert_eq!(t.level, Level::Info);
     }
 
     #[test]
