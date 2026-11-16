@@ -3,10 +3,7 @@
 use std::collections::HashMap;
 
 use spark_core::shader::MAX_PARAMS_SIZE;
-use spark_core::{
-    Assets, ShaderData,
-    ShaderKind, TextureId, Vertex,
-};
+use spark_core::{Assets, ShaderData, ShaderKind, TextureId, Vertex};
 
 use crate::consts::*;
 use crate::gpu_util::*;
@@ -28,7 +25,15 @@ impl Renderer {
                 }
             } else if self.shaders[i].textures != data.textures {
                 let s = &mut self.shaders[i];
-                s.resources = shader_resources(&self.device, &self.shader_layout, &self.texture_samplers, &self.white, &self.textures, &s.params, data.textures);
+                s.resources = shader_resources(
+                    &self.device,
+                    &self.shader_layout,
+                    &self.texture_samplers,
+                    &self.white,
+                    &self.textures,
+                    &s.params,
+                    data.textures,
+                );
                 s.textures = data.textures;
             }
             self.queue.write_buffer(&self.shaders[i].params, 0, &data.values);

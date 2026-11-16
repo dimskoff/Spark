@@ -101,14 +101,7 @@ impl Job {
         if let Some(err) = child.stderr.take() {
             pipe(err, Stream::Stderr, tx);
         }
-        Ok(Self {
-            kind,
-            state: JobState::Running,
-            child,
-            output: rx,
-            stdout: String::new(),
-            keep_stdout: kind == JobKind::Check,
-        })
+        Ok(Self { kind, state: JobState::Running, child, output: rx, stdout: String::new(), keep_stdout: kind == JobKind::Check })
     }
 
     pub fn pid(&self) -> u32 {
@@ -135,10 +128,11 @@ impl Job {
         }
         let mut finished = None;
         if self.state == JobState::Running
-            && let Ok(Some(status)) = self.child.try_wait() {
-                self.state = JobState::Exited(exit_code(status));
-                finished = Some(self.state.clone());
-            }
+            && let Ok(Some(status)) = self.child.try_wait()
+        {
+            self.state = JobState::Exited(exit_code(status));
+            finished = Some(self.state.clone());
+        }
         (lines, finished)
     }
 
@@ -201,26 +195,27 @@ pub fn parse_line(job: JobKind, stream: Stream, raw: &str, time: f64) -> LogLine
     let mut tagged = false;
     let mut text = raw;
     if let Some(rest) = raw.strip_prefix('[')
-        && let Some(end) = rest.find(']') {
-            let tag = rest[..end].split_whitespace().next().unwrap_or("");
-            let parsed = match tag {
-                "TRACE" => Some(Level::Trace),
-                "DEBUG" => Some(Level::Debug),
-                "INFO" => Some(Level::Info),
-                "WARN" => Some(Level::Warn),
-                "ERROR" => Some(Level::Error),
-                _ => None,
-            };
-            if let Some(l) = parsed {
-                level = l;
-                tagged = true;
-                text = rest[end + 1..].trim_start();
-            }
+        && let Some(end) = rest.find(']')
+    {
+        let tag = rest[..end].split_whitespace().next().unwrap_or("");
+        let parsed = match tag {
+            "TRACE" => Some(Level::Trace),
+            "DEBUG" => Some(Level::Debug),
+            "INFO" => Some(Level::Info),
+            "WARN" => Some(Level::Warn),
+            "ERROR" => Some(Level::Error),
+            _ => None,
+        };
+        if let Some(l) = parsed {
+            level = l;
+            tagged = true;
+            text = rest[end + 1..].trim_start();
         }
+    }
     let lower = text.to_ascii_lowercase();
-    if !tagged && (lower.contains("panicked at") || lower.starts_with("fatal") || lower.contains("stack overflow")) {
-        level = Level::Error;
-    } else if level < Level::Warn && (lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error")) {
+    let crash = !tagged && (lower.contains("panicked at") || lower.starts_with("fatal") || lower.contains("stack overflow"));
+    let error_line = lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error");
+    if crash || (level < Level::Warn && error_line) {
         level = Level::Error;
     } else if level < Level::Warn && lower.contains("warning:") {
         level = Level::Warn;
@@ -328,7 +323,10 @@ mod tests {
     #[test]
     fn finds_locations() {
         assert_eq!(find_location("error in \"main.luau:3: x\"").unwrap().file, "main.luau");
-        assert_eq!(find_location("./assets/shaders/water.wgsl:40:7 bad").unwrap(), Location { file: "assets/shaders/water.wgsl".into(), line: 40 });
+        assert_eq!(
+            find_location("./assets/shaders/water.wgsl:40:7 bad").unwrap(),
+            Location { file: "assets/shaders/water.wgsl".into(), line: 40 }
+        );
         assert_eq!(find_location("main.luau: no line"), None);
     }
 

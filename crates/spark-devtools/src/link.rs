@@ -232,8 +232,7 @@ mod tests {
     #[test]
     fn editor_and_game_talk() {
         let server = Server::bind_local().unwrap();
-        let game: Link<GameMessage, EditorCommand> =
-            Link::connect(&server.addr().to_string(), Duration::from_secs(2)).unwrap();
+        let game: Link<GameMessage, EditorCommand> = Link::connect(&server.addr().to_string(), Duration::from_secs(2)).unwrap();
         let editor: Link<EditorCommand, GameMessage> = wait(|| server.accept()).unwrap();
 
         assert!(game.send(GameMessage::Paused { paused: true }));

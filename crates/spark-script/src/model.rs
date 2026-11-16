@@ -14,14 +14,17 @@ pub struct LuaModel(pub ModelId);
 
 impl UserData for LuaModel {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
-        f.add_field_method_get("name", |lua, this| {
-            with(lua, |w| Ok(w.assets.model(this.0).map(|m| m.name.clone()).unwrap_or_default()))
-        });
+        f.add_field_method_get("name", |lua, this| with(lua, |w| Ok(w.assets.model(this.0).map(|m| m.name.clone()).unwrap_or_default())));
         f.add_field_method_get("animations", |lua, this| {
             with(lua, |w| Ok(w.assets.model(this.0).map(|m| m.clip_names()).unwrap_or_default()))
         });
         f.add_field_method_get("nodes", |lua, this| {
-            with(lua, |w| Ok(w.assets.model(this.0).map(|m| m.nodes.iter().filter(|n| n.name != "__fbx_root").map(|n| n.name.clone()).collect::<Vec<_>>()).unwrap_or_default()))
+            with(lua, |w| {
+                Ok(w.assets
+                    .model(this.0)
+                    .map(|m| m.nodes.iter().filter(|n| n.name != "__fbx_root").map(|n| n.name.clone()).collect::<Vec<_>>())
+                    .unwrap_or_default())
+            })
         });
         f.add_field_method_get("size", |lua, this| {
             with(lua, |w| Ok(vv(w.assets.model(this.0).map(|m| m.bounds.size()).unwrap_or_default())))
@@ -31,7 +34,9 @@ impl UserData for LuaModel {
         m.add_method("duration", |lua, this, name: String| {
             with(lua, |w| {
                 let model = w.assets.model(this.0).ok_or_else(|| rt("model was unloaded"))?;
-                let c = model.clip(&name).ok_or_else(|| rt(format!("duration: no animation '{name}' (available: {})", model.clip_names().join(", "))))?;
+                let c = model
+                    .clip(&name)
+                    .ok_or_else(|| rt(format!("duration: no animation '{name}' (available: {})", model.clip_names().join(", "))))?;
                 Ok(model.clips[c].duration)
             })
         });
@@ -52,7 +57,11 @@ pub(crate) fn to_model(w: &mut World, v: &Value, what: &str) -> LuaResult<Option
         Value::UserData(ud) => Ok(ud.borrow::<LuaModel>().ok().map(|m| m.0)),
         Value::String(s) => {
             let s = s.to_string_lossy();
-            if is_model_path(&s) { crate::untimed(|| w.assets.load_model(&s)).map(Some).map_err(|e| rt(format!("{what}: {e}"))) } else { Ok(None) }
+            if is_model_path(&s) {
+                crate::untimed(|| w.assets.load_model(&s)).map(Some).map_err(|e| rt(format!("{what}: {e}")))
+            } else {
+                Ok(None)
+            }
         }
         _ => Ok(None),
     }
@@ -76,8 +85,12 @@ pub(crate) fn spawn_model(lua: &Lua, model: ModelId, second: Value, third: Optio
         None => None,
     };
     with(lua, |w| {
-        let id = animation::spawn_model_node(w, model, material, only.as_deref())
-            .ok_or_else(|| rt(match &only { Some(n) => format!("spawn: the model has no node \"{n}\" (see model.nodes)"), None => "spawn: model was unloaded".to_string() }))?;
+        let id = animation::spawn_model_node(w, model, material, only.as_deref()).ok_or_else(|| {
+            rt(match &only {
+                Some(n) => format!("spawn: the model has no node \"{n}\" (see model.nodes)"),
+                None => "spawn: model was unloaded".to_string(),
+            })
+        })?;
         if let Err(e) = crate::types::apply_props(w, id, props) {
             w.scene.destroy(id);
             return Err(e);

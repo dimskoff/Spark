@@ -1,5 +1,6 @@
 # Create a release on GitHub (Releases > Draft a new release, tag v0.1.0): this builds spark on Windows, Linux and
-# macOS and attaches spark-windows-x64.zip, spark-linux-x64.tar.gz and spark-macos-arm64.tar.gz (each holds `spark` and\n# `spark-editor`) plus a .sha256 file per archive to it. The installers verify that checksum.
+# macOS and attaches spark-windows-x64.zip, spark-linux-x64.tar.gz and spark-macos-arm64.tar.gz (each holds `spark` and
+# spark-editor) plus a .sha256 file per archive to it. The installers verify that checksum.
 # The asset names are what install.ps1, install.sh and `spark update` download - keep them in sync.
 # Run it by hand (Actions > Release > Run workflow) to only build the archives as workflow artifacts.
 name: Release

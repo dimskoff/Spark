@@ -10,15 +10,14 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
+use rapier3d::control::{CharacterAutostep, CharacterLength, KinematicCharacterController};
 use rapier3d::prelude as rp;
 use rapier3d::prelude::{
-    ActiveCollisionTypes, ActiveEvents, ChannelEventCollector, ColliderBuilder, ColliderHandle, CollisionEvent,
-    PhysicsWorld, QueryFilter, Ray, RigidBodyBuilder, RigidBodyHandle,
+    ActiveCollisionTypes, ActiveEvents, ChannelEventCollector, ColliderBuilder, ColliderHandle, CollisionEvent, PhysicsWorld, QueryFilter,
+    Ray, RigidBodyBuilder, RigidBodyHandle,
 };
-use rapier3d::control::{CharacterAutostep, CharacterLength, KinematicCharacterController};
 use spark_core::{
-    Body, BodyKind, CharacterMove, Collision, MeshId, Object, ObjectId, PhysicsBackend, Quat, RayHit, Shape, ShapeHint, Vec3,
-    World,
+    Body, BodyKind, CharacterMove, Collision, MeshId, Object, ObjectId, PhysicsBackend, Quat, RayHit, Shape, ShapeHint, Vec3, World,
 };
 
 /// Teleport / velocity-change detection tolerance.
@@ -134,6 +133,7 @@ impl RapierBackend {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // the eight inputs are the rapier body description; a one-use struct would only move the list
     fn create(&mut self, world: &World, id: ObjectId, o: &Object, body: &Body, pos: Vec3, rot: Quat, key: ColliderKey) {
         let builder = match body.kind {
             BodyKind::Dynamic => RigidBodyBuilder::dynamic(),
@@ -172,8 +172,7 @@ impl RapierBackend {
 
     /// Brings rapier in line with the scene (creates / removes / updates bodies, applies impulses).
     fn sync(&mut self, world: &mut World) {
-        let ids: Vec<ObjectId> =
-            world.scene.iter().filter(|(_, o)| o.body.is_some()).map(|(id, _)| id).collect();
+        let ids: Vec<ObjectId> = world.scene.iter().filter(|(_, o)| o.body.is_some()).map(|(id, _)| id).collect();
         let alive: HashSet<ObjectId> = ids.iter().copied().collect();
         let dead: Vec<ObjectId> = self.entries.keys().filter(|id| !alive.contains(id)).copied().collect();
         for id in dead {
@@ -317,11 +316,7 @@ impl PhysicsBackend for RapierBackend {
         self.sync(world);
 
         // Relative speeds must be measured before the solver resolves the impact.
-        let before: HashMap<ObjectId, Vec3> = self
-            .entries
-            .iter()
-            .map(|(&id, e)| (id, sv(self.world.bodies[e.body].linvel())))
-            .collect();
+        let before: HashMap<ObjectId, Vec3> = self.entries.iter().map(|(&id, e)| (id, sv(self.world.bodies[e.body].linvel()))).collect();
 
         let (collision_send, collision_recv) = mpsc::channel();
         let (force_send, _force_recv) = mpsc::channel();
@@ -361,12 +356,7 @@ impl PhysicsBackend for RapierBackend {
         let ray = Ray::new(rv(origin), rv(dir));
         let (h, hit) = self.world.cast_ray_and_get_normal(&ray, max_distance, true, filter)?;
         let object = self.object_of(h)?;
-        Some(RayHit {
-            object,
-            point: origin + dir * hit.time_of_impact,
-            normal: sv(hit.normal),
-            distance: hit.time_of_impact,
-        })
+        Some(RayHit { object, point: origin + dir * hit.time_of_impact, normal: sv(hit.normal), distance: hit.time_of_impact })
     }
 
     fn clear(&mut self) {
@@ -379,7 +369,7 @@ impl PhysicsBackend for RapierBackend {
         let collider = self.world.colliders.get(e.collider)?;
         let mut at = pose(position, rotation);
         if let Some(offset) = collider.position_wrt_parent() {
-            at = at * *offset;
+            at *= *offset;
         }
         let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(e.body);
         let queries = self.world.query_pipeline_with_filter(filter);
@@ -448,15 +438,20 @@ fn auto_collider(world: &World, o: &Object, kind: BodyKind, s: Vec3) -> Collider
             // Slab of 0.5 m behind the front face so fast objects don't tunnel through.
             const SLAB: f32 = 0.25;
             let mut half = size * 0.5;
-            let thin = if size.y <= size.x && size.y <= size.z { 1 } else if size.z <= size.x { 2 } else { 0 };
+            let thin = if size.y <= size.x && size.y <= size.z {
+                1
+            } else if size.z <= size.x {
+                2
+            } else {
+                0
+            };
             half[thin] = SLAB;
             center[thin] -= SLAB;
             cuboid(half)
         }
         ShapeHint::Custom => {
             let mesh = mesh.expect("custom hint comes from a mesh");
-            let points: Vec<rp::Vector> =
-                mesh.vertices.iter().map(|v| rv(Vec3::from_array(v.position) * s)).collect();
+            let points: Vec<rp::Vector> = mesh.vertices.iter().map(|v| rv(Vec3::from_array(v.position) * s)).collect();
             let built = if kind == BodyKind::Dynamic {
                 ColliderBuilder::convex_hull(&points)
             } else {

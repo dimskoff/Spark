@@ -81,10 +81,8 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("spark test: no tests in {} (create tests/<name>.luau)\n\n{HELP}", dir.join("tests").display());
         return 2;
     }
-    let selected: Vec<PathBuf> = files
-        .into_iter()
-        .filter(|f| opts.filters.is_empty() || opts.filters.iter().any(|q| rel(&dir, f).contains(q.as_str())))
-        .collect();
+    let selected: Vec<PathBuf> =
+        files.into_iter().filter(|f| opts.filters.is_empty() || opts.filters.iter().any(|q| rel(&dir, f).contains(q.as_str()))).collect();
     if selected.is_empty() {
         eprintln!("spark test: no test matches {:?}", opts.filters);
         return 2;
@@ -422,7 +420,10 @@ end
 
     #[test]
     fn failed_check_has_location_and_step() {
-        let dir = game(&[("main.luau", DOOR_GAME), ("tests/door.luau", "test.step('check')\ntest.wait(0.1)\ntest.eq(opened, true, 'door opened')\n")]);
+        let dir = game(&[
+            ("main.luau", DOOR_GAME),
+            ("tests/door.luau", "test.step('check')\ntest.wait(0.1)\ntest.eq(opened, true, 'door opened')\n"),
+        ]);
         let r = run_test(&dir, &dir.join("tests/door.luau"), &opts());
         assert!(!r.ok);
         let e = r.error.unwrap();
@@ -447,7 +448,8 @@ end
 
     #[test]
     fn wait_until_times_out() {
-        let dir = game(&[("main.luau", DOOR_GAME), ("tests/t.luau", "test.wait_until(function() return opened end, 0.5, 'door to open')\n")]);
+        let dir =
+            game(&[("main.luau", DOOR_GAME), ("tests/t.luau", "test.wait_until(function() return opened end, 0.5, 'door to open')\n")]);
         let r = run_test(&dir, &dir.join("tests/t.luau"), &opts());
         let e = r.error.unwrap();
         assert!(e.message.contains("timed out after 0.5 s waiting for door to open"), "{e:?}");
@@ -457,7 +459,13 @@ end
 
     #[test]
     fn finds_test_files() {
-        let dir = game(&[("main.luau", ""), ("tests/a.luau", ""), ("tests/ch1/b.luau", ""), ("tests/_helpers.luau", ""), ("tests/snapshots/x.luau", "")]);
+        let dir = game(&[
+            ("main.luau", ""),
+            ("tests/a.luau", ""),
+            ("tests/ch1/b.luau", ""),
+            ("tests/_helpers.luau", ""),
+            ("tests/snapshots/x.luau", ""),
+        ]);
         let names: Vec<String> = test_files(&dir).iter().map(|f| rel(&dir, f)).collect();
         assert_eq!(names, vec!["tests/a.luau", "tests/ch1/b.luau"]);
         assert_eq!(snapshot_path(&dir, "tests/ch1/b.luau", "after door"), dir.join("tests/snapshots/ch1.b.after_door.snap"));

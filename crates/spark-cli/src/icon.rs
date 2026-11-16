@@ -22,7 +22,8 @@ pub fn load(path: &Path) -> Result<RgbaImage, String> {
 
 /// PNG bytes of the icon scaled to `size` x `size`.
 fn png_at(img: &RgbaImage, size: u32) -> Result<Vec<u8>, String> {
-    let scaled = if img.width() == size { img.clone() } else { image::imageops::resize(img, size, size, image::imageops::FilterType::Lanczos3) };
+    let scaled =
+        if img.width() == size { img.clone() } else { image::imageops::resize(img, size, size, image::imageops::FilterType::Lanczos3) };
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new(&mut out)
         .write_image(scaled.as_raw(), size, size, image::ExtendedColorType::Rgba8)
@@ -83,7 +84,9 @@ pub fn set_exe_icon(exe: &[u8], img: &RgbaImage) -> Result<Vec<u8>, String> {
             for (i, png) in pngs.iter().enumerate() {
                 ok &= UpdateResourceW(h, RT_ICON as *const u16, (i + 1) as *const u16, 0, png.as_ptr().cast(), png.len() as u32) != 0;
             }
-            ok &= UpdateResourceW(h, RT_GROUP_ICON as *const u16, std::ptr::dangling::<u16>(), 0, group.as_ptr().cast(), group.len() as u32) != 0;
+            ok &=
+                UpdateResourceW(h, RT_GROUP_ICON as *const u16, std::ptr::dangling::<u16>(), 0, group.as_ptr().cast(), group.len() as u32)
+                    != 0;
             if !ok {
                 EndUpdateResourceW(h, 1);
                 Err("UpdateResource failed".to_string())

@@ -35,7 +35,8 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("spark update: cannot find the spark executable");
         return 1;
     };
-    let exe = exe.canonicalize().ok().and_then(|p| p.to_str().map(|s| std::path::PathBuf::from(s.trim_start_matches(r"\\?\")))).unwrap_or(exe);
+    let exe =
+        exe.canonicalize().ok().and_then(|p| p.to_str().map(|s| std::path::PathBuf::from(s.trim_start_matches(r"\\?\")))).unwrap_or(exe);
     let Some(bin) = exe.parent() else { return 1 };
     if exe.components().any(|c| c.as_os_str() == "target") {
         eprintln!("spark update: this spark was built from source ({}).", exe.display());

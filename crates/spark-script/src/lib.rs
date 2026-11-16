@@ -22,7 +22,6 @@ mod draw;
 pub mod error_screen;
 mod flow;
 mod light;
-mod ui_api;
 mod model;
 mod modules;
 mod physics;
@@ -32,6 +31,7 @@ mod shader;
 pub mod testing;
 mod tween;
 mod types;
+mod ui_api;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -48,11 +48,6 @@ pub use save::default_save_path;
 use convert::Shared;
 use runtime::SharedRuntime;
 
-/// Runs a Luau script as a [`Game`].
-///
-/// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
-/// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
-/// -> render. `start()` runs once as a task (may `wait`).
 thread_local! {
     /// Time the running callback spent loading assets (models, textures, cube maps): it does not count towards the
     /// "script ran too long" limit, big files may take seconds to decode.
@@ -67,6 +62,11 @@ pub(crate) fn untimed<R>(f: impl FnOnce() -> R) -> R {
     r
 }
 
+/// Runs a Luau script as a [`Game`].
+///
+/// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
+/// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
+/// -> render. `start()` runs once as a task (may `wait`).
 pub struct ScriptGame {
     path: PathBuf,
     shared: Rc<RefCell<World>>,
@@ -341,9 +341,10 @@ impl ScriptGame {
         }
         self.last_check = Instant::now();
         let m = modified(&self.path);
-        let changed_module = self.modules.as_ref().and_then(|ms| {
-            ms.borrow().files.iter().find(|(p, t)| t.is_some() && modified(p) != *t).map(|(p, _)| p.clone())
-        });
+        let changed_module = self
+            .modules
+            .as_ref()
+            .and_then(|ms| ms.borrow().files.iter().find(|(p, t)| t.is_some() && modified(p) != *t).map(|(p, _)| p.clone()));
         if (m.is_some() && m != self.modified) || changed_module.is_some() {
             log::info!("reloading {}", changed_module.as_deref().unwrap_or(&self.path).display());
             self.shader_mtimes.clear();
@@ -352,8 +353,7 @@ impl ScriptGame {
             self.load(world);
             return;
         }
-        let files: Vec<(PathBuf, spark_core::ShaderId)> =
-            world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
+        let files: Vec<(PathBuf, spark_core::ShaderId)> = world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
         for (path, id) in files {
             let m = modified(&path);
             match self.shader_mtimes.get(&path) {
@@ -362,9 +362,8 @@ impl ScriptGame {
                 }
                 Some(old) if *old != m => {
                     self.shader_mtimes.insert(path.clone(), m);
-                    let result = spark_core::vfs::read_string(&path).and_then(|code| {
-                        world.assets.shader_mut(id).ok_or_else(|| "shader was unloaded".to_string())?.recompile(&code)
-                    });
+                    let result = spark_core::vfs::read_string(&path)
+                        .and_then(|code| world.assets.shader_mut(id).ok_or_else(|| "shader was unloaded".to_string())?.recompile(&code));
                     match result {
                         Ok(()) => {
                             log::info!("shader reloaded: {}", path.display());

@@ -80,7 +80,6 @@ impl Runtime {
         self.bus.clear();
         self.tasks.clear();
     }
-
 }
 
 pub(crate) type SharedRuntime = Rc<RefCell<Runtime>>;
@@ -178,7 +177,12 @@ fn schedule_wait(lua: &Lua, id: u64, values: MultiValue) -> LuaResult<()> {
     let kind = match it.next() {
         None => "frames".to_string(),
         Some(Value::String(s)) => s.to_string_lossy(),
-        Some(other) => return Err(rt(format!("task yielded an unexpected value ({}) - use wait(), wait_frames(), wait_until() or wait_event()", other.type_name()))),
+        Some(other) => {
+            return Err(rt(format!(
+                "task yielded an unexpected value ({}) - use wait(), wait_frames(), wait_until() or wait_event()",
+                other.type_name()
+            )));
+        }
     };
     let a = it.next().unwrap_or(Value::Nil);
     let b = it.next().unwrap_or(Value::Nil);
@@ -330,7 +334,8 @@ pub(crate) fn emit(lua: &Lua, name: &str, args: MultiValue) -> LuaResult<bool> {
                         rtc.borrow_mut().bus.off(id);
                         continue;
                     }
-                    let v = f.call::<Value>(args.clone()).map_err(|e| e.context(format!("in handler of event '{}'", display_name(name))))?;
+                    let v =
+                        f.call::<Value>(args.clone()).map_err(|e| e.context(format!("in handler of event '{}'", display_name(name))))?;
                     if v == Value::Boolean(true) {
                         return Ok(true);
                     }

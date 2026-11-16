@@ -37,10 +37,7 @@ impl Drop for Store {
 /// `%APPDATA%/SparkGames/<game>/save.json` (Windows), `~/Library/Application Support/SparkGames/<game>/save.json`
 /// (macOS) or `$XDG_DATA_HOME` / `~/.local/share/SparkGames/<game>/save.json` (Linux).
 pub fn default_save_path(game: &str) -> Option<PathBuf> {
-    let clean: String = game
-        .chars()
-        .map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.') { c } else { '_' })
-        .collect();
+    let clean: String = game.chars().map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.') { c } else { '_' }).collect();
     let clean = clean.trim().trim_matches('.').to_string();
     let clean = if clean.is_empty() { "game".to_string() } else { clean };
     let base = if cfg!(windows) {
@@ -300,14 +297,8 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
             persist(&s)
         })?,
     )?;
-    save.set(
-        "keys",
-        lua.create_function(|lua, ()| Ok(store(lua)?.data.borrow().keys().cloned().collect::<Vec<_>>()))?,
-    )?;
-    save.set(
-        "path",
-        lua.create_function(|lua, ()| Ok(store(lua)?.path.as_ref().map(|p| p.display().to_string())))?,
-    )?;
+    save.set("keys", lua.create_function(|lua, ()| Ok(store(lua)?.data.borrow().keys().cloned().collect::<Vec<_>>()))?)?;
+    save.set("path", lua.create_function(|lua, ()| Ok(store(lua)?.path.as_ref().map(|p| p.display().to_string())))?)?;
     g.set("save", save)?;
     Ok(())
 }

@@ -2,13 +2,15 @@
 #
 #   irm https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.ps1 | iex
 #
-# Downloads spark.exe (and spark-editor.exe, when the archive has it) from the latest GitHub release into\n# %LOCALAPPDATA%\Spark\bin, verifies the SHA-256 published next to the archive and adds the folder to the user PATH.
+# Downloads spark.exe (and spark-editor.exe, when the archive has it) from the latest GitHub release into
+# %LOCALAPPDATA%\Spark\bin, verifies the SHA-256 published next to the archive and adds the folder to the user PATH.
 # Run it again (or `spark update`) to update. Options (environment variables):
 #   SPARK_VERSION = v0.1.0     install this release instead of the latest
 #   SPARK_BIN     = C:\tools   install into this folder
 #   SPARK_NO_PATH = 1          do not touch PATH
 #   SPARK_ZIP     = file.zip   install from a local spark-windows-x64.zip (testing)
-#   SPARK_REPO    = owner/repo download from a fork (default AcelateOrg/Spark)\n#   SPARK_ALLOW_UNVERIFIED = 1 install a release that has no .sha256 file
+#   SPARK_REPO    = owner/repo download from a fork (default AcelateOrg/Spark)
+#   SPARK_ALLOW_UNVERIFIED = 1 install a release that has no .sha256 file
 #
 # Linux / macOS: curl -fsSL https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.sh | sh
 

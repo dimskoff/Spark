@@ -95,10 +95,12 @@ fn build(args: &[String]) -> Result<(), String> {
         let target = out_root.join(&name);
         // Linux / macOS: a previous one-file build has exactly this name.
         if target.is_file() {
-            std::fs::remove_file(&target).map_err(|e| format!("cannot replace '{}': {e} (is the game still running?)", target.display()))?;
+            std::fs::remove_file(&target)
+                .map_err(|e| format!("cannot replace '{}': {e} (is the game still running?)", target.display()))?;
         }
         if target.exists() {
-            std::fs::remove_dir_all(&target).map_err(|e| format!("cannot clear '{}': {e} (is the game still running?)", target.display()))?;
+            std::fs::remove_dir_all(&target)
+                .map_err(|e| format!("cannot clear '{}': {e} (is the game still running?)", target.display()))?;
         }
         std::fs::create_dir_all(&target).map_err(|e| format!("cannot create '{}': {e}", target.display()))?;
         write_exe(&target.join(&exe_name), &exe)?;
@@ -186,7 +188,14 @@ fn write_exe(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// `<name>.app/Contents/{Info.plist, MacOS/<name>}` around the built executable (or loose folder).
-fn make_app_bundle(out_root: &Path, name: &str, shipped: &Path, title: &str, loose: bool, icon: Option<&image::RgbaImage>) -> Result<PathBuf, String> {
+fn make_app_bundle(
+    out_root: &Path,
+    name: &str,
+    shipped: &Path,
+    title: &str,
+    loose: bool,
+    icon: Option<&image::RgbaImage>,
+) -> Result<PathBuf, String> {
     let bundle = out_root.join(format!("{name}.app"));
     if bundle.exists() {
         std::fs::remove_dir_all(&bundle).map_err(|e| format!("cannot clear '{}': {e}", bundle.display()))?;
@@ -253,10 +262,8 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 /// A safe file name from a title (keeps Unicode letters).
 fn file_name(title: &str) -> String {
-    let s: String = title
-        .chars()
-        .map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '(' | ')') { c } else { '_' })
-        .collect();
+    let s: String =
+        title.chars().map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '(' | ')') { c } else { '_' }).collect();
     let s = s.trim().trim_matches('.').to_string();
     if s.is_empty() { "game".into() } else { s }
 }

@@ -1,8 +1,6 @@
 //! Screenshots and frame capture: render into an offscreen target and read the pixels back.
 
-use spark_core::{
-    ImageData, World,
-};
+use spark_core::{ImageData, World};
 
 use crate::consts::*;
 use crate::gpu_util::*;

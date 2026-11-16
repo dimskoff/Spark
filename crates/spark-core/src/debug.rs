@@ -95,10 +95,7 @@ impl DebugOverlay {
     }
 
     pub fn add_line(&mut self, text: impl Into<String>, color: Color) {
-        self.lines.push(DebugLine {
-            text: text.into(),
-            color,
-        });
+        self.lines.push(DebugLine { text: text.into(), color });
     }
 
     /// Called every frame with the real frame time.
@@ -118,11 +115,7 @@ impl DebugOverlay {
 
     /// Average frame time in ms over the last 120 frames.
     pub fn avg_frame_ms(&self) -> f32 {
-        if self.frame_times.is_empty() {
-            0.0
-        } else {
-            self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32
-        }
+        if self.frame_times.is_empty() { 0.0 } else { self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32 }
     }
 
     /// FPS averaged over the last 120 frames (steadier than [`DebugOverlay::fps`]).
@@ -178,25 +171,16 @@ impl DebugOverlay {
             });
         }
         if self.show_gpu {
-            lines.push(DebugLine {
-                text: format!("GPU: {}", gpu_name),
-                color: cyan,
-            });
+            lines.push(DebugLine { text: format!("GPU: {}", gpu_name), color: cyan });
         }
         if self.show_scene {
             lines.push(DebugLine {
-                text: format!(
-                    "Objects: {} | Draw calls: {} | Triangles: {}",
-                    object_count, draw_calls, triangles
-                ),
+                text: format!("Objects: {} | Draw calls: {} | Triangles: {}", object_count, draw_calls, triangles),
                 color: white,
             });
         }
         if self.show_physics && physics_active > 0 {
-            lines.push(DebugLine {
-                text: format!("Physics bodies: {}", physics_active),
-                color: white,
-            });
+            lines.push(DebugLine { text: format!("Physics bodies: {}", physics_active), color: white });
         }
         // User-added lines
         lines.extend(self.lines.iter().cloned());

@@ -5,8 +5,8 @@ use crate::gpu_util::*;
 use crate::lighting::*;
 use crate::uniforms::*;
 use crate::*;
-use spark_core::*;
 use spark_core::glam::Quat;
+use spark_core::*;
 use spark_core::{Material, MeshData};
 
 #[test]

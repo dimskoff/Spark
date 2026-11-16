@@ -225,11 +225,7 @@ impl MeshData {
         let mut mesh = Self::default();
         for (n, u, v) in faces {
             let (c, hu, hv) = (n * half, u * half, v * half);
-            mesh.push_quad(
-                [c - hu - hv, c + hu - hv, c + hu + hv, c - hu + hv],
-                n,
-                [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-            );
+            mesh.push_quad([c - hu - hv, c + hu - hv, c + hu + hv, c - hu + hv], n, [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]);
         }
         mesh.shape = ShapeHint::Box;
         mesh

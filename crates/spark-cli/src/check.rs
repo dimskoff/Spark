@@ -120,7 +120,8 @@ pub fn run(args: &[String]) -> i32 {
 pub fn check(path: &Path, frames: u32) -> Report {
     let mut report = Report::default();
     let main = if path.is_dir() { path.join("main.luau") } else { path.to_path_buf() };
-    let Some(dir) = main.parent().map(|d| if d.as_os_str().is_empty() { Path::new(".") } else { d }).and_then(|d| d.canonicalize().ok()) else {
+    let Some(dir) = main.parent().map(|d| if d.as_os_str().is_empty() { Path::new(".") } else { d }).and_then(|d| d.canonicalize().ok())
+    else {
         report.errors.push(problem(&main.display().to_string(), None, "game folder not found"));
         return report;
     };
@@ -255,9 +256,9 @@ fn check_types(path: &Path, report: &mut Report) {
     let output = match output {
         Ok(o) => o,
         Err(_) => {
-            report.notes.push(
-                "--types needs luau-lsp (https://github.com/JohnnyMorganz/luau-lsp/releases) on PATH; skipped the type check".into(),
-            );
+            report
+                .notes
+                .push("--types needs luau-lsp (https://github.com/JohnnyMorganz/luau-lsp/releases) on PATH; skipped the type check".into());
             return;
         }
     };
@@ -407,7 +408,10 @@ mod tests {
     #[test]
     fn ok_game_runs_frames() {
         let dir = game(&[
-            ("main.luau", "local M = require(\"./src/m\")\nfunction start() M.build() end\nfunction update(dt) local _ = input.text() .. tostring(input.repeated(\"minus\")) end\n"),
+            (
+                "main.luau",
+                "local M = require(\"./src/m\")\nfunction start() M.build() end\nfunction update(dt) local _ = input.text() .. tostring(input.repeated(\"minus\")) end\n",
+            ),
             ("src/m.luau", "local M = {}\nfunction M.build() spawn(Mesh.cube(), \"red\") end\nreturn M\n"),
         ]);
         let r = check(&dir, 10);
@@ -448,7 +452,8 @@ mod tests {
 
     #[test]
     fn text_input_reaches_scripts() {
-        let dir = game(&[("main.luau", "typed = \"\"\nfunction update(dt) typed ..= input.text() if typed == \"hi\" then quit() end end\n")]);
+        let dir =
+            game(&[("main.luau", "typed = \"\"\nfunction update(dt) typed ..= input.text() if typed == \"hi\" then quit() end end\n")]);
         let mut game = ScriptGame::new(dir.join("main.luau")).hot_reload(false);
         let mut world = World::new();
         game.start(&mut world);

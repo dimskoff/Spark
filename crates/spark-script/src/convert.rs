@@ -59,33 +59,33 @@ pub(crate) fn to_num(v: &Value, what: &str) -> LuaResult<f32> {
     Ok(n)
 }
 
-/// Function arguments: a finite number (`Num`), an optional finite number (`ONum`) and their f64 forms.
-/// Used as closure patterns, e.g. `|lua, this, Num(v): Num|`, so every number the API takes is checked
-/// in one place. The error names the argument position; the Luau error adds the function name and line.
-macro_rules! finite_args {
-    ($($num:ident, $opt:ident, $t:ty);*) => {$(
-        #[derive(Clone, Copy, Debug)]
-        pub(crate) struct $num(pub $t);
-        #[derive(Clone, Copy, Debug)]
-        pub(crate) struct $opt(pub Option<$t>);
-        impl mlua::FromLua for $num {
-            fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
-                let n = to_num64(&v, "argument")?;
-                let x = n as $t;
-                if !x.is_finite() {
-                    return Err(rt("argument: number is too large"));
-                }
-                Ok(Self(x))
-            }
-        }
-        impl mlua::FromLua for $opt {
-            fn from_lua(v: Value, lua: &Lua) -> LuaResult<Self> {
-                if v.is_nil() { Ok(Self(None)) } else { $num::from_lua(v, lua).map(|n| Self(Some(n.0))) }
-            }
-        }
-    )*};
+/// A finite number argument (`Num` = f32, `Num64` = f64). Used as a closure pattern, e.g. `|lua, this, Num(v): Num|`, so
+/// every number the API takes is checked in one place; NaN, infinity and overflow are errors, never silent values.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Num(pub f32);
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Num64(pub f64);
+/// Optional finite f32 argument: `nil` / missing is `None`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ONum(pub Option<f32>);
+
+impl mlua::FromLua for Num {
+    fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+        to_num(&v, "argument").map(Self)
+    }
 }
-finite_args!(Num, ONum, f32; Num64, ONum64, f64);
+
+impl mlua::FromLua for Num64 {
+    fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+        to_num64(&v, "argument").map(Self)
+    }
+}
+
+impl mlua::FromLua for ONum {
+    fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+        if v.is_nil() { Ok(Self(None)) } else { to_num(&v, "argument").map(|n| Self(Some(n))) }
+    }
+}
 
 /// Checks every component of a vector.
 pub(crate) fn finite_vec(v: Vec3, what: &str) -> LuaResult<Vec3> {
@@ -167,9 +167,8 @@ pub(crate) fn to_color(v: &Value, what: &str) -> LuaResult<Color> {
         Value::Number(_) | Value::Integer(_) => Ok(Color::hex(to_num(v, what)? as u32)),
         Value::String(s) => {
             let s = s.to_string_lossy();
-            Color::parse(&s).ok_or_else(|| {
-                rt(format!("{what}: unknown color '{s}' (use \"#rrggbb\", 0xrrggbb or a name: {})", color_names()))
-            })
+            Color::parse(&s)
+                .ok_or_else(|| rt(format!("{what}: unknown color '{s}' (use \"#rrggbb\", 0xrrggbb or a name: {})", color_names())))
         }
         Value::Vector(c) => {
             let c = finite_vec(Vec3::new(c.x(), c.y(), c.z()), what)?;

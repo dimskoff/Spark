@@ -52,7 +52,12 @@ impl WelcomeScreen {
         self.rows = settings
             .recent
             .iter()
-            .map(|r| RecentRow { path: r.path.clone(), title: r.title.clone(), exists: r.path.join(spark_project::ENTRY).is_file(), last_opened: r.last_opened })
+            .map(|r| RecentRow {
+                path: r.path.clone(),
+                title: r.title.clone(),
+                exists: r.path.join(spark_project::ENTRY).is_file(),
+                last_opened: r.last_opened,
+            })
             .collect();
     }
 
@@ -69,9 +74,8 @@ impl WelcomeScreen {
             .frame(egui::Frame::new().fill(theme::SURFACE).inner_margin(Margin::same(16)))
             .show(ui, |ui| self.sidebar(ui, settings, &mut action));
 
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::BG).inner_margin(Margin::symmetric(28, 22)))
-            .show(ui, |ui| match self.page {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG).inner_margin(Margin::symmetric(28, 22))).show(ui, |ui| {
+            match self.page {
                 Page::Projects => self.projects(ui, settings, &mut action),
                 Page::Settings => {
                     if settings_page(ui, settings) {
@@ -79,7 +83,8 @@ impl WelcomeScreen {
                     }
                 }
                 Page::About => about_page(ui),
-            });
+            }
+        });
 
         if let Some(a) = self.new_project_dialog(ui.ctx(), settings) {
             action = Some(a);
@@ -101,7 +106,9 @@ impl WelcomeScreen {
             });
         });
         ui.add_space(18.0);
-        for (page, label) in [(Page::Projects, t("welcome.projects")), (Page::Settings, t("welcome.customize")), (Page::About, t("welcome.about"))] {
+        for (page, label) in
+            [(Page::Projects, t("welcome.projects")), (Page::Settings, t("welcome.customize")), (Page::About, t("welcome.about"))]
+        {
             let selected = self.page == page;
             let text = if selected { RichText::new(label).color(Color32::WHITE).strong() } else { RichText::new(label) };
             if ui.add_sized([ui.available_width(), 30.0], egui::Button::selectable(selected, text)).clicked() {
@@ -117,14 +124,25 @@ impl WelcomeScreen {
 
     fn projects(&mut self, ui: &mut egui::Ui, settings: &mut Settings, action: &mut Option<AppAction>) {
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.search).hint_text(format!("{}  {}", icon::SEARCH, t("welcome.search"))).desired_width(280.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.search)
+                    .hint_text(format!("{}  {}", icon::SEARCH, t("welcome.search")))
+                    .desired_width(280.0),
+            );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui.button(t("welcome.open")).on_hover_text(t("welcome.open_hint")).clicked()
-                    && let Some(dir) = rfd::FileDialog::new().set_title(t("welcome.open_title")).set_directory(settings.projects_dir()).pick_folder() {
-                        *action = Some(AppAction::OpenProject(dir));
-                    }
+                    && let Some(dir) =
+                        rfd::FileDialog::new().set_title(t("welcome.open_title")).set_directory(settings.projects_dir()).pick_folder()
+                {
+                    *action = Some(AppAction::OpenProject(dir));
+                }
                 if ui.add(theme::primary_button(t("welcome.new_project"))).clicked() {
-                    self.new_project = Some(NewProject { name: unique_name(settings), location: settings.projects_dir().display().to_string(), error: None, focus: true });
+                    self.new_project = Some(NewProject {
+                        name: unique_name(settings),
+                        location: settings.projects_dir().display().to_string(),
+                        error: None,
+                        focus: true,
+                    });
                 }
             });
         });
@@ -144,7 +162,10 @@ impl WelcomeScreen {
         let mut remove = None;
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             for (i, row) in self.rows.iter().enumerate() {
-                if !query.is_empty() && !row.title.to_lowercase().contains(&query) && !row.path.to_string_lossy().to_lowercase().contains(&query) {
+                if !query.is_empty()
+                    && !row.title.to_lowercase().contains(&query)
+                    && !row.path.to_string_lossy().to_lowercase().contains(&query)
+                {
                     continue;
                 }
                 match recent_row(ui, row) {
@@ -184,9 +205,10 @@ impl WelcomeScreen {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut np.location).desired_width(270.0));
                     if ui.button(t("common.browse")).clicked()
-                        && let Some(dir) = rfd::FileDialog::new().set_directory(&np.location).pick_folder() {
-                            np.location = dir.display().to_string();
-                        }
+                        && let Some(dir) = rfd::FileDialog::new().set_directory(&np.location).pick_folder()
+                    {
+                        np.location = dir.display().to_string();
+                    }
                 });
                 ui.end_row();
             });
@@ -240,9 +262,21 @@ fn recent_row(ui: &mut egui::Ui, row: &RecentRow) -> RowAction {
     painter.rect_filled(avatar, 8.0, color);
     painter.text(avatar.center(), Align2::CENTER_CENTER, theme::initials(&row.title), FontId::proportional(14.0), Color32::WHITE);
     let x = avatar.right() + 12.0;
-    painter.text(egui::pos2(x, rect.top() + 9.0), Align2::LEFT_TOP, &row.title, FontId::proportional(15.0), if row.exists { Color32::WHITE } else { theme::TEXT_DIM });
+    painter.text(
+        egui::pos2(x, rect.top() + 9.0),
+        Align2::LEFT_TOP,
+        &row.title,
+        FontId::proportional(15.0),
+        if row.exists { Color32::WHITE } else { theme::TEXT_DIM },
+    );
     let sub = if row.exists { row.path.display().to_string() } else { format!("{}  —  {}", row.path.display(), t("welcome.missing")) };
-    painter.text(egui::pos2(x, rect.top() + 30.0), Align2::LEFT_TOP, sub, FontId::proportional(12.0), if row.exists { theme::TEXT_DIM } else { theme::ERROR });
+    painter.text(
+        egui::pos2(x, rect.top() + 30.0),
+        Align2::LEFT_TOP,
+        sub,
+        FontId::proportional(12.0),
+        if row.exists { theme::TEXT_DIM } else { theme::ERROR },
+    );
     if row.last_opened > 0 {
         painter.text(
             egui::pos2(rect.right() - 44.0, rect.center().y),
@@ -291,7 +325,10 @@ fn ago(unix: u64) -> String {
 fn unique_name(settings: &Settings) -> String {
     let base = t("welcome.default_name");
     let dir = settings.projects_dir();
-    (1..100).map(|i| if i == 1 { base.to_string() } else { format!("{base} {i}") }).find(|n| !dir.join(n).exists()).unwrap_or_else(|| base.into())
+    (1..100)
+        .map(|i| if i == 1 { base.to_string() } else { format!("{base} {i}") })
+        .find(|n| !dir.join(n).exists())
+        .unwrap_or_else(|| base.into())
 }
 
 /// Language combo box. Returns true when changed.
@@ -301,12 +338,15 @@ pub fn language_picker(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
         None => format!("{} ({})", t("settings.system"), Lang::system().native_name()),
         Some(l) => l.native_name().to_string(),
     };
-    egui::ComboBox::from_id_salt("language").selected_text(format!("🌐 {current}")).width(ui.available_width().min(200.0)).show_ui(ui, |ui| {
-        ui.selectable_value(&mut settings.language, None, t("settings.system"));
-        for l in Lang::ALL {
-            ui.selectable_value(&mut settings.language, Some(l), l.native_name());
-        }
-    });
+    egui::ComboBox::from_id_salt("language").selected_text(format!("🌐 {current}")).width(ui.available_width().min(200.0)).show_ui(
+        ui,
+        |ui| {
+            ui.selectable_value(&mut settings.language, None, t("settings.system"));
+            for l in Lang::ALL {
+                ui.selectable_value(&mut settings.language, Some(l), l.native_name());
+            }
+        },
+    );
     before != settings.language
 }
 
@@ -337,9 +377,10 @@ pub fn settings_page(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
                     settings.spark_path = (!text.trim().is_empty()).then(|| PathBuf::from(text.trim()));
                 }
                 if ui.button(t("common.browse")).clicked()
-                    && let Some(p) = rfd::FileDialog::new().pick_file() {
-                        settings.spark_path = Some(p);
-                    }
+                    && let Some(p) = rfd::FileDialog::new().pick_file()
+                {
+                    settings.spark_path = Some(p);
+                }
             });
             let found = process::find_spark(settings.spark_path.as_deref());
             match found {

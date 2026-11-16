@@ -207,12 +207,8 @@ pub fn badge(world: &mut World, p: &BadgeParams) -> BadgeState {
     let w = p.width.max(1.0) * unit;
     let h = w * size.1 as f32 / size.0 as f32;
     let margin = p.margin * unit;
-    let pos = p.pos.unwrap_or_else(|| {
-        Vec2::new(
-            margin + (screen.x - 2.0 * margin) * p.align.x,
-            margin + (screen.y - 2.0 * margin) * p.align.y,
-        )
-    });
+    let pos =
+        p.pos.unwrap_or_else(|| Vec2::new(margin + (screen.x - 2.0 * margin) * p.align.x, margin + (screen.y - 2.0 * margin) * p.align.y));
     let top_left = pos - Vec2::new(w, h) * Vec2::new(p.align.x, p.align.y);
     let mouse = world.canvas.to_virtual(world.input.mouse_position);
     let pad = 6.0 * unit;

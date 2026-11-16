@@ -1,6 +1,6 @@
 //! Script globals for the scheduler and events: after/every/task/wait*/on/once/emit...
 
-use mlua::{Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value, MetaMethod};
+use mlua::{Function, Lua, MetaMethod, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value};
 use spark_core::{ListenerId, ObjectId, TimerId};
 
 use crate::convert::*;
@@ -170,9 +170,9 @@ pub(crate) fn add_object_methods<M: UserDataMethods<Obj>>(m: &mut M) {
         Ok(LuaTimer(id))
     });
     m.add_method("every", |lua, this, (Num64(s), f, times): (Num64, Function, Option<u32>)| {
-            if s <= 0.0 {
-                return Err(rt("obj:every: interval must be > 0 seconds (for every frame use update())"));
-            }
+        if s <= 0.0 {
+            return Err(rt("obj:every: interval must be > 0 seconds (for every frame use update())"));
+        }
         let id = runtime(lua)?.borrow_mut().sched.every(s, times, Job::Call { f, owner: Some(this.0) });
         Ok(LuaTimer(id))
     });

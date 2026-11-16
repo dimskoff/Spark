@@ -140,7 +140,7 @@ test.hold("d", 1)
 test.expect(camera.position.x > start_x + 3, "the camera should follow the player to the right")
 "##;
 
-const GITIGNORE: &str ="dist/\nscreenshots/\nerror.log\n";
+const GITIGNORE: &str = "dist/\nscreenshots/\nerror.log\n";
 
 const AGENTS: &str = r##"# AGENTS.md - working on this game
 
@@ -380,11 +380,7 @@ pub fn write_template_kind(dir: &Path, title: &str, kind: Template) -> Result<()
             ("tests/smoke.luau", TEST_2D.into()),
             (".gitignore", GITIGNORE.into()),
         ],
-        Template::Empty => vec![
-            ("main.luau", MAIN_EMPTY.replace("{TITLE}", &t)),
-            ("game.toml", toml),
-            (".gitignore", GITIGNORE.into()),
-        ],
+        Template::Empty => vec![("main.luau", MAIN_EMPTY.replace("{TITLE}", &t)), ("game.toml", toml), (".gitignore", GITIGNORE.into())],
     };
     for (rel, text) in files {
         let p = dir.join(rel);

@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use mlua::{Lua, Value};
 use spark_core::{Rect, Vec2};
 
-use crate::convert::{Num, ONum, rt, to_color, with, LuaResult};
+use crate::convert::{LuaResult, Num, ONum, rt, to_color, with};
 
 /// Widget ids: any string or integer that stays the same between frames.
 fn widget_id(v: &Value, what: &str) -> LuaResult<u64> {
@@ -23,7 +23,12 @@ fn widget_id(v: &Value, what: &str) -> LuaResult<u64> {
         Value::String(s) => s.as_bytes().hash(&mut h),
         Value::Integer(i) => i.hash(&mut h),
         Value::Number(n) if n.fract() == 0.0 => (*n as i64).hash(&mut h),
-        _ => return Err(rt(format!("{what}: the first argument is the widget id (a string or an integer that stays the same every frame), got {}", v.type_name()))),
+        _ => {
+            return Err(rt(format!(
+                "{what}: the first argument is the widget id (a string or an integer that stays the same every frame), got {}",
+                v.type_name()
+            )));
+        }
     }
     Ok(h.finish())
 }
@@ -79,7 +84,17 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
     ui.set(
         "slider",
         lua.create_function(
-            |lua, (id, Num(x), Num(y), Num(width), Num(height), Num(value), ONum(min), ONum(max)): (Value, Num, Num, Num, Num, Num, ONum, ONum)| {
+            |lua,
+             (id, Num(x), Num(y), Num(width), Num(height), Num(value), ONum(min), ONum(max)): (
+                Value,
+                Num,
+                Num,
+                Num,
+                Num,
+                Num,
+                ONum,
+                ONum,
+            )| {
                 let id = widget_id(&id, "ui.slider")?;
                 let (min, max) = (min.unwrap_or(0.0), max.unwrap_or(1.0));
                 with(lua, |w| Ok(w.ui.slider(&mut w.canvas, id, Rect::new(x, y, width, height), value, min, max).unwrap_or(value)))

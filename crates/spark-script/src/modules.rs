@@ -110,9 +110,8 @@ fn require(lua: &Lua, spec: String) -> LuaResult<Value> {
     let modules = lua.app_data_ref::<SharedModules>().ok_or_else(|| rt("require is not available here"))?.clone();
     let root = modules.borrow().root.clone();
     let rel = resolve_spec(&from, &spec).map_err(rt)?;
-    let rel = find_file(&root, &rel).map_err(|tried| {
-        rt(format!("require(\"{spec}\") from {from}: no such module (looked for {})", tried.join(", ")))
-    })?;
+    let rel = find_file(&root, &rel)
+        .map_err(|tried| rt(format!("require(\"{spec}\") from {from}: no such module (looked for {})", tried.join(", "))))?;
     let cache: Table = lua.named_registry_value(CACHE)?;
     let cached: Value = cache.raw_get(rel.as_str())?;
     if !cached.is_nil() {

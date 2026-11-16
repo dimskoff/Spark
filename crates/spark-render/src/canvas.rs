@@ -1,8 +1,6 @@
 //! The 2D canvas: vertex upload, pipelines and layer drawing.
 
-use spark_core::{
-    Batch, Canvas, CanvasTexture, Layer, Vertex2D, World,
-};
+use spark_core::{Batch, Canvas, CanvasTexture, Layer, Vertex2D, World};
 
 use crate::assets::*;
 use crate::consts::*;
@@ -47,17 +45,21 @@ impl Renderer {
                             aspect: wgpu::TextureAspect::All,
                         },
                         &atlas.pixels,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(atlas.width * 4),
-                            rows_per_image: Some(atlas.height),
-                        },
+                        wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(atlas.width * 4), rows_per_image: Some(atlas.height) },
                         extent((atlas.width, atlas.height)),
                     );
                 }
                 _ => {
-                    self.glyphs =
-                        Some(upload_texture(&self.device, &self.queue, &self.texture_layout, &self.texture_samplers, &self.flat_normal, atlas, GLYPH_FORMAT, false));
+                    self.glyphs = Some(upload_texture(
+                        &self.device,
+                        &self.queue,
+                        &self.texture_layout,
+                        &self.texture_samplers,
+                        &self.flat_normal,
+                        atlas,
+                        GLYPH_FORMAT,
+                        false,
+                    ));
                 }
             }
             self.glyph_version = fonts.version();

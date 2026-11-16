@@ -245,7 +245,10 @@ fn install_screen(lua: &Lua, g: &Table) -> LuaResult<()> {
                 if h <= 0.0 {
                     return Err(rt("screen.height must be > 0 (virtual pixels, default 720)"));
                 }
-                with(lua, |w| Ok(w.canvas.virtual_height = h))
+                with(lua, |w| {
+                    let _: () = w.canvas.virtual_height = h;
+                    Ok(())
+                })
             }
             "width" => Err(rt("screen.width can't be set: it follows the window aspect ratio (set screen.height instead)")),
             _ => Err(rt(format!("screen.{k} can't be set (only screen.height)"))),
@@ -291,7 +294,10 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "line",
         lua.create_function(|lua, (Num(x1), Num(y1), Num(x2), Num(y2), color, ONum(width)): (Num, Num, Num, Num, Value, ONum)| {
             let c = color_or_white(&color, "draw.line color")?;
-            with(lua, |w| Ok(w.canvas.line(Vec2::new(x1, y1), Vec2::new(x2, y2), width.unwrap_or(2.0), c)))
+            with(lua, |w| {
+                let _: () = w.canvas.line(Vec2::new(x1, y1), Vec2::new(x2, y2), width.unwrap_or(2.0), c);
+                Ok(())
+            })
         })?,
     )?;
     draw.set(
@@ -383,20 +389,47 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
             })
         })?,
     )?;
-    draw.set("push", lua.create_function(|lua, ()| with(lua, |w| Ok(w.canvas.push())))?)?;
     draw.set(
-        "pop",
+        "push",
         lua.create_function(|lua, ()| {
             with(lua, |w| {
-                if w.canvas.pop() { Ok(()) } else { Err(rt("draw.pop() without a matching draw.push()")) }
+                let _: () = w.canvas.push();
+                Ok(())
             })
         })?,
     )?;
-    draw.set("translate", lua.create_function(|lua, (Num(x), Num(y)): (Num, Num)| with(lua, |w| Ok(w.canvas.translate(Vec2::new(x, y)))))?)?;
-    draw.set("rotate", lua.create_function(|lua, Num(a): Num| with(lua, |w| Ok(w.canvas.rotate(a))))?)?;
+    draw.set(
+        "pop",
+        lua.create_function(|lua, ()| {
+            with(lua, |w| if w.canvas.pop() { Ok(()) } else { Err(rt("draw.pop() without a matching draw.push()")) })
+        })?,
+    )?;
+    draw.set(
+        "translate",
+        lua.create_function(|lua, (Num(x), Num(y)): (Num, Num)| {
+            with(lua, |w| {
+                let _: () = w.canvas.translate(Vec2::new(x, y));
+                Ok(())
+            })
+        })?,
+    )?;
+    draw.set(
+        "rotate",
+        lua.create_function(|lua, Num(a): Num| {
+            with(lua, |w| {
+                let _: () = w.canvas.rotate(a);
+                Ok(())
+            })
+        })?,
+    )?;
     draw.set(
         "scale",
-        lua.create_function(|lua, (Num(sx), ONum(sy)): (Num, ONum)| with(lua, |w| Ok(w.canvas.scale_by(Vec2::new(sx, sy.unwrap_or(sx))))))?,
+        lua.create_function(|lua, (Num(sx), ONum(sy)): (Num, ONum)| {
+            with(lua, |w| {
+                let _: () = w.canvas.scale_by(Vec2::new(sx, sy.unwrap_or(sx)));
+                Ok(())
+            })
+        })?,
     )?;
     draw.set(
         "layer",
@@ -415,7 +448,10 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         "filter",
         lua.create_function(|lua, v: Value| {
             let f = to_filter(&v, "draw.filter")?;
-            with(lua, |w| Ok(w.canvas.nearest = f == spark_core::TextureFilter::Nearest))
+            with(lua, |w| {
+                let _: () = w.canvas.nearest = f == spark_core::TextureFilter::Nearest;
+                Ok(())
+            })
         })?,
     )?;
     draw.set(

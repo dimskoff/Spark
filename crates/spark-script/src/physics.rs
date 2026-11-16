@@ -72,7 +72,9 @@ fn body_from_table(t: &Table, what: &str) -> LuaResult<Body> {
 fn body_mut<R>(lua: &Lua, id: ObjectId, what: &str, f: impl FnOnce(&mut Body) -> R) -> LuaResult<R> {
     with(lua, |w| {
         let o = w.scene.get_mut(id).ok_or_else(dead)?;
-        let b = o.body.as_mut().ok_or_else(|| rt(format!("{what}: object has no body (add one with obj:add_body() or spawn(..., {{ body = \"dynamic\" }}))")))?;
+        let b = o.body.as_mut().ok_or_else(|| {
+            rt(format!("{what}: object has no body (add one with obj:add_body() or spawn(..., {{ body = \"dynamic\" }}))"))
+        })?;
         Ok(f(b))
     })
 }
@@ -152,10 +154,18 @@ impl UserData for PhysicsRef {
         f.add_field_method_get("gravity", |lua, _| with(lua, |w| Ok(vv(w.physics.gravity))));
         f.add_field_method_set("gravity", |lua, _, v: Value| {
             let g = to_vec3(&v, "physics.gravity")?;
-            with(lua, |w| Ok(w.physics.gravity = g))
+            with(lua, |w| {
+                let _: () = w.physics.gravity = g;
+                Ok(())
+            })
         });
         f.add_field_method_get("enabled", |lua, _| with(lua, |w| Ok(w.physics.enabled)));
-        f.add_field_method_set("enabled", |lua, _, v: bool| with(lua, |w| Ok(w.physics.enabled = v)));
+        f.add_field_method_set("enabled", |lua, _, v: bool| {
+            with(lua, |w| {
+                let _: () = w.physics.enabled = v;
+                Ok(())
+            })
+        });
     }
 }
 

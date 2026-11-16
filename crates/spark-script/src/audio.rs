@@ -16,21 +16,38 @@ impl UserData for LuaSound {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("stop", |lua, this, ONum(fade): ONum| with(lua, |w| Ok(w.audio.stop(this.0, fade.unwrap_or(0.0)))));
+        m.add_method("stop", |lua, this, ONum(fade): ONum| {
+            with(lua, |w| {
+                let _: () = w.audio.stop(this.0, fade.unwrap_or(0.0));
+                Ok(())
+            })
+        });
         m.add_method("set_volume", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
-            with(lua, |w| Ok(w.audio.set_volume(this.0, v, fade.unwrap_or(0.0))))
+            with(lua, |w| {
+                let _: () = w.audio.set_volume(this.0, v, fade.unwrap_or(0.0));
+                Ok(())
+            })
         });
         m.add_method("set_pitch", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
-            with(lua, |w| Ok(w.audio.set_pitch(this.0, v, fade.unwrap_or(0.0))))
+            with(lua, |w| {
+                let _: () = w.audio.set_pitch(this.0, v, fade.unwrap_or(0.0));
+                Ok(())
+            })
         });
-        m.add_method("set_pan", |lua, this, Num(v): Num| with(lua, |w| Ok(w.audio.set_pan(this.0, v))));
+        m.add_method("set_pan", |lua, this, Num(v): Num| {
+            with(lua, |w| {
+                let _: () = w.audio.set_pan(this.0, v);
+                Ok(())
+            })
+        });
         m.add_method("set_position", |lua, this, v: Value| {
             let src = to_source(&v, "sound:set_position")?;
             with(lua, |w| {
                 if !w.audio.is_spatial(this.0) {
                     return Err(rt("sound:set_position: only for 3D sounds (play with { at = position_or_object })"));
                 }
-                Ok(w.audio.set_source(this.0, src))
+                let _: () = w.audio.set_source(this.0, src);
+                Ok(())
             })
         });
         m.add_meta_method(MetaMethod::ToString, |_, this, ()| Ok(format!("Sound#{}", this.0.0)));
@@ -45,19 +62,45 @@ impl UserData for LuaBus {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("name", |_, this| Ok(this.1.clone()));
         f.add_field_method_get("volume", |lua, this| with(lua, |w| Ok(w.audio.bus_volume(this.0))));
-        f.add_field_method_set("volume", |lua, this, Num(v): Num| with(lua, |w| Ok(w.audio.set_bus_volume(this.0, v, 0.0))));
+        f.add_field_method_set("volume", |lua, this, Num(v): Num| {
+            with(lua, |w| {
+                let _: () = w.audio.set_bus_volume(this.0, v, 0.0);
+                Ok(())
+            })
+        });
         f.add_field_method_get("paused", |lua, this| with(lua, |w| Ok(w.audio.bus_paused(this.0))));
-        f.add_field_method_set("paused", |lua, this, v: bool| with(lua, |w| Ok(w.audio.pause_bus(this.0, v, 0.0))));
+        f.add_field_method_set("paused", |lua, this, v: bool| {
+            with(lua, |w| {
+                let _: () = w.audio.pause_bus(this.0, v, 0.0);
+                Ok(())
+            })
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("set_volume", |lua, this, (Num(v), ONum(fade)): (Num, ONum)| {
-            with(lua, |w| Ok(w.audio.set_bus_volume(this.0, v, fade.unwrap_or(0.0))))
+            with(lua, |w| {
+                let _: () = w.audio.set_bus_volume(this.0, v, fade.unwrap_or(0.0));
+                Ok(())
+            })
         });
-        m.add_method("stop", |lua, this, ONum(fade): ONum| with(lua, |w| Ok(w.audio.stop_bus(this.0, fade.unwrap_or(0.0)))));
-        m.add_method("pause", |lua, this, ONum(fade): ONum| with(lua, |w| Ok(w.audio.pause_bus(this.0, true, fade.unwrap_or(0.0)))));
+        m.add_method("stop", |lua, this, ONum(fade): ONum| {
+            with(lua, |w| {
+                let _: () = w.audio.stop_bus(this.0, fade.unwrap_or(0.0));
+                Ok(())
+            })
+        });
+        m.add_method("pause", |lua, this, ONum(fade): ONum| {
+            with(lua, |w| {
+                let _: () = w.audio.pause_bus(this.0, true, fade.unwrap_or(0.0));
+                Ok(())
+            })
+        });
         m.add_method("resume", |lua, this, ONum(fade): ONum| {
-            with(lua, |w| Ok(w.audio.pause_bus(this.0, false, fade.unwrap_or(0.0))))
+            with(lua, |w| {
+                let _: () = w.audio.pause_bus(this.0, false, fade.unwrap_or(0.0));
+                Ok(())
+            })
         });
         m.add_meta_method(MetaMethod::ToString, |_, this, ()| Ok(format!("Bus({})", this.1)));
         m.add_meta_method(MetaMethod::Eq, |_, this, other: mlua::UserDataRef<LuaBus>| Ok(this.0 == other.0));
@@ -134,7 +177,12 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     sound.set(
         "stop_all",
-        lua.create_function(|lua, ONum(fade): ONum| with(lua, |w| Ok(w.audio.stop_all(fade.unwrap_or(0.0)))))?,
+        lua.create_function(|lua, ONum(fade): ONum| {
+            with(lua, |w| {
+                let _: () = w.audio.stop_all(fade.unwrap_or(0.0));
+                Ok(())
+            })
+        })?,
     )?;
     sound.set("enabled", lua.create_function(|lua, ()| with(lua, |w| Ok(w.audio.has_backend())))?)?;
     sound.set(
@@ -158,7 +206,10 @@ pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, (_, k, v): (Table, String, Value)| match k.as_str() {
             "volume" => {
                 let v = to_num(&v, "sound.volume")?;
-                with(lua, |w| Ok(w.audio.set_master_volume(v)))
+                with(lua, |w| {
+                    let _: () = w.audio.set_master_volume(v);
+                    Ok(())
+                })
             }
             _ => Err(rt(format!("sound.{k} can't be set (only sound.volume)"))),
         })?,

@@ -148,7 +148,8 @@ pub(crate) fn install(lua: &Lua, shared: SharedTest) -> LuaResult<()> {
     t.set(
         "button",
         lua.create_function(|lua, (b, down): (String, bool)| {
-            let btn = MouseButton::from_name(&b).ok_or_else(|| rt(format!("test.button: unknown mouse button '{b}' (left, right, middle)")))?;
+            let btn =
+                MouseButton::from_name(&b).ok_or_else(|| rt(format!("test.button: unknown mouse button '{b}' (left, right, middle)")))?;
             push(lua, TestInput::Button(btn, down))
         })?,
     )?;
@@ -250,21 +251,35 @@ fn flatten(out: &mut String, prefix: &str, v: &Value, depth: usize) -> LuaResult
     match v {
         Value::Table(t) => flatten_table(out, prefix, t, depth),
         Value::Nil => Ok(()),
-        Value::Boolean(b) => Ok(writeln!(out, "{prefix} = {b}").unwrap_or(())),
-        Value::Integer(i) => Ok(writeln!(out, "{prefix} = {i}").unwrap_or(())),
+        Value::Boolean(b) => {
+            let _: () = writeln!(out, "{prefix} = {b}").unwrap_or(());
+            Ok(())
+        }
+        Value::Integer(i) => {
+            let _: () = writeln!(out, "{prefix} = {i}").unwrap_or(());
+            Ok(())
+        }
         Value::Number(n) => {
             let s = if n.fract() == 0.0 && n.abs() < 1e15 { format!("{}", *n as i64) } else { num(*n as f32) };
-            Ok(writeln!(out, "{prefix} = {s}").unwrap_or(()))
+            let _: () = writeln!(out, "{prefix} = {s}").unwrap_or(());
+            Ok(())
         }
-        Value::String(s) => Ok(writeln!(out, "{prefix} = {:?}", s.to_string_lossy()).unwrap_or(())),
-        Value::Vector(x) => Ok(writeln!(out, "{prefix} = {}", vec3(Vec3::new(x.x(), x.y(), x.z()))).unwrap_or(())),
+        Value::String(s) => {
+            let _: () = writeln!(out, "{prefix} = {:?}", s.to_string_lossy()).unwrap_or(());
+            Ok(())
+        }
+        Value::Vector(x) => {
+            let _: () = writeln!(out, "{prefix} = {}", vec3(Vec3::new(x.x(), x.y(), x.z()))).unwrap_or(());
+            Ok(())
+        }
         other => {
             // Objects and other userdata: their tostring() (e.g. the object name).
             let s = match other {
                 Value::UserData(_) => other.to_string().unwrap_or_else(|_| "<userdata>".into()),
                 _ => format!("<{}>", other.type_name()),
             };
-            Ok(writeln!(out, "{prefix} = {s}").unwrap_or(()))
+            let _: () = writeln!(out, "{prefix} = {s}").unwrap_or(());
+            Ok(())
         }
     }
 }
@@ -419,7 +434,11 @@ mod tests {
             ]
         );
         assert!(diff(a, a).is_empty());
-        let c = Change::Changed("obj \"d\"".into(), "pos (0.00, 1.00, 0.00) rot (0.00, 0.00, 0.00) body dynamic".into(), "pos (0.00, 3.00, 0.00) rot (0.00, 0.00, 0.00) body static".into());
+        let c = Change::Changed(
+            "obj \"d\"".into(),
+            "pos (0.00, 1.00, 0.00) rot (0.00, 0.00, 0.00) body dynamic".into(),
+            "pos (0.00, 3.00, 0.00) rot (0.00, 0.00, 0.00) body static".into(),
+        );
         assert_eq!(c.to_string(), "~ obj \"d\": pos (0.00, 1.00, 0.00) -> (0.00, 3.00, 0.00), body dynamic -> static");
         let c = Change::Changed("state.x".into(), "1".into(), "2".into());
         assert_eq!(c.to_string(), "~ state.x: 1  ->  2");

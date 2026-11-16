@@ -55,12 +55,12 @@ fn keys(name: &str) -> LuaResult<Vec<Key>> {
 
 fn button(name: Option<String>) -> LuaResult<MouseButton> {
     let name = name.unwrap_or_else(|| "left".into());
-    MouseButton::from_name(&name).ok_or_else(|| rt(format!("unknown mouse button '{name}' (use \"left\", \"right\", \"middle\", \"back\", \"forward\")")))
+    MouseButton::from_name(&name)
+        .ok_or_else(|| rt(format!("unknown mouse button '{name}' (use \"left\", \"right\", \"middle\", \"back\", \"forward\")")))
 }
 
 fn pad_button(name: &str) -> LuaResult<PadButton> {
-    PadButton::from_name(name)
-        .ok_or_else(|| rt(format!("unknown gamepad button '{name}' (buttons: {})", PadButton::NAMES.trim_end())))
+    PadButton::from_name(name).ok_or_else(|| rt(format!("unknown gamepad button '{name}' (buttons: {})", PadButton::NAMES.trim_end())))
 }
 
 fn pad_axis(name: &str) -> LuaResult<PadAxis> {
@@ -82,8 +82,7 @@ fn axis_value(w: &World, a: PadAxis, n: Option<usize>) -> f32 {
 
 fn install_gamepad(lua: &Lua, input: &Table) -> LuaResult<()> {
     type State = fn(&Gamepad, PadButton) -> bool;
-    let states: [(&str, State); 3] =
-        [("pad_down", Gamepad::down), ("pad_pressed", Gamepad::pressed), ("pad_released", Gamepad::released)];
+    let states: [(&str, State); 3] = [("pad_down", Gamepad::down), ("pad_pressed", Gamepad::pressed), ("pad_released", Gamepad::released)];
     for (name, f) in states {
         input.set(
             name,
@@ -164,10 +163,7 @@ fn install_math(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set("normalize", lua.create_function(|_, v: Value| Ok(vv(to_vec3(&v, "normalize")?.normalize_or_zero())))?)?;
     g.set("dot", lua.create_function(|_, (a, b): (Value, Value)| Ok(to_vec3(&a, "dot")?.dot(to_vec3(&b, "dot")?)))?)?;
     g.set("cross", lua.create_function(|_, (a, b): (Value, Value)| Ok(vv(to_vec3(&a, "cross")?.cross(to_vec3(&b, "cross")?))))?)?;
-    g.set(
-        "distance",
-        lua.create_function(|_, (a, b): (Value, Value)| Ok(to_vec3(&a, "distance")?.distance(to_vec3(&b, "distance")?)))?,
-    )?;
+    g.set("distance", lua.create_function(|_, (a, b): (Value, Value)| Ok(to_vec3(&a, "distance")?.distance(to_vec3(&b, "distance")?)))?)?;
     g.set("lerp", lua.create_function(|lua, (a, b, Num(t)): (Value, Value, Num)| lerp_values(lua, &a, &b, t))?)?;
     Ok(())
 }
@@ -239,58 +235,61 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     mesh.set(
         "custom",
-        lua.create_function(
-            |lua, (positions, indices, uvs, normals): CustomMeshArgs| {
-                let n = positions.len();
-                if n == 0 || indices.len() < 3 || indices.len() % 3 != 0 {
-                    return Err(rt(format!("Mesh.custom: need positions and 3*k indices, got {} / {}", n, indices.len())));
+        lua.create_function(|lua, (positions, indices, uvs, normals): CustomMeshArgs| {
+            let n = positions.len();
+            if n == 0 || indices.len() < 3 || indices.len() % 3 != 0 {
+                return Err(rt(format!("Mesh.custom: need positions and 3*k indices, got {} / {}", n, indices.len())));
+            }
+            let pos = positions.iter().map(|p| to_vec3(p, "Mesh.custom")).collect::<LuaResult<Vec<_>>>()?;
+            let mut idx = Vec::with_capacity(indices.len());
+            for i in indices {
+                if i == 0 || i as usize > n {
+                    return Err(rt(format!("Mesh.custom: index {} out of range 1..{}", i, n)));
                 }
-                let pos = positions.iter().map(|p| to_vec3(p, "Mesh.custom")).collect::<LuaResult<Vec<_>>>()?;
-                let mut idx = Vec::with_capacity(indices.len());
-                for i in indices {
-                    if i == 0 || i as usize > n {
-                        return Err(rt(format!("Mesh.custom: index {} out of range 1..{}", i, n)));
+                idx.push(i - 1);
+            }
+            if let Some(u) = &uvs {
+                if u.len() != n * 2 {
+                    return Err(rt(format!("Mesh.custom: uvs must have {} numbers, got {}", n * 2, u.len())));
+                }
+            }
+            let nrm: Vec<Vec3> = match normals {
+                Some(ns) => {
+                    if ns.len() != n {
+                        return Err(rt(format!("Mesh.custom: normals must have {} entries, got {}", n, ns.len())));
                     }
-                    idx.push(i - 1);
+                    ns.iter().map(|p| to_vec3(p, "Mesh.custom").map(|v| v.normalize_or(Vec3::Y))).collect::<LuaResult<Vec<_>>>()?
                 }
-                if let Some(u) = &uvs {
-                    if u.len() != n * 2 {
-                        return Err(rt(format!("Mesh.custom: uvs must have {} numbers, got {}", n * 2, u.len())));
-                    }
-                }
-                let nrm: Vec<Vec3> = match normals {
-                    Some(ns) => {
-                        if ns.len() != n {
-                            return Err(rt(format!("Mesh.custom: normals must have {} entries, got {}", n, ns.len())));
+                None => {
+                    let mut acc = vec![Vec3::ZERO; n];
+                    for t in idx.chunks_exact(3) {
+                        let (a, b, c) = (pos[t[0] as usize], pos[t[1] as usize], pos[t[2] as usize]);
+                        let f = (b - a).cross(c - a);
+                        for &k in t {
+                            acc[k as usize] += f;
                         }
-                        ns.iter().map(|p| to_vec3(p, "Mesh.custom").map(|v| v.normalize_or(Vec3::Y))).collect::<LuaResult<Vec<_>>>()?
                     }
-                    None => {
-                        let mut acc = vec![Vec3::ZERO; n];
-                        for t in idx.chunks_exact(3) {
-                            let (a, b, c) = (pos[t[0] as usize], pos[t[1] as usize], pos[t[2] as usize]);
-                            let f = (b - a).cross(c - a);
-                            for &k in t {
-                                acc[k as usize] += f;
-                            }
-                        }
-                        acc.into_iter().map(|v| v.normalize_or(Vec3::Y)).collect()
-                    }
-                };
-                let verts = (0..n)
-                    .map(|i| {
-                        let uv = uvs.as_ref().map(|u| [u[i * 2], u[i * 2 + 1]]).unwrap_or([0.0, 0.0]);
-                        Vertex::new(pos[i], nrm[i], uv)
-                    })
-                    .collect();
-                with(lua, |w| Ok(LuaMesh(w.add_mesh(MeshData::new(verts, idx)))))
-            },
-        )?,
+                    acc.into_iter().map(|v| v.normalize_or(Vec3::Y)).collect()
+                }
+            };
+            let verts = (0..n)
+                .map(|i| {
+                    let uv = uvs.as_ref().map(|u| [u[i * 2], u[i * 2 + 1]]).unwrap_or([0.0, 0.0]);
+                    Vertex::new(pos[i], nrm[i], uv)
+                })
+                .collect();
+            with(lua, |w| Ok(LuaMesh(w.add_mesh(MeshData::new(verts, idx)))))
+        })?,
     )?;
     g.set("Mesh", mesh)?;
 
     let texture = lua.create_table()?;
-    texture.set("load", lua.create_function(|lua, path: String| with(lua, |w| crate::untimed(|| w.assets.load_texture(&path)).map(LuaTexture).map_err(rt)))?)?;
+    texture.set(
+        "load",
+        lua.create_function(|lua, path: String| {
+            with(lua, |w| crate::untimed(|| w.assets.load_texture(&path)).map(LuaTexture).map_err(rt))
+        })?,
+    )?;
     texture.set(
         "checker",
         lua.create_function(|lua, (a, b, cells, size): (Value, Value, Option<u32>, Option<u32>)| {
@@ -348,11 +347,16 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
 
     let color = lua.create_table()?;
     color.set("rgb", lua.create_function(|_, (Num(r), Num(g), Num(b)): (Num, Num, Num)| Ok(LuaColor(Color::rgb(r, g, b))))?)?;
-    color.set("rgba", lua.create_function(|_, (Num(r), Num(g), Num(b), Num(a)): (Num, Num, Num, Num)| Ok(LuaColor(Color::rgba(r, g, b, a))))?)?;
+    color.set(
+        "rgba",
+        lua.create_function(|_, (Num(r), Num(g), Num(b), Num(a)): (Num, Num, Num, Num)| Ok(LuaColor(Color::rgba(r, g, b, a))))?,
+    )?;
     color.set("hex", lua.create_function(|_, v: Value| Ok(LuaColor(to_color(&v, "Color.hex")?)))?)?;
     color.set(
         "lerp",
-        lua.create_function(|_, (a, b, Num(t)): (Value, Value, Num)| Ok(LuaColor(to_color(&a, "Color.lerp")?.lerp(to_color(&b, "Color.lerp")?, t))))?,
+        lua.create_function(|_, (a, b, Num(t)): (Value, Value, Num)| {
+            Ok(LuaColor(to_color(&a, "Color.lerp")?.lerp(to_color(&b, "Color.lerp")?, t)))
+        })?,
     )?;
     for (name, c) in Color::NAMED {
         color.set(name.to_ascii_uppercase(), LuaColor(*c))?;
@@ -430,14 +434,20 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         "ambient",
         lua.create_function(|lua, c: Value| {
             let c = to_color(&c, "ambient")?;
-            with(lua, |w| Ok(w.scene.ambient = c))
+            with(lua, |w| {
+                let _: () = w.scene.ambient = c;
+                Ok(())
+            })
         })?,
     )?;
     g.set(
         "background",
         lua.create_function(|lua, c: Value| {
             let c = to_color(&c, "background")?;
-            with(lua, |w| Ok(w.scene.background = c))
+            with(lua, |w| {
+                let _: () = w.scene.background = c;
+                Ok(())
+            })
         })?,
     )?;
     g.set(
@@ -447,7 +457,10 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
                 Value::Nil | Value::Boolean(false) => None,
                 _ => Some(Fog { color: to_color(&c, "fog")?, near: near.unwrap_or(10.0), far: far.unwrap_or(60.0) }),
             };
-            with(lua, |w| Ok(w.scene.fog = fog))
+            with(lua, |w| {
+                let _: () = w.scene.fog = fog;
+                Ok(())
+            })
         })?,
     )?;
     g.set(
@@ -455,33 +468,97 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         lua.create_function(|lua, v: Value| {
             with(lua, |w| {
                 let sky = to_sky(w, &v)?;
-                Ok(w.scene.sky = sky)
+                let _: () = w.scene.sky = sky;
+                Ok(())
             })
         })?,
     )?;
     g.set("dump_scene", lua.create_function(|lua, ()| with(lua, |w| Ok(w.scene.dump())))?)?;
-    g.set("quit", lua.create_function(|lua, ()| with(lua, |w| Ok(w.quit())))?)?;
-    g.set("restart", lua.create_function(|lua, ()| with(lua, |w| Ok(w.request_restart())))?)?;
+    g.set(
+        "quit",
+        lua.create_function(|lua, ()| {
+            with(lua, |w| {
+                let _: () = w.quit();
+                Ok(())
+            })
+        })?,
+    )?;
+    g.set(
+        "restart",
+        lua.create_function(|lua, ()| {
+            with(lua, |w| {
+                let _: () = w.request_restart();
+                Ok(())
+            })
+        })?,
+    )?;
     g.set("time", lua.create_userdata(TimeRef)?)?;
     Ok(())
 }
 
 fn install_input(lua: &Lua, g: &Table) -> LuaResult<()> {
     let input = lua.create_table()?;
-    input.set("down", lua.create_function(|lua, n: String| { let ks = keys(&n)?; with(lua, |w| Ok(ks.iter().any(|k| w.input.down(*k)))) })?)?;
-    input.set("pressed", lua.create_function(|lua, n: String| { let ks = keys(&n)?; with(lua, |w| Ok(ks.iter().any(|k| w.input.pressed(*k)))) })?)?;
-    input.set("released", lua.create_function(|lua, n: String| { let ks = keys(&n)?; with(lua, |w| Ok(ks.iter().any(|k| w.input.released(*k)))) })?)?;
-    input.set("repeated", lua.create_function(|lua, n: String| { let ks = keys(&n)?; with(lua, |w| Ok(ks.iter().any(|k| w.input.repeated(*k)))) })?)?;
+    input.set(
+        "down",
+        lua.create_function(|lua, n: String| {
+            let ks = keys(&n)?;
+            with(lua, |w| Ok(ks.iter().any(|k| w.input.down(*k))))
+        })?,
+    )?;
+    input.set(
+        "pressed",
+        lua.create_function(|lua, n: String| {
+            let ks = keys(&n)?;
+            with(lua, |w| Ok(ks.iter().any(|k| w.input.pressed(*k))))
+        })?,
+    )?;
+    input.set(
+        "released",
+        lua.create_function(|lua, n: String| {
+            let ks = keys(&n)?;
+            with(lua, |w| Ok(ks.iter().any(|k| w.input.released(*k))))
+        })?,
+    )?;
+    input.set(
+        "repeated",
+        lua.create_function(|lua, n: String| {
+            let ks = keys(&n)?;
+            with(lua, |w| Ok(ks.iter().any(|k| w.input.repeated(*k))))
+        })?,
+    )?;
     input.set("text", lua.create_function(|lua, ()| with(lua, |w| Ok(w.input.text.clone())))?)?;
-    input.set("mouse_down", lua.create_function(|lua, b: Option<String>| { let b = button(b)?; with(lua, |w| Ok(w.input.mouse_down(b))) })?)?;
-    input.set("mouse_pressed", lua.create_function(|lua, b: Option<String>| { let b = button(b)?; with(lua, |w| Ok(w.input.mouse_pressed(b))) })?)?;
-    input.set("mouse_released", lua.create_function(|lua, b: Option<String>| { let b = button(b)?; with(lua, |w| Ok(w.input.mouse_released(b))) })?)?;
+    input.set(
+        "mouse_down",
+        lua.create_function(|lua, b: Option<String>| {
+            let b = button(b)?;
+            with(lua, |w| Ok(w.input.mouse_down(b)))
+        })?,
+    )?;
+    input.set(
+        "mouse_pressed",
+        lua.create_function(|lua, b: Option<String>| {
+            let b = button(b)?;
+            with(lua, |w| Ok(w.input.mouse_pressed(b)))
+        })?,
+    )?;
+    input.set(
+        "mouse_released",
+        lua.create_function(|lua, b: Option<String>| {
+            let b = button(b)?;
+            with(lua, |w| Ok(w.input.mouse_released(b)))
+        })?,
+    )?;
     input.set("mouse", lua.create_function(|lua, ()| with(lua, |w| Ok((w.input.mouse_position.x, w.input.mouse_position.y))))?)?;
     input.set("mouse_delta", lua.create_function(|lua, ()| with(lua, |w| Ok((w.input.mouse_delta.x, w.input.mouse_delta.y))))?)?;
     input.set("wheel", lua.create_function(|lua, ()| with(lua, |w| Ok(w.input.wheel)))?)?;
     input.set(
         "lock_mouse",
-        lua.create_function(|lua, on: Option<bool>| with(lua, |w| Ok(w.input.lock_mouse = on.unwrap_or(true))))?,
+        lua.create_function(|lua, on: Option<bool>| {
+            with(lua, |w| {
+                let _: () = w.input.lock_mouse = on.unwrap_or(true);
+                Ok(())
+            })
+        })?,
     )?;
     input.set("mouse_locked", lua.create_function(|lua, ()| with(lua, |w| Ok(w.input.lock_mouse)))?)?;
     install_gamepad(lua, &input)?;
@@ -504,9 +581,19 @@ struct LuaWindow;
 impl mlua::UserData for LuaWindow {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("fullscreen", |lua, _| with(lua, |w| Ok(w.window.fullscreen)));
-        f.add_field_method_set("fullscreen", |lua, _, on: bool| with(lua, |w| Ok(w.window.fullscreen = on)));
+        f.add_field_method_set("fullscreen", |lua, _, on: bool| {
+            with(lua, |w| {
+                let _: () = w.window.fullscreen = on;
+                Ok(())
+            })
+        });
         f.add_field_method_get("title", |lua, _| with(lua, |w| Ok(w.window.title.clone())));
-        f.add_field_method_set("title", |lua, _, t: Option<String>| with(lua, |w| Ok(w.window.title = t)));
+        f.add_field_method_set("title", |lua, _, t: Option<String>| {
+            with(lua, |w| {
+                let _: () = w.window.title = t;
+                Ok(())
+            })
+        });
         f.add_field_method_get("width", |lua, _| with(lua, |w| Ok(w.canvas.output_size().0)));
         f.add_field_method_get("height", |lua, _| with(lua, |w| Ok(w.canvas.output_size().1)));
     }

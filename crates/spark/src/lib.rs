@@ -35,8 +35,8 @@ pub use spark_window as window;
 pub mod prelude {
     pub use crate::App;
     pub use spark_core::{
-        Aabb, Assets, Body, BodyKind, Camera, Collision, PlayParams, RayHit, Shape, SoundId, Color, EulerRot, Fog, Game, ImageData, Input, Key, Mat4, Material, MeshData, MeshId,
-        MouseButton, Object, ObjectId, Quat, PassSize, PostPass, RenderSettings, Scene, ShaderData, ShaderId, ShaderKind, Sun, TextureFilter, TextureId, Time, VERSION, Vec2,
-        Vec3, Vec4, World, vec2, vec3, vec4,
+        Aabb, Assets, Body, BodyKind, Camera, Collision, Color, EulerRot, Fog, Game, ImageData, Input, Key, Mat4, Material, MeshData,
+        MeshId, MouseButton, Object, ObjectId, PassSize, PlayParams, PostPass, Quat, RayHit, RenderSettings, Scene, ShaderData, ShaderId,
+        ShaderKind, Shape, SoundId, Sun, TextureFilter, TextureId, Time, VERSION, Vec2, Vec3, Vec4, World, vec2, vec3, vec4,
     };
 }
