@@ -202,11 +202,15 @@ pub fn diff(mut args: Vec<String>) -> i32 {
     if same { EXIT_OK } else { EXIT_FAILED }
 }
 
-/// `spark golden path/to/game [--update] [--frames N] [--size WxH] [--tolerance T]`: compares a headless render with
-/// `tests/golden.png`; on a mismatch writes `screenshots/golden-current.png` and `screenshots/golden-diff.png`.
+/// `spark golden path/to/game [--golden FILE] [--update] [--frames N] [--size WxH] [--tolerance T]`: compares a headless render
+/// with `tests/golden.png` (or FILE); on a mismatch writes `screenshots/golden-current.png` and `screenshots/golden-diff.png`.
 pub fn golden(mut args: Vec<String>) -> i32 {
     let json = take_flag(&mut args, "--json");
     let update = take_flag(&mut args, "--update");
+    let golden_file = match take_value(&mut args, "--golden") {
+        Ok(v) => v,
+        Err(e) => return fail("golden", json, EXIT_USAGE, &e),
+    };
     let opts = (|| -> Result<(u32, String, f64, f64), String> {
         let frames = take_value(&mut args, "--frames")?
             .map(|v| v.parse::<u32>().map_err(|_| "--frames: expected a whole number".to_string()))
@@ -222,7 +226,7 @@ pub fn golden(mut args: Vec<String>) -> i32 {
         Err(e) => return fail("golden", json, EXIT_USAGE, &e),
     };
     let dir = game_dir(args.first());
-    let golden = dir.join("tests/golden.png");
+    let golden = golden_file.map(PathBuf::from).unwrap_or_else(|| dir.join("tests/golden.png"));
     let current = dir.join("screenshots/golden-current.png");
     if let Err(e) = render(&dir, frames, &size, &current) {
         return fail("golden", json, EXIT_FAILED, &format!("the game did not render:\n{e}"));

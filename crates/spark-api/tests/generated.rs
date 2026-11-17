@@ -26,12 +26,9 @@ fn check(rel: &str, expected: String) {
 #[test]
 fn generated_files_are_current() {
     let api = spark_api::api();
-    let guide = std::fs::read_to_string(root().join("docs/SPARK_API.md")).unwrap();
-    let shaders = std::fs::read_to_string(root().join("docs/SPARK_SHADERS.md")).unwrap();
     check("docs/API_REFERENCE.md", spark_api::markdown(&api, VERSION));
     check("docs/api.json", serde_json::to_string_pretty(&api).unwrap() + "\n");
     check("llms.txt", spark_api::llms_txt(VERSION));
-    check("llms-full.txt", spark_api::llms_full(&api, VERSION, &guide, &shaders));
 }
 
 /// The narrative guide must mention every global function and table of the API.

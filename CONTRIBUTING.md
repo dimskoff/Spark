@@ -16,4 +16,4 @@ All three must pass; CI runs them on Windows, Linux and macOS. The toolchain is 
 - **Numbers from Luau go through `convert::Num` / `to_num`** so NaN and infinity are rejected.
 - **Public Luau API and `game.toml` changes** need a CHANGELOG entry and, if they break, a deprecation first.
 - Code, comments and docs are in English; keep `README.ru.md` in step with `README.md`.
-- Architecture decisions go in `docs/adr/NNNN-title.md`.
+- Architecture decisions go in `docs/dev/adr/NNNN-title.md`.

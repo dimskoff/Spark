@@ -121,14 +121,8 @@ paths relative to the game folder. Numbers must be finite; asset paths cannot le
 4. `spark test mygame --json` runs scenario tests in `tests/*.luau`\n\
 5. `spark mygame --headless --frames 120 --screenshot shot.png` then look at the picture\n\
 6. `spark api search <word>` looks a function up in the API\n\n\
-## Optional\n\n\
-- [llms-full.txt](llms-full.txt): this index plus the full guide and API reference in one file\n"
+"
     )
-}
-
-/// `llms-full.txt`: index + API reference + the narrative guide.
-pub fn llms_full(api: &Api, version: &str, guide: &str, shaders: &str) -> String {
-    format!("{}\n\n---\n\n{}\n\n---\n\n{}\n\n---\n\n{}\n", llms_txt(version), guide.trim(), markdown(api, version).trim(), shaders.trim())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

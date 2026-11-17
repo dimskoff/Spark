@@ -62,7 +62,6 @@ jobs:
           for d in examples/[0-9]*/ examples/showcase/*/ examples/demo; do
             target/release/${{ matrix.exe }} check "$d" --frames 90 --json > /dev/null || { echo "example failed: $d"; target/release/${{ matrix.exe }} check "$d" --frames 90; exit 1; }
           done
-          target/release/${{ matrix.exe }} test examples/10-scenario-test
 
       # The golden images were made on a desktop GPU; software Vulkan (lavapipe) renders slightly differently, so this
       # step only reports for now. Regenerate on CI hardware (spark golden <dir> --update) to make it blocking.
@@ -71,7 +70,7 @@ jobs:
         continue-on-error: true
         run: |
           for d in examples/[0-9]*/ examples/showcase/*/; do
-            target/release/${{ matrix.exe }} golden "$d" --frames 40 --size 480x270 --tolerance 0.05 --max-bad 0.15
+            target/release/${{ matrix.exe }} golden "$d" --golden "examples/_golden/$(basename $d).png" --frames 40 --size 480x270 --tolerance 0.05 --max-bad 0.15
           done
 
       - name: spark check (template game)

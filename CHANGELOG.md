@@ -29,7 +29,7 @@ read the entries below for your old version and the new one, fix the code, then 
 ### Tooling
 - CI runs `cargo fmt --check` and `clippy -D warnings` with no allowed lints; `rustfmt.toml` added.
 ### Added
-- **API registry**: `docs/API_REFERENCE.md`, `docs/api.json`, `llms.txt`, `llms-full.txt` are generated from `docs/spark.d.luau`; tests fail when the docs and the engine disagree. `spark new` ships them plus `CLAUDE.md`.
+- **API registry**: `docs/API_REFERENCE.md`, `docs/api.json`, `llms.txt` are generated from `docs/spark.d.luau`; tests fail when the docs and the engine disagree. `spark new` ships them plus `CLAUDE.md`.
 - **Agent CLI**: `spark api search|show|list`, `spark doctor`, `spark screenshot`, `spark inspect`, `spark golden`, `spark diff`, `spark mcp` (Model Context Protocol server on stdio); `--json` on `new`, `docs`, `build`, `update`. Exit codes: 0 ok, 1 failed, 2 usage/environment.
 - Range checks: `camera.fov` 1..179, `near`/`far`, mesh sizes and radii, body `mass`/`friction`.
 - Devtools protocol 2: `SetObject` (edit a running object), `Hello.token`. Luau memory limit (1 GiB).

@@ -11,7 +11,7 @@ mod parse;
 mod render;
 
 pub use parse::{ParseError, parse};
-pub use render::{Hit, Kind, llms_full, llms_txt, markdown, search};
+pub use render::{Hit, Kind, llms_txt, markdown, search};
 
 use serde::Serialize;
 

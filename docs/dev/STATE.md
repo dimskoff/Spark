@@ -3,7 +3,7 @@
 Branch: `overhaul/phase-0-1` (from `main` @ aa92d4b). Nothing is pushed to `main`.
 
 ## Done
-- Phase 0: `docs/audit/AUDIT.md`, `docs/ROADMAP.md`, `docs/audit/CLEANUP.md`.
+- Phase 0: `docs/dev/audit/AUDIT.md`, `docs/dev/ROADMAP.md`, `docs/dev/audit/CLEANUP.md`.
 - Phase 1a (see checklist in ROADMAP): finite numbers, path jail, save durability, pack/devtools limits, unknown flags,
   BOM in check, editor log level, fmt + clippy -D warnings, strict CI, SECURITY/CONTRIBUTING.
 
@@ -17,7 +17,7 @@ cargo test -p spark-script --test flow validation     # NaN + path regression sc
 
 ## 2nd session
 Done: API registry + drift tests, agent CLI (api/doctor/screenshot/inspect/golden/diff/mcp, --json), range checks, memory limit, alpha cutoff, 12 examples + goldens, CI examples/audit, release metadata (SHA256SUMS, optional minisign), devtools protocol v2 (game side).
-Continue with **docs/NEXT_PROMPT.md** (general) and **docs/EDITOR_PROMPT.md** (editor redesign).
+Continue with **docs/dev/NEXT_PROMPT.md** (general) and **docs/dev/EDITOR_PROMPT.md** (editor redesign).
 
 ## Older notes (superseded by NEXT_PROMPT.md)
 1. Range validation (fov, sizes, near/far); FBX panics (`fbx.rs` control-point indexing, inflate limit); `ImageData` invariants.

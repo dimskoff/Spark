@@ -12,9 +12,9 @@ reproduces it. You can expect an acknowledgement within a week.
 
 ## Trust model today
 - Game scripts are trusted code (they run Luau with the full Spark API). Asset and `require` paths are confined to the game
-  folder; the Luau VM is not yet sandboxed against memory exhaustion (planned: Phase 7 in `docs/ROADMAP.md`).
+  folder; the Luau VM is not yet sandboxed against memory exhaustion (planned: Phase 7 in `docs/dev/ROADMAP.md`).
 - Devtools listens on `127.0.0.1` only and has no authentication yet (planned: token handshake).
 - Release archives carry a `.sha256` published next to them; signatures are not available yet. `spark update` runs the installer
   from the `main` branch (planned: pinned to the release tag and signature-verified).
 
-Known open issues are listed in `docs/audit/AUDIT.md`.
+Known open issues are listed in `docs/dev/audit/AUDIT.md`.

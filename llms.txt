@@ -21,6 +21,3 @@ Conventions: Y-up, right-handed, 1 unit = 1 meter, objects look along -Z, angles
 5. `spark mygame --headless --frames 120 --screenshot shot.png` then look at the picture
 6. `spark api search <word>` looks a function up in the API
 
-## Optional
-
-- [llms-full.txt](llms-full.txt): this index plus the full guide and API reference in one file

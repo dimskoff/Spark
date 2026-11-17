@@ -9,7 +9,7 @@ Every removal or move, with the reason.
 | `fmt` CI step enabled | See above. |
 | Literal `\n` text in comments of `install.ps1` and `.github/workflows/release.yml` replaced by real line breaks | Broken line wraps from an earlier edit; comments ran together. |
 | `unit_arg` rewrites (`Ok(w.scene.ambient = c)` -> statement + `Ok(())`) done by `cargo clippy --fix` | 73 mechanical warnings. |
-| `docs/audit/` and `docs/ROADMAP.md` added | Audit record and plan requested for the overhaul. |
+| `docs/dev/audit/` and `docs/dev/ROADMAP.md` added | Audit record and plan requested for the overhaul. |
 
 Not removed (decision recorded): `examples/demo`, `examples/hello`, `examples/starfall` stay until their replacements (Phase 1b)
 exist; deleting them first would leave the repository without any runnable sample and CI without `spark check` coverage of
