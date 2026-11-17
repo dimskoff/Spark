@@ -273,7 +273,7 @@ Primitives are centered at the origin (a cube of size 1 spans -0.5..0.5). Same p
 | `Mesh.cylinder(radius=0.5, height=1, segments=24)` | |
 | `Mesh.triangles({p1, p2, p3, ...})` | counter-clockwise triangles, flat normals |
 | `Mesh.custom(positions, indices, uvs?, normals?)` | indexed mesh: `positions` = `{vector}`, `indices` = 1-based, 3 per counter-clockwise triangle, `uvs` = flat `{u1, v1, u2, v2, ...}`, `normals` = `{vector}` (smooth normals are computed when omitted). For swept tunnels, terrain, any generated geometry |
-| `Texture.load("img.png")` | PNG/JPEG, path relative to the script folder, cached |
+| `Texture.load("img.png")` | PNG/JPEG, path relative to the game folder, cached |
 | `Texture.checker(a="white", b="gray", cells=8, size=64)` | |
 | `Texture.solid(color)` | |
 | `Material.color(c)` | lit solid color |
@@ -590,7 +590,7 @@ function render()
 end
 ```
 
-Full 2D game: `examples/starfall/main.luau`.
+Full 2D example: `examples/04-draw-2d/main.luau`.
 
 ## UI widgets (ui)
 

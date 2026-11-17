@@ -107,10 +107,7 @@ impl Channel {
                 let (p0, m0) = (self.values[i * 3 + 1], self.values[i * 3 + 2] * dt);
                 let (p1, m1) = (self.values[(i + 1) * 3 + 1], self.values[(i + 1) * 3] * dt);
                 let (k2, k3) = (k * k, k * k * k);
-                let v = p0 * (2.0 * k3 - 3.0 * k2 + 1.0)
-                    + m0 * (k3 - 2.0 * k2 + k)
-                    + p1 * (-2.0 * k3 + 3.0 * k2)
-                    + m1 * (k3 - k2);
+                let v = p0 * (2.0 * k3 - 3.0 * k2 + 1.0) + m0 * (k3 - 2.0 * k2 + k) + p1 * (-2.0 * k3 + 3.0 * k2) + m1 * (k3 - k2);
                 if rot { Quat::from_vec4(v).normalize().into() } else { v }
             }
         }
@@ -250,8 +247,7 @@ impl ModelData {
                                 if s > 0.0 { w.map(|x| x / s) } else { [1.0, 0.0, 0.0, 0.0] }
                             })
                             .collect();
-                        (joints.len() == positions.len() && weights.len() == positions.len())
-                            .then_some(SkinWeights { joints, weights })
+                        (joints.len() == positions.len() && weights.len() == positions.len()).then_some(SkinWeights { joints, weights })
                     }
                     _ => None,
                 };
@@ -411,9 +407,8 @@ fn read_uri(dir: &Path, uri: &str) -> Result<Vec<u8>, String> {
         let (_, data) = rest.split_once(";base64,").ok_or("unsupported data URI")?;
         return base64_decode(data).ok_or_else(|| "bad base64 data".into());
     }
-    let rel = safe_relative(&percent_decode(uri)).ok_or_else(|| {
-        format!("refusing external file '{uri}': model files may only reference files next to / below the model")
-    })?;
+    let rel = safe_relative(&percent_decode(uri))
+        .ok_or_else(|| format!("refusing external file '{uri}': model files may only reference files next to / below the model"))?;
     crate::vfs::read(&dir.join(rel))
 }
 
@@ -421,7 +416,8 @@ fn read_uri(dir: &Path, uri: &str) -> Result<Vec<u8>, String> {
 /// schemes or `..` climbing out). A downloaded model cannot read arbitrary files.
 fn safe_relative(uri: &str) -> Option<std::path::PathBuf> {
     use std::path::Component;
-    if uri.contains("://") || uri.starts_with('/') || uri.starts_with('\\') || uri.get(1..2) == Some(":") {
+    // Any ':' (drive letters anywhere in the path, NTFS streams, URLs): PathBuf::push of C:x replaces the base on Windows.
+    if uri.contains(':') || uri.contains('\0') || uri.starts_with('/') || uri.starts_with('\\') {
         return None;
     }
     let mut out = std::path::PathBuf::new();
@@ -489,7 +485,18 @@ mod tests {
     fn uri_sandbox() {
         assert_eq!(safe_relative("textures/a.png").unwrap(), std::path::PathBuf::from("textures/a.png"));
         assert_eq!(safe_relative("./x/../b.bin").unwrap(), std::path::PathBuf::from("b.bin"));
-        for bad in ["../secret.txt", "/etc/passwd", "C:/Windows/win.ini", "a/../../b", "http://x/y.png", "\\\\server\\share", ""] {
+        for bad in [
+            "../secret.txt",
+            "/etc/passwd",
+            "C:/Windows/win.ini",
+            "a/../../b",
+            "http://x/y.png",
+            "\\\\server\\share",
+            "",
+            "a/C:x.png",
+            "tex/D:/y.png",
+            "a.png:ads",
+        ] {
             assert!(safe_relative(bad).is_none(), "{bad}");
         }
         assert_eq!(percent_decode("a%20b%20"), "a b ");

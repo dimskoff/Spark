@@ -2,13 +2,11 @@
 
 use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use spark_core::shader::COPY_POST;
-use spark_core::{
-    Color, ImageData, Mat4, ShaderData, Vertex,
-};
+use spark_core::{Color, ImageData, Mat4, ShaderData, Vertex};
 use wgpu::util::DeviceExt;
 
 use crate::assets::*;
@@ -39,12 +37,10 @@ impl Renderer {
         };
 
         // GPU error handling: log uncaptured errors instead of panicking.
-        device.on_uncaptured_error(Arc::new(|e| {
-            match e {
-                wgpu::Error::Validation { description, .. } => log::error!("GPU validation error: {description}"),
-                wgpu::Error::OutOfMemory { source, .. } => log::error!("GPU out of memory: {source}"),
-                wgpu::Error::Internal { description, .. } => log::error!("GPU internal error: {description}"),
-            }
+        device.on_uncaptured_error(Arc::new(|e| match e {
+            wgpu::Error::Validation { description, .. } => log::error!("GPU validation error: {description}"),
+            wgpu::Error::OutOfMemory { source, .. } => log::error!("GPU out of memory: {source}"),
+            wgpu::Error::Internal { description, .. } => log::error!("GPU internal error: {description}"),
         }));
 
         // Device loss tracking: set a flag the renderer can check before drawing.
@@ -145,7 +141,11 @@ impl Renderer {
             }],
         );
         // Base texture, its sampler and the material normal map (2D canvas uses only the first two).
-        let texture_layout = bind_group_layout(&device, "spark texture", &[texture_entry(0, fs), sampler_entry(1, fs), texture_entry(2, fs), texture_entry(3, fs)]);
+        let texture_layout = bind_group_layout(
+            &device,
+            "spark texture",
+            &[texture_entry(0, fs), sampler_entry(1, fs), texture_entry(2, fs), texture_entry(3, fs)],
+        );
         let shader_layout = bind_group_layout(
             &device,
             "spark shader resources",
@@ -190,8 +190,16 @@ impl Renderer {
             ..Default::default()
         });
         let sky_dummy = upload_cube(&device, &queue, &std::array::from_fn(|_| ImageData::solid(Color::WHITE)));
-        let frame_bind_group =
-            frame_bind_group(&device, &frame_layout, &frame_buffer, &shadow_dummy.view, &shadow_sampler, &sky_dummy.view, &sky_sampler, &light_shadow_dummy.view);
+        let frame_bind_group = frame_bind_group(
+            &device,
+            &frame_layout,
+            &frame_buffer,
+            &shadow_dummy.view,
+            &shadow_sampler,
+            &sky_dummy.view,
+            &sky_sampler,
+            &light_shadow_dummy.view,
+        );
         let sky_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("spark sky"),
             bind_group_layouts: &[Some(&frame_layout)],
@@ -207,8 +215,7 @@ impl Renderer {
         let object_capacity = 64 * 1024;
         let (object_buffer, object_bind_group) = object_buffer(&device, &object_layout, object_capacity);
 
-        let shadow_layout =
-            bind_group_layout(&device, "spark shadow", &[uniform_entry(0, false, 64, wgpu::ShaderStages::VERTEX)]);
+        let shadow_layout = bind_group_layout(&device, "spark shadow", &[uniform_entry(0, false, 64, wgpu::ShaderStages::VERTEX)]);
         let shadow_buffer = uniform_buffer(&device, "spark shadow view", 64);
         let shadow_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("spark shadow"),

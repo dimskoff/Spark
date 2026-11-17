@@ -1,0 +1,5114 @@
+{
+  "aliases": [
+    {
+      "name": "Key",
+      "def": "\"a\" | \"b\" | \"c\" | \"d\" | \"e\" | \"f\" | \"g\" | \"h\" | \"i\" | \"j\" | \"k\" | \"l\" | \"m\" | \"n\" | \"o\" | \"p\" | \"q\" | \"r\" | \"s\" | \"t\" | \"u\" | \"v\" | \"w\" | \"x\" | \"y\" | \"z\" | \"0\" | \"1\" | \"2\" | \"3\" | \"4\" | \"5\" | \"6\" | \"7\" | \"8\" | \"9\" | \"space\" | \"enter\" | \"escape\" | \"tab\" | \"backspace\" | \"left\" | \"right\" | \"up\" | \"down\" | \"lshift\" | \"rshift\" | \"lctrl\" | \"rctrl\" | \"lalt\" | \"ralt\" | \"lsuper\" | \"rsuper\" | \"shift\" | \"ctrl\" | \"control\" | \"alt\" | \"super\" | \"meta\" | \"cmd\" | \"win\" | \"esc\" | \"return\" | \"f1\" | \"f2\" | \"f3\" | \"f4\" | \"f5\" | \"f6\" | \"f7\" | \"f8\" | \"f9\" | \"f10\" | \"f11\" | \"f12\" | \"f13\" | \"f14\" | \"f15\" | \"f16\" | \"f17\" | \"f18\" | \"f19\" | \"f20\" | \"f21\" | \"f22\" | \"f23\" | \"f24\" | \"minus\" | \"equal\" | \"bracketleft\" | \"bracketright\" | \"backslash\" | \"semicolon\" | \"quote\" | \"comma\" | \"period\" | \"slash\" | \"backquote\" | \"-\" | \"=\" | \"[\" | \"]\" | \"\\\\\" | \";\" | \"'\" | \",\" | \".\" | \"/\" | \"`\" | \"insert\" | \"delete\" | \"home\" | \"end\" | \"pageup\" | \"pagedown\" | \"del\" | \"ins\" | \"pgup\" | \"pgdn\" | \"capslock\" | \"numlock\" | \"scrolllock\" | \"printscreen\" | \"pause\" | \"menu\" | \"numpad0\" | \"numpad1\" | \"numpad2\" | \"numpad3\" | \"numpad4\" | \"numpad5\" | \"numpad6\" | \"numpad7\" | \"numpad8\" | \"numpad9\" | \"numpad_add\" | \"numpad_subtract\" | \"numpad_multiply\" | \"numpad_divide\" | \"numpad_decimal\"",
+      "doc": "Keys accepted by input.down / pressed / released / repeated and sent by key_pressed / key_released\n(physical US-layout positions). Aliases: shift ctrl alt super esc return - = [ ] \\ ; ' , . / ` del ins pgup pgdn ..."
+    },
+    {
+      "name": "MouseButton",
+      "def": "\"left\" | \"right\" | \"middle\" | \"back\" | \"forward\"",
+      "doc": ""
+    },
+    {
+      "name": "PadButton",
+      "def": "\"a\" | \"b\" | \"x\" | \"y\" | \"lb\" | \"rb\" | \"lt\" | \"rt\" | \"back\" | \"start\" | \"lstick\" | \"rstick\" | \"up\" | \"down\" | \"left\" | \"right\"",
+      "doc": ""
+    },
+    {
+      "name": "PadAxis",
+      "def": "\"left_x\" | \"left_y\" | \"right_x\" | \"right_y\" | \"lt\" | \"rt\"",
+      "doc": ""
+    },
+    {
+      "name": "ColorLike",
+      "def": "string | number | Color | vector | { number }",
+      "doc": "\"red\", \"#ff8800\", \"#f80\", \"#rrggbbaa\", 0xff8800, Color.rgb(...), vec3(r, g, b) or {r, g, b}"
+    },
+    {
+      "name": "Ease",
+      "def": "\"linear\" | \"in\" | \"out\" | \"in_out\" | \"smooth\" | \"in_quad\" | \"out_quad\" | \"in_out_quad\" | \"in_cubic\" | \"out_cubic\" | \"in_out_cubic\" | \"in_sine\" | \"out_sine\" | \"in_out_sine\" | \"in_expo\" | \"out_expo\" | \"in_back\" | \"out_back\" | \"out_elastic\" | \"in_bounce\" | \"out_bounce\"",
+      "doc": ""
+    },
+    {
+      "name": "Align",
+      "def": "\"top_left\" | \"top\" | \"top_right\" | \"left\" | \"center\" | \"right\" | \"bottom_left\" | \"bottom\" | \"bottom_right\"",
+      "doc": ""
+    },
+    {
+      "name": "BodyType",
+      "def": "\"dynamic\" | \"static\" | \"kinematic\"",
+      "doc": ""
+    },
+    {
+      "name": "BodySpec",
+      "def": "{ type: BodyType?, shape: (\"auto\" | \"box\" | \"sphere\" | \"capsule\" | \"cylinder\")?, size: vector?, radius: number?, height: number?, mass: number?, friction: number?, bounciness: number?, sensor: boolean?, lock_rotation: boolean?, gravity_scale: number?, damping: number?, angular_damping: number?, ccd: boolean?, velocity: vector?, angular_velocity: vector?, }",
+      "doc": ""
+    },
+    {
+      "name": "LightSpec",
+      "def": "{ type: (\"point\" | \"spot\")?, color: ColorLike?, intensity: number?, range: number?, angle: number?, softness: number?, shadows: boolean?, position: vector?, rotation: vector?, parent: Object?, name: string?, }",
+      "doc": ""
+    },
+    {
+      "name": "BlendMode",
+      "def": "\"auto\" | \"opaque\" | \"alpha\" | \"additive\"",
+      "doc": ""
+    },
+    {
+      "name": "SpawnProps",
+      "def": "{ name: string?, position: vector?, rotation: vector?, scale: (number | vector)?, visible: boolean?, parent: Object?, color: ColorLike?, body: (BodyType | boolean | BodySpec)?, light: LightSpec?, shader: Shader?, data: { number }?, blend: BlendMode?, double_sided: boolean?, cast_shadow: boolean?, pbr: boolean?, metallic: number?, roughness: number?, emissive: ColorLike?, normal_map: (Texture | string | false)?, orm_map: (Texture | string | false)?, node: string?, lod: { LodLevel }?, }",
+      "doc": ""
+    },
+    {
+      "name": "LodLevel",
+      "def": "{ number | Mesh }",
+      "doc": "`{distance, mesh}`: from `distance` meters away the object draws `mesh`."
+    },
+    {
+      "name": "Hit",
+      "def": "{ object: Object, point: vector, normal: vector, distance: number }",
+      "doc": ""
+    },
+    {
+      "name": "CollisionInfo",
+      "def": "{ speed: number, sensor: boolean }",
+      "doc": ""
+    },
+    {
+      "name": "ListenerOptions",
+      "def": "{ priority: number?, owner: Object?, once: boolean? }",
+      "doc": ""
+    },
+    {
+      "name": "TweenOptions",
+      "def": "{ ease: Ease?, delay: number?, loop: boolean?, yoyo: boolean?, unscaled: boolean?, done: (() -> ())?, owner: Object?, }",
+      "doc": ""
+    },
+    {
+      "name": "TextOptions",
+      "def": "{ size: number?, color: ColorLike?, align: Align?, font: Font?, width: number?, line_height: number?, shadow: (boolean | ColorLike)?, }",
+      "doc": ""
+    },
+    {
+      "name": "SoundOptions",
+      "def": "{ volume: number?, pitch: number?, pan: number?, loop: boolean?, fade_in: number?, bus: (string | Bus)?, at: (vector | Object)?, range: number?, }",
+      "doc": ""
+    },
+    {
+      "name": "MeshOptions",
+      "def": "{ tile: number?, cell: number? }",
+      "doc": ""
+    },
+    {
+      "name": "PlayOptions",
+      "def": "{ loop: boolean?, speed: number?, fade: number?, restart: boolean? }",
+      "doc": ""
+    },
+    {
+      "name": "SkySpec",
+      "def": "{ top: ColorLike?, bottom: ColorLike?, cubemap: (string | false)?, blend: number?, lighting: number? }",
+      "doc": ""
+    },
+    {
+      "name": "BloomSettings",
+      "def": "{ threshold: number?, knee: number?, strength: number?, radius: number? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "SsaoSettings",
+      "def": "{ radius: number?, samples: number?, strength: number?, bias: number? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "MotionBlurSettings",
+      "def": "{ strength: number?, samples: number? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "DofSettings",
+      "def": "{ focus: number?, aperture: number?, focal_range: number?, samples: number? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "ColorGradingSettings",
+      "def": "{ exposure: number?, contrast: number?, saturation: number?, temperature: number?, tint: number?, lift: (vector | { number })?, gamma: (vector | { number })?, gain: (vector | { number })?, } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "ChromaticAberrationSettings",
+      "def": "{ amount: number?, radial: boolean? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "FilmGrainSettings",
+      "def": "{ strength: number?, size: number? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "VignetteSettings",
+      "def": "{ strength: number?, inner: number?, outer: number?, color: ColorLike? } | boolean",
+      "doc": ""
+    },
+    {
+      "name": "WidgetId",
+      "def": "string | number",
+      "doc": ""
+    }
+  ],
+  "classes": [
+    {
+      "name": "Color",
+      "fields": [
+        {
+          "name": "r",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "g",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "b",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "a",
+          "ty": "number",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "lerp",
+          "generics": "",
+          "params": [
+            {
+              "name": "other",
+              "ty": "ColorLike",
+              "optional": false
+            },
+            {
+              "name": "t",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "Color",
+          "doc": ""
+        },
+        {
+          "name": "with_alpha",
+          "generics": "",
+          "params": [
+            {
+              "name": "a",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "Color",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Mesh",
+      "fields": [],
+      "methods": [],
+      "doc": ""
+    },
+    {
+      "name": "Texture",
+      "fields": [],
+      "methods": [],
+      "doc": ""
+    },
+    {
+      "name": "Material",
+      "fields": [
+        {
+          "name": "blend",
+          "ty": "BlendMode",
+          "doc": ""
+        },
+        {
+          "name": "double_sided",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "cast_shadow",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "pbr",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "metallic",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "roughness",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "emissive",
+          "ty": "Color",
+          "doc": ""
+        },
+        {
+          "name": "normal_map",
+          "ty": "Texture?",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "tiling",
+          "generics": "",
+          "params": [
+            {
+              "name": "x",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "y",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_color",
+          "generics": "",
+          "params": [
+            {
+              "name": "color",
+              "ty": "ColorLike",
+              "optional": false
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_unlit",
+          "generics": "",
+          "params": [
+            {
+              "name": "on",
+              "ty": "boolean?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_blend",
+          "generics": "",
+          "params": [
+            {
+              "name": "mode",
+              "ty": "BlendMode",
+              "optional": false
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_double_sided",
+          "generics": "",
+          "params": [
+            {
+              "name": "on",
+              "ty": "boolean?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_cast_shadow",
+          "generics": "",
+          "params": [
+            {
+              "name": "on",
+              "ty": "boolean?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_metallic",
+          "generics": "",
+          "params": [
+            {
+              "name": "metallic",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_roughness",
+          "generics": "",
+          "params": [
+            {
+              "name": "roughness",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_emissive",
+          "generics": "",
+          "params": [
+            {
+              "name": "color",
+              "ty": "ColorLike",
+              "optional": false
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_normal_map",
+          "generics": "",
+          "params": [
+            {
+              "name": "texture",
+              "ty": "(Texture | string)?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_shader",
+          "generics": "",
+          "params": [
+            {
+              "name": "shader",
+              "ty": "Shader?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        },
+        {
+          "name": "with_data",
+          "generics": "",
+          "params": [
+            {
+              "name": "a",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "b",
+              "ty": "number?",
+              "optional": true
+            },
+            {
+              "name": "c",
+              "ty": "number?",
+              "optional": true
+            },
+            {
+              "name": "d",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "Material",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Model",
+      "fields": [
+        {
+          "name": "nodes",
+          "ty": "{ string }",
+          "doc": ""
+        },
+        {
+          "name": "name",
+          "ty": "string",
+          "doc": ""
+        },
+        {
+          "name": "animations",
+          "ty": "{ string }",
+          "doc": ""
+        },
+        {
+          "name": "size",
+          "ty": "vector",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "duration",
+          "generics": "",
+          "params": [
+            {
+              "name": "clip",
+              "ty": "string",
+              "optional": false
+            }
+          ],
+          "ret": "number",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Shader",
+      "fields": [
+        {
+          "name": "name",
+          "ty": "string",
+          "doc": ""
+        },
+        {
+          "name": "kind",
+          "ty": "\"surface\" | \"post\"",
+          "doc": ""
+        },
+        {
+          "name": "params",
+          "ty": "{ string }",
+          "doc": ""
+        },
+        {
+          "name": "vertex",
+          "ty": "boolean",
+          "doc": "false = ignore the shader's `fn vertex` (engine vertex stage, plain depth: early depth testing stays on)"
+        },
+        {
+          "name": "texture1",
+          "ty": "(Texture | string)?",
+          "doc": ""
+        },
+        {
+          "name": "texture2",
+          "ty": "(Texture | string)?",
+          "doc": ""
+        },
+        {
+          "name": "[string]",
+          "ty": "any",
+          "doc": "`shader.<param>` reads / writes a field of `struct Params` in the WGSL code (any name)."
+        }
+      ],
+      "methods": [
+        {
+          "name": "set",
+          "generics": "",
+          "params": [
+            {
+              "name": "values",
+              "ty": "{ [string]: any }",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Font",
+      "fields": [],
+      "methods": [],
+      "doc": ""
+    },
+    {
+      "name": "Timer",
+      "fields": [
+        {
+          "name": "active",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "paused",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "remaining",
+          "ty": "number",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "cancel",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "pause",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "resume",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Task",
+      "fields": [
+        {
+          "name": "status",
+          "ty": "\"running\" | \"waiting\" | \"done\" | \"cancelled\" | \"failed\"",
+          "doc": ""
+        },
+        {
+          "name": "alive",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "cancel",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Listener",
+      "fields": [
+        {
+          "name": "active",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "off",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Tween",
+      "fields": [
+        {
+          "name": "active",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "finished",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "cancel",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Sound",
+      "fields": [
+        {
+          "name": "playing",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "stop",
+          "generics": "",
+          "params": [
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "set_volume",
+          "generics": "",
+          "params": [
+            {
+              "name": "volume",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "set_pitch",
+          "generics": "",
+          "params": [
+            {
+              "name": "pitch",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "set_pan",
+          "generics": "",
+          "params": [
+            {
+              "name": "pan",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "set_position",
+          "generics": "",
+          "params": [
+            {
+              "name": "at",
+              "ty": "vector | Object",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Bus",
+      "fields": [
+        {
+          "name": "name",
+          "ty": "string",
+          "doc": ""
+        },
+        {
+          "name": "volume",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "paused",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "set_volume",
+          "generics": "",
+          "params": [
+            {
+              "name": "volume",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "pause",
+          "generics": "",
+          "params": [
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "resume",
+          "generics": "",
+          "params": [
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "stop",
+          "generics": "",
+          "params": [
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "LightRef",
+      "fields": [
+        {
+          "name": "type",
+          "ty": "\"point\" | \"spot\"",
+          "doc": ""
+        },
+        {
+          "name": "color",
+          "ty": "Color",
+          "doc": ""
+        },
+        {
+          "name": "intensity",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "range",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "angle",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "softness",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "shadows",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [],
+      "doc": ""
+    },
+    {
+      "name": "Object",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "name",
+          "ty": "string",
+          "doc": ""
+        },
+        {
+          "name": "position",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "x",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "y",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "z",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "rotation",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "scale",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "visible",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "blend",
+          "ty": "BlendMode",
+          "doc": ""
+        },
+        {
+          "name": "double_sided",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "cast_shadow",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "pbr",
+          "ty": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "metallic",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "roughness",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "emissive",
+          "ty": "Color",
+          "doc": ""
+        },
+        {
+          "name": "normal_map",
+          "ty": "Texture?",
+          "doc": ""
+        },
+        {
+          "name": "orm_map",
+          "ty": "Texture?",
+          "doc": ""
+        },
+        {
+          "name": "lod",
+          "ty": "{ LodLevel }",
+          "doc": ""
+        },
+        {
+          "name": "color",
+          "ty": "Color",
+          "doc": ""
+        },
+        {
+          "name": "material",
+          "ty": "Material?",
+          "doc": ""
+        },
+        {
+          "name": "mesh",
+          "ty": "Mesh?",
+          "doc": ""
+        },
+        {
+          "name": "parent",
+          "ty": "Object?",
+          "doc": ""
+        },
+        {
+          "name": "light",
+          "ty": "LightRef?",
+          "doc": ""
+        },
+        {
+          "name": "shader",
+          "ty": "Shader?",
+          "doc": ""
+        },
+        {
+          "name": "data",
+          "ty": "{ number }",
+          "doc": ""
+        },
+        {
+          "name": "body",
+          "ty": "BodyType?",
+          "doc": "physics (see \"Physics\")"
+        },
+        {
+          "name": "velocity",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "angular_velocity",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "mass",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "gravity_scale",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "sensor",
+          "ty": "boolean",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "rotate_x",
+          "generics": "",
+          "params": [
+            {
+              "name": "angle",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "rotate_y",
+          "generics": "",
+          "params": [
+            {
+              "name": "angle",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "rotate_z",
+          "generics": "",
+          "params": [
+            {
+              "name": "angle",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "translate",
+          "generics": "",
+          "params": [
+            {
+              "name": "delta",
+              "ty": "vector",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "look_at",
+          "generics": "",
+          "params": [
+            {
+              "name": "target",
+              "ty": "vector | Object",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "place_on",
+          "generics": "",
+          "params": [
+            {
+              "name": "other",
+              "ty": "Object",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "set_parent",
+          "generics": "",
+          "params": [
+            {
+              "name": "parent",
+              "ty": "Object?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "children",
+          "generics": "",
+          "params": [],
+          "ret": "{ Object }",
+          "doc": ""
+        },
+        {
+          "name": "world_position",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "forward",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "right",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "up",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "bounds",
+          "generics": "",
+          "params": [],
+          "ret": "(vector?, vector?)",
+          "doc": ""
+        },
+        {
+          "name": "size",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "distance_to",
+          "generics": "",
+          "params": [
+            {
+              "name": "other",
+              "ty": "Object | vector",
+              "optional": false
+            }
+          ],
+          "ret": "number",
+          "doc": ""
+        },
+        {
+          "name": "exists",
+          "generics": "",
+          "params": [],
+          "ret": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "destroy",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "find",
+          "generics": "",
+          "params": [
+            {
+              "name": "name",
+              "ty": "string",
+              "optional": false
+            }
+          ],
+          "ret": "Object?",
+          "doc": ""
+        },
+        {
+          "name": "paint",
+          "generics": "",
+          "params": [
+            {
+              "name": "material",
+              "ty": "Material | ColorLike",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "on",
+          "generics": "",
+          "params": [
+            {
+              "name": "name",
+              "ty": "string",
+              "optional": false
+            },
+            {
+              "name": "fn",
+              "ty": "(...any) -> any",
+              "optional": false
+            },
+            {
+              "name": "opts",
+              "ty": "ListenerOptions?",
+              "optional": true
+            }
+          ],
+          "ret": "Listener",
+          "doc": "events and timers owned by the object"
+        },
+        {
+          "name": "once",
+          "generics": "",
+          "params": [
+            {
+              "name": "name",
+              "ty": "string",
+              "optional": false
+            },
+            {
+              "name": "fn",
+              "ty": "(...any) -> any",
+              "optional": false
+            },
+            {
+              "name": "opts",
+              "ty": "ListenerOptions?",
+              "optional": true
+            }
+          ],
+          "ret": "Listener",
+          "doc": ""
+        },
+        {
+          "name": "emit",
+          "generics": "",
+          "params": [
+            {
+              "name": "name",
+              "ty": "string",
+              "optional": false
+            },
+            {
+              "name": "...",
+              "ty": "any",
+              "optional": true
+            }
+          ],
+          "ret": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "emit_later",
+          "generics": "",
+          "params": [
+            {
+              "name": "name",
+              "ty": "string",
+              "optional": false
+            },
+            {
+              "name": "...",
+              "ty": "any",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "after",
+          "generics": "",
+          "params": [
+            {
+              "name": "seconds",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "fn",
+              "ty": "() -> ()",
+              "optional": false
+            }
+          ],
+          "ret": "Timer",
+          "doc": ""
+        },
+        {
+          "name": "every",
+          "generics": "",
+          "params": [
+            {
+              "name": "seconds",
+              "ty": "number",
+              "optional": false
+            },
+            {
+              "name": "fn",
+              "ty": "(n: number) -> ()",
+              "optional": false
+            },
+            {
+              "name": "times",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "Timer",
+          "doc": ""
+        },
+        {
+          "name": "play",
+          "generics": "",
+          "params": [
+            {
+              "name": "clip",
+              "ty": "string",
+              "optional": false
+            },
+            {
+              "name": "opts",
+              "ty": "PlayOptions?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": "animation (glTF models)"
+        },
+        {
+          "name": "stop",
+          "generics": "",
+          "params": [
+            {
+              "name": "fade",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "is_playing",
+          "generics": "",
+          "params": [
+            {
+              "name": "clip",
+              "ty": "string?",
+              "optional": true
+            }
+          ],
+          "ret": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "animation",
+          "generics": "",
+          "params": [],
+          "ret": "string?",
+          "doc": ""
+        },
+        {
+          "name": "animation_time",
+          "generics": "",
+          "params": [],
+          "ret": "number",
+          "doc": ""
+        },
+        {
+          "name": "set_animation_speed",
+          "generics": "",
+          "params": [
+            {
+              "name": "speed",
+              "ty": "number",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "animations",
+          "generics": "",
+          "params": [],
+          "ret": "{ string }",
+          "doc": ""
+        },
+        {
+          "name": "add_body",
+          "generics": "",
+          "params": [
+            {
+              "name": "spec",
+              "ty": "(BodyType | boolean | BodySpec)?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": "physics"
+        },
+        {
+          "name": "remove_body",
+          "generics": "",
+          "params": [],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "impulse",
+          "generics": "",
+          "params": [
+            {
+              "name": "v",
+              "ty": "vector",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "force",
+          "generics": "",
+          "params": [
+            {
+              "name": "v",
+              "ty": "vector",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "torque",
+          "generics": "",
+          "params": [
+            {
+              "name": "v",
+              "ty": "vector",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "move",
+          "generics": "",
+          "params": [
+            {
+              "name": "delta",
+              "ty": "vector",
+              "optional": false
+            }
+          ],
+          "ret": "(vector, boolean)",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Camera",
+      "fields": [
+        {
+          "name": "position",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "x",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "y",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "z",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "rotation",
+          "ty": "vector",
+          "doc": ""
+        },
+        {
+          "name": "fov",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "near",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "far",
+          "ty": "number",
+          "doc": ""
+        },
+        {
+          "name": "ortho",
+          "ty": "number?",
+          "doc": ""
+        }
+      ],
+      "methods": [
+        {
+          "name": "look_at",
+          "generics": "",
+          "params": [
+            {
+              "name": "target",
+              "ty": "vector | Object",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "world_to_screen",
+          "generics": "",
+          "params": [
+            {
+              "name": "pos",
+              "ty": "vector | Object",
+              "optional": false
+            }
+          ],
+          "ret": "(number?, number?, number?)",
+          "doc": ""
+        },
+        {
+          "name": "screen_to_ray",
+          "generics": "",
+          "params": [
+            {
+              "name": "x",
+              "ty": "number?",
+              "optional": true
+            },
+            {
+              "name": "y",
+              "ty": "number?",
+              "optional": true
+            }
+          ],
+          "ret": "(vector, vector)",
+          "doc": ""
+        },
+        {
+          "name": "translate",
+          "generics": "",
+          "params": [
+            {
+              "name": "delta",
+              "ty": "vector",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "forward",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "right",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        },
+        {
+          "name": "up",
+          "generics": "",
+          "params": [],
+          "ret": "vector",
+          "doc": ""
+        }
+      ],
+      "doc": ""
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "Mesh",
+      "members": [
+        {
+          "Function": {
+            "name": "cube",
+            "generics": "",
+            "params": [
+              {
+                "name": "size",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "box",
+            "generics": "",
+            "params": [
+              {
+                "name": "w",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "h",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "d",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "opts",
+                "ty": "MeshOptions?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "plane",
+            "generics": "",
+            "params": [
+              {
+                "name": "w",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "d",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "opts",
+                "ty": "MeshOptions?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "quad",
+            "generics": "",
+            "params": [
+              {
+                "name": "w",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "h",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "opts",
+                "ty": "MeshOptions?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "sphere",
+            "generics": "",
+            "params": [
+              {
+                "name": "radius",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "segments",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "cylinder",
+            "generics": "",
+            "params": [
+              {
+                "name": "radius",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "height",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "segments",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "triangles",
+            "generics": "",
+            "params": [
+              {
+                "name": "points",
+                "ty": "{ vector }",
+                "optional": false
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "custom",
+            "generics": "",
+            "params": [
+              {
+                "name": "positions",
+                "ty": "{ vector }",
+                "optional": false
+              },
+              {
+                "name": "indices",
+                "ty": "{ number }",
+                "optional": false
+              },
+              {
+                "name": "uvs",
+                "ty": "{ number }?",
+                "optional": true
+              },
+              {
+                "name": "normals",
+                "ty": "{ vector }?",
+                "optional": true
+              }
+            ],
+            "ret": "Mesh",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Texture",
+      "members": [
+        {
+          "Function": {
+            "name": "load",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "Texture",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "checker",
+            "generics": "",
+            "params": [
+              {
+                "name": "a",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "b",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "cells",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "size",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Texture",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "solid",
+            "generics": "",
+            "params": [
+              {
+                "name": "color",
+                "ty": "ColorLike",
+                "optional": false
+              }
+            ],
+            "ret": "Texture",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Material",
+      "members": [
+        {
+          "Function": {
+            "name": "color",
+            "generics": "",
+            "params": [
+              {
+                "name": "color",
+                "ty": "ColorLike",
+                "optional": false
+              }
+            ],
+            "ret": "Material",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "unlit",
+            "generics": "",
+            "params": [
+              {
+                "name": "color",
+                "ty": "ColorLike",
+                "optional": false
+              }
+            ],
+            "ret": "Material",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "texture",
+            "generics": "",
+            "params": [
+              {
+                "name": "texture",
+                "ty": "Texture | string",
+                "optional": false
+              },
+              {
+                "name": "tint",
+                "ty": "ColorLike?",
+                "optional": true
+              }
+            ],
+            "ret": "Material",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "checker",
+            "generics": "",
+            "params": [
+              {
+                "name": "a",
+                "ty": "ColorLike",
+                "optional": false
+              },
+              {
+                "name": "b",
+                "ty": "ColorLike",
+                "optional": false
+              },
+              {
+                "name": "repeats",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Material",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pbr",
+            "generics": "",
+            "params": [
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "metallic",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "roughness",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Material",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Color",
+      "members": [
+        {
+          "Function": {
+            "name": "rgb",
+            "generics": "",
+            "params": [
+              {
+                "name": "r",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "g",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "b",
+                "ty": "number",
+                "optional": false
+              }
+            ],
+            "ret": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "rgba",
+            "generics": "",
+            "params": [
+              {
+                "name": "r",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "g",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "b",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "a",
+                "ty": "number",
+                "optional": false
+              }
+            ],
+            "ret": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "hex",
+            "generics": "",
+            "params": [
+              {
+                "name": "hex",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "lerp",
+            "generics": "",
+            "params": [
+              {
+                "name": "a",
+                "ty": "ColorLike",
+                "optional": false
+              },
+              {
+                "name": "b",
+                "ty": "ColorLike",
+                "optional": false
+              },
+              {
+                "name": "t",
+                "ty": "number",
+                "optional": false
+              }
+            ],
+            "ret": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "WHITE",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "BLACK",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "GRAY",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "GREY",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "RED",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "GREEN",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "BLUE",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "YELLOW",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "ORANGE",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "PURPLE",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "PINK",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "BROWN",
+            "ty": "Color",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "SKY",
+            "ty": "Color",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Model",
+      "members": [
+        {
+          "Function": {
+            "name": "load",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "Model",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Shader",
+      "members": [
+        {
+          "Function": {
+            "name": "load",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "Shader",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "new",
+            "generics": "",
+            "params": [
+              {
+                "name": "code",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "name",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "Shader",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "Font",
+      "members": [
+        {
+          "Function": {
+            "name": "load",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "Font",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "graphics",
+      "members": [
+        {
+          "Field": {
+            "name": "height",
+            "ty": "number?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "scale",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "upscale",
+            "ty": "\"linear\" | \"nearest\"",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "filter",
+            "ty": "\"linear\" | \"nearest\"",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "msaa",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "shadows",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "shadow_distance",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "shadow_size",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "light_shadows",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "light_shadow_size",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "light_shadow_updates",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "light_shadow_soft",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "scene_width",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "scene_height",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "shader",
+            "ty": "Shader?",
+            "doc": "Shader, list of Shaders / { shader = s, size = \"screen\" | \"scene\" }, or nil"
+          }
+        },
+        {
+          "Field": {
+            "name": "post",
+            "ty": "any",
+            "doc": "built-in post effects: nil / false = off, true = defaults, table = settings"
+          }
+        },
+        {
+          "Field": {
+            "name": "tonemap",
+            "ty": "\"off\" | \"aces\" | \"reinhard\" | \"hejl\"",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "fxaa",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "bloom",
+            "ty": "BloomSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "ssao",
+            "ty": "SsaoSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "motion_blur",
+            "ty": "MotionBlurSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "dof",
+            "ty": "DofSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "color_grading",
+            "ty": "ColorGradingSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "chromatic_aberration",
+            "ty": "ChromaticAberrationSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "film_grain",
+            "ty": "FilmGrainSettings?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "vignette",
+            "ty": "VignetteSettings?",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "physics",
+      "members": [
+        {
+          "Field": {
+            "name": "gravity",
+            "ty": "vector",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "enabled",
+            "ty": "boolean",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "sound",
+      "members": [
+        {
+          "Function": {
+            "name": "play",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "opts",
+                "ty": "SoundOptions?",
+                "optional": true
+              }
+            ],
+            "ret": "Sound",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "bus",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "Bus",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "volume",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "stop_all",
+            "generics": "",
+            "params": [
+              {
+                "name": "fade",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "enabled",
+            "generics": "",
+            "params": [],
+            "ret": "boolean",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "draw",
+      "members": [
+        {
+          "Function": {
+            "name": "rect",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "w",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "h",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "opts",
+                "ty": "{ align: Align?, line: number? }?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "circle",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "r",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "opts",
+                "ty": "{ line: number? }?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "line",
+            "generics": "",
+            "params": [
+              {
+                "name": "x1",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y1",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "x2",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y2",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "width",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "polygon",
+            "generics": "",
+            "params": [
+              {
+                "name": "points",
+                "ty": "{ number }",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "opts",
+                "ty": "{ line: number? }?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "sprite",
+            "generics": "",
+            "params": [
+              {
+                "name": "texture",
+                "ty": "Texture | string",
+                "optional": false
+              },
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "opts",
+                "ty": "{ w: number?, h: number?, scale: number?, rotation: number?, color: ColorLike?, align: Align?, flip_x: boolean?, flip_y: boolean?, region: { number }?, grid: { number }?, frame: number?, filter: (\"nearest\" | \"linear\")?, }?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "text",
+            "generics": "",
+            "params": [
+              {
+                "name": "text",
+                "ty": "string | number",
+                "optional": false
+              },
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "opts",
+                "ty": "TextOptions?",
+                "optional": true
+              }
+            ],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "measure",
+            "generics": "",
+            "params": [
+              {
+                "name": "text",
+                "ty": "string | number",
+                "optional": false
+              },
+              {
+                "name": "opts",
+                "ty": "{ size: number?, font: Font?, width: number? }?",
+                "optional": true
+              }
+            ],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "push",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pop",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "translate",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "rotate",
+            "generics": "",
+            "params": [
+              {
+                "name": "radians",
+                "ty": "number",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "scale",
+            "generics": "",
+            "params": [
+              {
+                "name": "sx",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "sy",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "layer",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "(\"ui\" | \"scene\")?",
+                "optional": true
+              }
+            ],
+            "ret": "string",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "filter",
+            "generics": "",
+            "params": [
+              {
+                "name": "mode",
+                "ty": "\"nearest\" | \"linear\"",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "stats",
+            "generics": "",
+            "params": [],
+            "ret": "{ [string]: number }",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "spark_badge",
+            "generics": "",
+            "params": [
+              {
+                "name": "opts",
+                "ty": "{ align: Align?, margin: number?, width: number?, alpha: number?, x: number?, y: number? }?",
+                "optional": true
+              }
+            ],
+            "ret": "(boolean, boolean)",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "ui",
+      "members": [
+        {
+          "Function": {
+            "name": "button",
+            "generics": "",
+            "params": [
+              {
+                "name": "id",
+                "ty": "WidgetId",
+                "optional": false
+              },
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "w",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "h",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "text",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "slider",
+            "generics": "",
+            "params": [
+              {
+                "name": "id",
+                "ty": "WidgetId",
+                "optional": false
+              },
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "w",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "h",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "value",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "min",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "max",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "checkbox",
+            "generics": "",
+            "params": [
+              {
+                "name": "id",
+                "ty": "WidgetId",
+                "optional": false
+              },
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "size",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "checked",
+                "ty": "boolean",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "panel",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "w",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "h",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              },
+              {
+                "name": "border",
+                "ty": "ColorLike?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "label",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "text",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "size",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "image",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "w",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "h",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "texture",
+                "ty": "Texture | string",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "progress",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "w",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "h",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "t",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "hovered",
+            "generics": "",
+            "params": [],
+            "ret": "boolean",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "screen",
+      "members": [
+        {
+          "Field": {
+            "name": "width",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "height",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "scale",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "pixel_width",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "pixel_height",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse",
+            "generics": "",
+            "params": [],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "center",
+            "generics": "",
+            "params": [],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "input",
+      "members": [
+        {
+          "Function": {
+            "name": "down",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pressed",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "released",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": "went down or auto-repeated this frame (key held): menus, text fields"
+          }
+        },
+        {
+          "Function": {
+            "name": "repeated",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": "text typed this frame (keyboard layout and IME aware, no control characters); \"\" if none"
+          }
+        },
+        {
+          "Function": {
+            "name": "text",
+            "generics": "",
+            "params": [],
+            "ret": "string",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse_down",
+            "generics": "",
+            "params": [
+              {
+                "name": "button",
+                "ty": "MouseButton?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse_pressed",
+            "generics": "",
+            "params": [
+              {
+                "name": "button",
+                "ty": "MouseButton?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse_released",
+            "generics": "",
+            "params": [
+              {
+                "name": "button",
+                "ty": "MouseButton?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse",
+            "generics": "",
+            "params": [],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse_delta",
+            "generics": "",
+            "params": [],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "wheel",
+            "generics": "",
+            "params": [],
+            "ret": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "lock_mouse",
+            "generics": "",
+            "params": [
+              {
+                "name": "on",
+                "ty": "boolean?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse_locked",
+            "generics": "",
+            "params": [],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pad_down",
+            "generics": "",
+            "params": [
+              {
+                "name": "button",
+                "ty": "PadButton",
+                "optional": false
+              },
+              {
+                "name": "pad",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pad_pressed",
+            "generics": "",
+            "params": [
+              {
+                "name": "button",
+                "ty": "PadButton",
+                "optional": false
+              },
+              {
+                "name": "pad",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pad_released",
+            "generics": "",
+            "params": [
+              {
+                "name": "button",
+                "ty": "PadButton",
+                "optional": false
+              },
+              {
+                "name": "pad",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pad_axis",
+            "generics": "",
+            "params": [
+              {
+                "name": "axis",
+                "ty": "PadAxis",
+                "optional": false
+              },
+              {
+                "name": "pad",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pad_stick",
+            "generics": "",
+            "params": [
+              {
+                "name": "stick",
+                "ty": "\"left\" | \"right\"",
+                "optional": false
+              },
+              {
+                "name": "pad",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "(number, number)",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pads",
+            "generics": "",
+            "params": [],
+            "ret": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "pad_name",
+            "generics": "",
+            "params": [
+              {
+                "name": "pad",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "string?",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "any_pressed",
+            "generics": "",
+            "params": [],
+            "ret": "boolean",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "time",
+      "members": [
+        {
+          "Field": {
+            "name": "dt",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "elapsed",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "frame",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "fps",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "unscaled_dt",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "unscaled_elapsed",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "scale",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "fixed_dt",
+            "ty": "number",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "test",
+      "members": [
+        {
+          "Function": {
+            "name": "press",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "release",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "tap",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "hold",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "Key",
+                "optional": false
+              },
+              {
+                "name": "seconds",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "mouse",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number",
+                "optional": false
+              },
+              {
+                "name": "y",
+                "ty": "number",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "button",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "down",
+                "ty": "boolean",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "click",
+            "generics": "",
+            "params": [
+              {
+                "name": "x",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "y",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "button",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "text",
+            "generics": "",
+            "params": [
+              {
+                "name": "s",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "type",
+            "generics": "",
+            "params": [
+              {
+                "name": "s",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "wait",
+            "generics": "",
+            "params": [
+              {
+                "name": "seconds",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "frames",
+            "generics": "",
+            "params": [
+              {
+                "name": "n",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "wait_until",
+            "generics": "",
+            "params": [
+              {
+                "name": "condition",
+                "ty": "() -> boolean",
+                "optional": false
+              },
+              {
+                "name": "timeout",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "what",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "wait_event",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "timeout",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "...any",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "find",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "timeout",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "Object",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "expect",
+            "generics": "T",
+            "params": [
+              {
+                "name": "cond",
+                "ty": "T",
+                "optional": false
+              },
+              {
+                "name": "msg",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "T",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "eq",
+            "generics": "",
+            "params": [
+              {
+                "name": "actual",
+                "ty": "any",
+                "optional": false
+              },
+              {
+                "name": "expected",
+                "ty": "any",
+                "optional": false
+              },
+              {
+                "name": "msg",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "near",
+            "generics": "",
+            "params": [
+              {
+                "name": "actual",
+                "ty": "any",
+                "optional": false
+              },
+              {
+                "name": "expected",
+                "ty": "any",
+                "optional": false
+              },
+              {
+                "name": "eps",
+                "ty": "number?",
+                "optional": true
+              },
+              {
+                "name": "msg",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "fail",
+            "generics": "",
+            "params": [
+              {
+                "name": "msg",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "step",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "snapshot",
+            "generics": "",
+            "params": [
+              {
+                "name": "name",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "state",
+                "ty": "any?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": "every text drawn this frame (draw.text and ui), in draw order; shadow copies are listed once"
+          }
+        },
+        {
+          "Function": {
+            "name": "texts",
+            "generics": "",
+            "params": [],
+            "ret": "{ string }",
+            "doc": "true when s is part of any drawn text (reads the last finished frame: call test.frames(1) after a state change)"
+          }
+        },
+        {
+          "Function": {
+            "name": "sees",
+            "generics": "",
+            "params": [
+              {
+                "name": "s",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "expect_text",
+            "generics": "",
+            "params": [
+              {
+                "name": "s",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "msg",
+                "ty": "string?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "wait_text",
+            "generics": "",
+            "params": [
+              {
+                "name": "s",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "timeout",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": "Exists only in files under tests/ run by `spark test`."
+    },
+    {
+      "name": "save",
+      "members": [
+        {
+          "Function": {
+            "name": "set",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "value",
+                "ty": "any",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "get",
+            "generics": "T",
+            "params": [
+              {
+                "name": "key",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "default",
+                "ty": "T?",
+                "optional": true
+              }
+            ],
+            "ret": "T",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "has",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "delete",
+            "generics": "",
+            "params": [
+              {
+                "name": "key",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "clear",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "keys",
+            "generics": "",
+            "params": [],
+            "ret": "{ string }",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "flush",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "path",
+            "generics": "",
+            "params": [],
+            "ret": "string?",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "discord",
+      "members": [
+        {
+          "Function": {
+            "name": "connect",
+            "generics": "",
+            "params": [
+              {
+                "name": "app_id",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "set",
+            "generics": "",
+            "params": [
+              {
+                "name": "presence",
+                "ty": "{ details: string?, state: string?, large_image: string?, large_text: string?, small_image: string?, small_text: string?, start: (boolean | number)?, finish: number?, buttons: { { label: string, url: string } }?, }",
+                "optional": false
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "clear",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "shutdown",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "status",
+            "generics": "",
+            "params": [],
+            "ret": "\"off\" | \"connecting\" | \"connected\"",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "window",
+      "members": [
+        {
+          "Field": {
+            "name": "fullscreen",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "title",
+            "ty": "string?",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "width",
+            "ty": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "height",
+            "ty": "number",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "debug",
+      "members": [
+        {
+          "Field": {
+            "name": "enabled",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "hotkey",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "show_fps",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "show_gpu",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "show_scene",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "show_physics",
+            "ty": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Field": {
+            "name": "fps",
+            "ty": "number",
+            "doc": "read-only"
+          }
+        },
+        {
+          "Field": {
+            "name": "frame_time",
+            "ty": "number",
+            "doc": "read-only (ms)"
+          }
+        },
+        {
+          "Function": {
+            "name": "toggle",
+            "generics": "",
+            "params": [],
+            "ret": "boolean",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "avg_frame_ms",
+            "generics": "",
+            "params": [],
+            "ret": "number",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "add_line",
+            "generics": "",
+            "params": [
+              {
+                "name": "text",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "color",
+                "ty": "ColorLike?",
+                "optional": true
+              }
+            ],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "clear_lines",
+            "generics": "",
+            "params": [],
+            "ret": "()",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "traceback",
+            "generics": "",
+            "params": [
+              {
+                "name": "message",
+                "ty": "string?",
+                "optional": true
+              },
+              {
+                "name": "level",
+                "ty": "number?",
+                "optional": true
+              }
+            ],
+            "ret": "string",
+            "doc": ""
+          }
+        },
+        {
+          "Function": {
+            "name": "info",
+            "generics": "",
+            "params": [
+              {
+                "name": "",
+                "ty": "...any",
+                "optional": false
+              }
+            ],
+            "ret": "...any",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": "Spark's debug overlay merged with the standard Luau debug library."
+    }
+  ],
+  "functions": [
+    {
+      "name": "vec3",
+      "generics": "",
+      "params": [
+        {
+          "name": "x",
+          "ty": "number?",
+          "optional": true
+        },
+        {
+          "name": "y",
+          "ty": "number?",
+          "optional": true
+        },
+        {
+          "name": "z",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "vector",
+      "doc": ""
+    },
+    {
+      "name": "length",
+      "generics": "",
+      "params": [
+        {
+          "name": "v",
+          "ty": "vector",
+          "optional": false
+        }
+      ],
+      "ret": "number",
+      "doc": ""
+    },
+    {
+      "name": "normalize",
+      "generics": "",
+      "params": [
+        {
+          "name": "v",
+          "ty": "vector",
+          "optional": false
+        }
+      ],
+      "ret": "vector",
+      "doc": ""
+    },
+    {
+      "name": "dot",
+      "generics": "",
+      "params": [
+        {
+          "name": "a",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "b",
+          "ty": "vector",
+          "optional": false
+        }
+      ],
+      "ret": "number",
+      "doc": ""
+    },
+    {
+      "name": "cross",
+      "generics": "",
+      "params": [
+        {
+          "name": "a",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "b",
+          "ty": "vector",
+          "optional": false
+        }
+      ],
+      "ret": "vector",
+      "doc": ""
+    },
+    {
+      "name": "distance",
+      "generics": "",
+      "params": [
+        {
+          "name": "a",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "b",
+          "ty": "vector",
+          "optional": false
+        }
+      ],
+      "ret": "number",
+      "doc": ""
+    },
+    {
+      "name": "lerp",
+      "generics": "T",
+      "params": [
+        {
+          "name": "a",
+          "ty": "T",
+          "optional": false
+        },
+        {
+          "name": "b",
+          "ty": "T",
+          "optional": false
+        },
+        {
+          "name": "t",
+          "ty": "number",
+          "optional": false
+        }
+      ],
+      "ret": "T",
+      "doc": ""
+    },
+    {
+      "name": "spawn",
+      "generics": "",
+      "params": [
+        {
+          "name": "what",
+          "ty": "Mesh | Model | string",
+          "optional": false
+        },
+        {
+          "name": "material",
+          "ty": "(Material | Texture | ColorLike | SpawnProps)?",
+          "optional": true
+        },
+        {
+          "name": "props",
+          "ty": "SpawnProps?",
+          "optional": true
+        }
+      ],
+      "ret": "Object",
+      "doc": ""
+    },
+    {
+      "name": "group",
+      "generics": "",
+      "params": [
+        {
+          "name": "props",
+          "ty": "SpawnProps?",
+          "optional": true
+        }
+      ],
+      "ret": "Object",
+      "doc": ""
+    },
+    {
+      "name": "light",
+      "generics": "",
+      "params": [
+        {
+          "name": "spec",
+          "ty": "LightSpec",
+          "optional": false
+        }
+      ],
+      "ret": "Object",
+      "doc": ""
+    },
+    {
+      "name": "find",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        }
+      ],
+      "ret": "Object?",
+      "doc": ""
+    },
+    {
+      "name": "find_all",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        }
+      ],
+      "ret": "{ Object }",
+      "doc": ""
+    },
+    {
+      "name": "destroy",
+      "generics": "",
+      "params": [
+        {
+          "name": "obj",
+          "ty": "Object",
+          "optional": false
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "dump_scene",
+      "generics": "",
+      "params": [],
+      "ret": "string",
+      "doc": ""
+    },
+    {
+      "name": "sun",
+      "generics": "",
+      "params": [
+        {
+          "name": "direction",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "color",
+          "ty": "ColorLike?",
+          "optional": true
+        },
+        {
+          "name": "intensity",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "ambient",
+      "generics": "",
+      "params": [
+        {
+          "name": "color",
+          "ty": "ColorLike",
+          "optional": false
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "background",
+      "generics": "",
+      "params": [
+        {
+          "name": "color",
+          "ty": "ColorLike",
+          "optional": false
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "fog",
+      "generics": "",
+      "params": [
+        {
+          "name": "color",
+          "ty": "ColorLike?",
+          "optional": true
+        },
+        {
+          "name": "near",
+          "ty": "number?",
+          "optional": true
+        },
+        {
+          "name": "far",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "sky",
+      "generics": "",
+      "params": [
+        {
+          "name": "spec",
+          "ty": "(SkySpec | boolean)?",
+          "optional": true
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "after",
+      "generics": "",
+      "params": [
+        {
+          "name": "seconds",
+          "ty": "number",
+          "optional": false
+        },
+        {
+          "name": "fn",
+          "ty": "() -> ()",
+          "optional": false
+        },
+        {
+          "name": "owner",
+          "ty": "Object?",
+          "optional": true
+        }
+      ],
+      "ret": "Timer",
+      "doc": ""
+    },
+    {
+      "name": "every",
+      "generics": "",
+      "params": [
+        {
+          "name": "seconds",
+          "ty": "number",
+          "optional": false
+        },
+        {
+          "name": "fn",
+          "ty": "(n: number) -> ()",
+          "optional": false
+        },
+        {
+          "name": "opts",
+          "ty": "(number | { times: number?, owner: Object? })?",
+          "optional": true
+        }
+      ],
+      "ret": "Timer",
+      "doc": ""
+    },
+    {
+      "name": "next_frame",
+      "generics": "",
+      "params": [
+        {
+          "name": "fn",
+          "ty": "() -> ()",
+          "optional": false
+        },
+        {
+          "name": "owner",
+          "ty": "Object?",
+          "optional": true
+        }
+      ],
+      "ret": "Timer",
+      "doc": ""
+    },
+    {
+      "name": "after_frames",
+      "generics": "",
+      "params": [
+        {
+          "name": "n",
+          "ty": "number",
+          "optional": false
+        },
+        {
+          "name": "fn",
+          "ty": "() -> ()",
+          "optional": false
+        },
+        {
+          "name": "owner",
+          "ty": "Object?",
+          "optional": true
+        }
+      ],
+      "ret": "Timer",
+      "doc": ""
+    },
+    {
+      "name": "task",
+      "generics": "",
+      "params": [
+        {
+          "name": "fn",
+          "ty": "(...any) -> ()",
+          "optional": false
+        },
+        {
+          "name": "...",
+          "ty": "any",
+          "optional": true
+        }
+      ],
+      "ret": "Task",
+      "doc": ""
+    },
+    {
+      "name": "wait",
+      "generics": "",
+      "params": [
+        {
+          "name": "seconds",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "number",
+      "doc": ""
+    },
+    {
+      "name": "wait_frames",
+      "generics": "",
+      "params": [
+        {
+          "name": "n",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "wait_until",
+      "generics": "",
+      "params": [
+        {
+          "name": "condition",
+          "ty": "() -> boolean",
+          "optional": false
+        },
+        {
+          "name": "timeout",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "boolean?",
+      "doc": ""
+    },
+    {
+      "name": "wait_event",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        },
+        {
+          "name": "timeout",
+          "ty": "number?",
+          "optional": true
+        }
+      ],
+      "ret": "...any",
+      "doc": ""
+    },
+    {
+      "name": "on",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        },
+        {
+          "name": "fn",
+          "ty": "(...any) -> any",
+          "optional": false
+        },
+        {
+          "name": "opts",
+          "ty": "ListenerOptions?",
+          "optional": true
+        }
+      ],
+      "ret": "Listener",
+      "doc": ""
+    },
+    {
+      "name": "once",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        },
+        {
+          "name": "fn",
+          "ty": "(...any) -> any",
+          "optional": false
+        },
+        {
+          "name": "opts",
+          "ty": "ListenerOptions?",
+          "optional": true
+        }
+      ],
+      "ret": "Listener",
+      "doc": ""
+    },
+    {
+      "name": "emit",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        },
+        {
+          "name": "...",
+          "ty": "any",
+          "optional": true
+        }
+      ],
+      "ret": "boolean",
+      "doc": ""
+    },
+    {
+      "name": "emit_later",
+      "generics": "",
+      "params": [
+        {
+          "name": "name",
+          "ty": "string",
+          "optional": false
+        },
+        {
+          "name": "...",
+          "ty": "any",
+          "optional": true
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "off",
+      "generics": "",
+      "params": [
+        {
+          "name": "listener",
+          "ty": "Listener | string",
+          "optional": false
+        }
+      ],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "tween",
+      "generics": "",
+      "params": [
+        {
+          "name": "target",
+          "ty": "any",
+          "optional": false
+        },
+        {
+          "name": "goals",
+          "ty": "{ [string]: any }",
+          "optional": false
+        },
+        {
+          "name": "seconds",
+          "ty": "number",
+          "optional": false
+        },
+        {
+          "name": "ease",
+          "ty": "(Ease | TweenOptions)?",
+          "optional": true
+        }
+      ],
+      "ret": "Tween",
+      "doc": ""
+    },
+    {
+      "name": "raycast",
+      "generics": "",
+      "params": [
+        {
+          "name": "origin",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "dir",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "max",
+          "ty": "number?",
+          "optional": true
+        },
+        {
+          "name": "opts",
+          "ty": "{ ignore: Object? }?",
+          "optional": true
+        }
+      ],
+      "ret": "Hit?",
+      "doc": ""
+    },
+    {
+      "name": "pick",
+      "generics": "",
+      "params": [
+        {
+          "name": "origin",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "dir",
+          "ty": "vector",
+          "optional": false
+        },
+        {
+          "name": "max",
+          "ty": "number?",
+          "optional": true
+        },
+        {
+          "name": "opts",
+          "ty": "{ ignore: Object? }?",
+          "optional": true
+        }
+      ],
+      "ret": "Hit?",
+      "doc": ""
+    },
+    {
+      "name": "quit",
+      "generics": "",
+      "params": [],
+      "ret": "()",
+      "doc": ""
+    },
+    {
+      "name": "restart",
+      "generics": "",
+      "params": [],
+      "ret": "()",
+      "doc": ""
+    }
+  ],
+  "values": [
+    {
+      "name": "camera",
+      "ty": "Camera",
+      "doc": ""
+    }
+  ]
+}

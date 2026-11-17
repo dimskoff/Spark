@@ -202,12 +202,8 @@ impl Ui {
         } else {
             s.widget
         };
-        let text_params = TextParams {
-            size: s.button_text_size.min(rect.h * 0.6).max(1.0),
-            color: s.text,
-            align: Align::CENTER,
-            ..Default::default()
-        };
+        let text_params =
+            TextParams { size: s.button_text_size.min(rect.h * 0.6).max(1.0), color: s.text, align: Align::CENTER, ..Default::default() };
         let border = s.border;
         on_ui_layer(canvas, |c| {
             c.rect(rect.pos(), rect.size(), color, Align::TOP_LEFT);

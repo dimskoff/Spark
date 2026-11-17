@@ -91,10 +91,20 @@ impl UserData for LightRef {
         f.add_field_method_get("range", |lua, this| with_light(lua, this.0, |l| Ok(l.range)));
         f.add_field_method_get("shadows", |lua, this| with_light(lua, this.0, |l| Ok(l.shadows)));
         f.add_field_method_get("angle", |lua, this| {
-            with_light(lua, this.0, |l| Ok(match l.kind { LightKind::Spot { angle, .. } => Some(angle.to_degrees()), _ => None }))
+            with_light(lua, this.0, |l| {
+                Ok(match l.kind {
+                    LightKind::Spot { angle, .. } => Some(angle.to_degrees()),
+                    _ => None,
+                })
+            })
         });
         f.add_field_method_get("softness", |lua, this| {
-            with_light(lua, this.0, |l| Ok(match l.kind { LightKind::Spot { softness, .. } => Some(softness), _ => None }))
+            with_light(lua, this.0, |l| {
+                Ok(match l.kind {
+                    LightKind::Spot { softness, .. } => Some(softness),
+                    _ => None,
+                })
+            })
         });
         for key in ["type", "color", "intensity", "range", "angle", "softness", "shadows"] {
             f.add_field_method_set(key, move |lua, this, v: Value| with_light(lua, this.0, |l| set_light_key(l, key, &v, "light")));
@@ -103,7 +113,9 @@ impl UserData for LightRef {
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_meta_method(mlua::MetaMethod::ToString, |lua, this, ()| {
-            with_light(lua, this.0, |l| Ok(format!("Light({:?}, range {:.1}, intensity {:.2}, shadows {})", l.kind, l.range, l.intensity, l.shadows)))
+            with_light(lua, this.0, |l| {
+                Ok(format!("Light({:?}, range {:.1}, intensity {:.2}, shadows {})", l.kind, l.range, l.intensity, l.shadows))
+            })
         });
     }
 }

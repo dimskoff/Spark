@@ -174,11 +174,10 @@ function update(dt)
 end
 ```
 
-Examples in this repo:
+Examples in this repo (see [examples/README.md](examples/README.md); agents: `spark api search <word>`, `spark mcp`, `spark doctor`):
 
 ```
 target/release/spark examples/demo        # 3D: physics, custom shaders, sound
-target/release/spark examples/starfall    # 2D game made only with draw.* (keyboard, mouse or gamepad)
 cargo run -p hello                        # the same idea in pure Rust
 ```
 

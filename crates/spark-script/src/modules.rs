@@ -79,6 +79,9 @@ fn resolve_spec(from: &str, spec: &str) -> Result<String, String> {
                     return Err(format!("require(\"{spec}\"): goes above the game folder"));
                 }
             }
+            p if p.contains([':', '\0']) => {
+                return Err(format!("require(\"{spec}\"): drive letters and ':' are not allowed; modules live in the game folder"));
+            }
             p => parts.push(p),
         }
     }
@@ -107,9 +110,8 @@ fn require(lua: &Lua, spec: String) -> LuaResult<Value> {
     let modules = lua.app_data_ref::<SharedModules>().ok_or_else(|| rt("require is not available here"))?.clone();
     let root = modules.borrow().root.clone();
     let rel = resolve_spec(&from, &spec).map_err(rt)?;
-    let rel = find_file(&root, &rel).map_err(|tried| {
-        rt(format!("require(\"{spec}\") from {from}: no such module (looked for {})", tried.join(", ")))
-    })?;
+    let rel = find_file(&root, &rel)
+        .map_err(|tried| rt(format!("require(\"{spec}\") from {from}: no such module (looked for {})", tried.join(", "))))?;
     let cache: Table = lua.named_registry_value(CACHE)?;
     let cached: Value = cache.raw_get(rel.as_str())?;
     if !cached.is_nil() {
@@ -155,5 +157,9 @@ mod tests {
         assert_eq!(resolve_spec("src/ui/hud.luau", "@game/config").unwrap(), "config");
         assert!(resolve_spec("main.luau", "player").unwrap_err().contains("require(\"./player\")"));
         assert!(resolve_spec("main.luau", "../x").is_err());
+        // A drive prefix would make PathBuf::join replace the game folder on Windows.
+        assert!(resolve_spec("main.luau", "./C:/Windows/win").is_err());
+        assert!(resolve_spec("main.luau", "@game/C:x").is_err());
+        assert!(resolve_spec("main.luau", "./a\\..\\..\\x").is_err());
     }
 }

@@ -89,8 +89,6 @@ impl Renderer {
         });
     }
 
-    /// Uploads the 2D vertices of both layers, the screen transform and the glyph atlas.
-
     /// MSAA sample count supported for both scene formats (falls back to 1).
     pub(crate) fn supported_samples(&self, wanted: u32) -> u32 {
         let ok = |n: u32| {

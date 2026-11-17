@@ -635,6 +635,12 @@ declare test: {
     fail: (msg: string?) -> (),
     step: (name: string) -> (),
     snapshot: (name: string, state: any?) -> (),
+    -- every text drawn this frame (draw.text and ui), in draw order; shadow copies are listed once
+    texts: () -> { string },
+    -- true when s is part of any drawn text (reads the last finished frame: call test.frames(1) after a state change)
+    sees: (s: string) -> boolean,
+    expect_text: (s: string, msg: string?) -> (),
+    wait_text: (s: string, timeout: number?) -> (),
 }
 
 -- ===================================================================== saving, window, misc

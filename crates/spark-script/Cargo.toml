@@ -23,3 +23,4 @@ discord = ["dep:spark-discord"]
 
 [dev-dependencies]
 spark-physics.workspace = true
+spark-api.workspace = true

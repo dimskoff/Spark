@@ -1,8 +1,6 @@
 //! Uploads `Assets` (meshes, textures, cubemaps) to the GPU and keeps them in sync.
 
-use spark_core::{
-    Assets, Color, CubemapId, ImageData, MeshId, TextureId,
-};
+use spark_core::{Assets, Color, CubemapId, ImageData, MeshId, TextureId};
 use wgpu::util::DeviceExt;
 
 use crate::consts::*;
@@ -63,9 +61,27 @@ impl Renderer {
             let gpu = if image.width == 0 || image.height == 0 || image.width > max || image.height > max {
                 log::error!("texture {}x{} is not supported (max {max}x{max}); using magenta", image.width, image.height);
                 let magenta = ImageData::solid(Color::hex(0xff00ff));
-                upload_texture(&self.device, &self.queue, &self.texture_layout, &self.texture_samplers, &self.flat_normal, &magenta, COLOR_FORMAT, false)
+                upload_texture(
+                    &self.device,
+                    &self.queue,
+                    &self.texture_layout,
+                    &self.texture_samplers,
+                    &self.flat_normal,
+                    &magenta,
+                    COLOR_FORMAT,
+                    false,
+                )
             } else {
-                upload_texture(&self.device, &self.queue, &self.texture_layout, &self.texture_samplers, &self.flat_normal, image, COLOR_FORMAT, true)
+                upload_texture(
+                    &self.device,
+                    &self.queue,
+                    &self.texture_layout,
+                    &self.texture_samplers,
+                    &self.flat_normal,
+                    image,
+                    COLOR_FORMAT,
+                    true,
+                )
             };
             self.textures.push(gpu);
         }
@@ -108,13 +124,12 @@ pub(crate) fn upload_cube(device: &wgpu::Device, queue: &wgpu::Queue, faces: &[I
         wgpu::util::TextureDataOrder::LayerMajor,
         &data,
     );
-    let view = texture.create_view(&wgpu::TextureViewDescriptor {
-        dimension: Some(wgpu::TextureViewDimension::Cube),
-        ..Default::default()
-    });
+    let view =
+        texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::Cube), ..Default::default() });
     GpuCube { view, mips }
 }
 
+#[allow(clippy::too_many_arguments)] // too many arguments mirror the GPU API: each is a distinct wgpu resource; bundling them into a one-use struct would only move the list
 pub(crate) fn upload_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -173,7 +188,11 @@ pub(crate) fn build_mips(image: &ImageData) -> (u32, std::borrow::Cow<'_, [u8]>)
     }
     let to_lin: Vec<f32> = (0..256).map(|i| (i as f32 / 255.0).powf(2.2)).collect();
     let mut out = image.pixels.clone();
-    let mut cur: Vec<f32> = image.pixels.chunks(4).flat_map(|p| [to_lin[p[0] as usize], to_lin[p[1] as usize], to_lin[p[2] as usize], p[3] as f32 / 255.0]).collect();
+    let mut cur: Vec<f32> = image
+        .pixels
+        .chunks(4)
+        .flat_map(|p| [to_lin[p[0] as usize], to_lin[p[1] as usize], to_lin[p[2] as usize], p[3] as f32 / 255.0])
+        .collect();
     for _ in 1..levels {
         let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
         let mut next = vec![0.0f32; nw * nh * 4];

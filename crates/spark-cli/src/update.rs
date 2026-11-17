@@ -1,8 +1,16 @@
 //! `spark update [vX.Y.Z]`: replaces this spark executable with a release from GitHub.
 //! Windows runs `install.ps1` (PowerShell), Linux / macOS run `install.sh` (curl or wget + tar).
 
-const INSTALL_PS1: &str = "https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.ps1";
-const INSTALL_SH: &str = "https://raw.githubusercontent.com/AcelateOrg/Spark/main/install.sh";
+/// The installers are release assets (see release.yml): an update runs the script that was published with the release,
+/// not whatever sits on the `main` branch at that moment.
+const RELEASES: &str = "https://github.com/AcelateOrg/Spark/releases";
+
+fn installer_url(version: Option<&str>, file: &str) -> String {
+    match version {
+        Some(v) => format!("{RELEASES}/download/{v}/{file}"),
+        None => format!("{RELEASES}/latest/download/{file}"),
+    }
+}
 const FROM_SOURCE: &str = "  git clone https://github.com/AcelateOrg/Spark.git && cd Spark && cargo build --release -p spark-cli";
 
 /// Parses `[version]` -> `Some("v0.2.0")`, `None` = latest. `Err` = usage error.
@@ -35,7 +43,8 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("spark update: cannot find the spark executable");
         return 1;
     };
-    let exe = exe.canonicalize().ok().and_then(|p| p.to_str().map(|s| std::path::PathBuf::from(s.trim_start_matches(r"\\?\")))).unwrap_or(exe);
+    let exe =
+        exe.canonicalize().ok().and_then(|p| p.to_str().map(|s| std::path::PathBuf::from(s.trim_start_matches(r"\\?\")))).unwrap_or(exe);
     let Some(bin) = exe.parent() else { return 1 };
     if exe.components().any(|c| c.as_os_str() == "target") {
         eprintln!("spark update: this spark was built from source ({}).", exe.display());
@@ -52,15 +61,17 @@ pub fn run(args: &[String]) -> i32 {
         return 1;
     }
     println!("spark update: current version {}", engine::VERSION);
+    let install_ps1 = installer_url(version.as_deref(), "install.ps1");
+    let install_sh = installer_url(version.as_deref(), "install.sh");
     let mut cmd = if cfg!(windows) {
         let mut c = std::process::Command::new("powershell");
-        c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &format!("irm {INSTALL_PS1} | iex")]);
+        c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &format!("irm {install_ps1} | iex")]);
         c
     } else {
         // curl or wget, whichever exists; the script itself also needs one of them.
         let script = format!(
-            "set -e; if command -v curl >/dev/null 2>&1; then curl -fsSL {INSTALL_SH} | sh; \
-             elif command -v wget >/dev/null 2>&1; then wget -qO- {INSTALL_SH} | sh; \
+            "set -e; if command -v curl >/dev/null 2>&1; then curl -fsSL {install_sh} | sh; \
+             elif command -v wget >/dev/null 2>&1; then wget -qO- {install_sh} | sh; \
              else echo 'spark update: needs curl or wget' >&2; exit 1; fi"
         );
         let mut c = std::process::Command::new("sh");
@@ -98,6 +109,13 @@ mod tests {
         assert_eq!(parse_version(&s(&["v0.2.0"])), Ok(Some("v0.2.0".into())));
         assert!(parse_version(&s(&["--help"])).is_err());
         assert!(parse_version(&s(&["a", "b"])).is_err());
+    }
+
+    #[test]
+    fn installer_comes_from_the_release_not_main() {
+        assert_eq!(installer_url(Some("v0.2.0"), "install.sh"), "https://github.com/AcelateOrg/Spark/releases/download/v0.2.0/install.sh");
+        assert!(installer_url(None, "install.ps1").contains("/releases/latest/download/"));
+        assert!(!installer_url(None, "install.sh").contains("raw.githubusercontent"));
     }
 
     #[test]

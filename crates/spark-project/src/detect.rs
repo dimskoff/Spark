@@ -10,8 +10,8 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::manifest::{self, Manifest};
 use crate::ENTRY;
+use crate::manifest::{self, Manifest};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Confidence {

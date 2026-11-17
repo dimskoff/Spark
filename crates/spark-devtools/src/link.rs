@@ -1,6 +1,6 @@
 //! Transport: newline-delimited JSON over a TCP stream, with I/O on background threads.
 
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 use std::marker::PhantomData;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
@@ -14,6 +14,14 @@ use serde::de::DeserializeOwned;
 /// Messages waiting to be written. When the peer stops reading, newer messages are dropped instead
 /// of growing memory (stats / scenes are snapshots: losing one is harmless).
 const OUTBOX: usize = 256;
+
+/// Received messages waiting to be handled. When the owner stops polling, the reader thread blocks (and the TCP
+/// window fills, so the peer slows down) instead of memory growing.
+const INBOX: usize = 1024;
+
+/// Longest accepted line. A scene with thousands of objects is a few hundred KB; a peer that never sends '\n'
+/// is cut off here instead of growing a buffer without limit.
+pub const MAX_LINE: usize = 8 << 20;
 
 /// One end of a devtools connection: sends `Out`, receives `In`. Never blocks the caller.
 pub struct Link<Out, In> {
@@ -46,7 +54,7 @@ where
         let read_half = stream.try_clone()?;
         let alive = Arc::new(AtomicBool::new(true));
         let (outbox, out_rx) = mpsc::sync_channel::<Out>(OUTBOX);
-        let (in_tx, inbox) = mpsc::channel::<In>();
+        let (in_tx, inbox) = mpsc::sync_channel::<In>(INBOX);
 
         let writer_alive = alive.clone();
         std::thread::Builder::new().name("spark-devtools-write".into()).spawn(move || {
@@ -73,7 +81,8 @@ where
 
         let reader_alive = alive.clone();
         std::thread::Builder::new().name("spark-devtools-read".into()).spawn(move || {
-            for line in BufReader::new(read_half).lines() {
+            let mut reader = BufReader::new(read_half);
+            while let Some(line) = read_line_limited(&mut reader, MAX_LINE) {
                 let Ok(line) = line else { break };
                 if line.trim().is_empty() {
                     continue;
@@ -127,6 +136,24 @@ where
 
     pub fn peer(&self) -> SocketAddr {
         self.peer
+    }
+}
+
+/// One line (without the newline), at most `max` bytes. `None` at end of stream; an `Err` for I/O errors,
+/// invalid UTF-8 and lines that are too long (the connection is dropped then).
+fn read_line_limited(r: &mut impl BufRead, max: usize) -> Option<io::Result<String>> {
+    let mut buf = Vec::new();
+    match r.take(max as u64 + 1).read_until(b'\n', &mut buf) {
+        Ok(0) => None,
+        Ok(_) => {
+            if buf.last() == Some(&b'\n') {
+                buf.pop();
+            } else if buf.len() > max {
+                return Some(Err(io::Error::new(io::ErrorKind::InvalidData, format!("devtools line longer than {max} bytes"))));
+            }
+            Some(String::from_utf8(buf).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "devtools line is not UTF-8")))
+        }
+        Err(e) => Some(Err(e)),
     }
 }
 
@@ -187,10 +214,25 @@ mod tests {
     }
 
     #[test]
+    fn long_and_binary_lines_are_cut_off() {
+        let mut ok = io::Cursor::new(b"{\"a\":1}\nnext\n".to_vec());
+        assert_eq!(read_line_limited(&mut ok, 64).unwrap().unwrap(), "{\"a\":1}");
+        assert_eq!(read_line_limited(&mut ok, 64).unwrap().unwrap(), "next");
+        assert!(read_line_limited(&mut ok, 64).is_none());
+        // no newline within the limit
+        let mut long = io::Cursor::new(vec![b'x'; 1000]);
+        assert!(read_line_limited(&mut long, 100).unwrap().is_err());
+        // exactly at the limit with a newline is fine
+        let mut edge = io::Cursor::new([vec![b'y'; 100], vec![b'\n']].concat());
+        assert_eq!(read_line_limited(&mut edge, 100).unwrap().unwrap().len(), 100);
+        let mut bad = io::Cursor::new(vec![0xff, 0xfe, b'\n']);
+        assert!(read_line_limited(&mut bad, 100).unwrap().is_err());
+    }
+
+    #[test]
     fn editor_and_game_talk() {
         let server = Server::bind_local().unwrap();
-        let game: Link<GameMessage, EditorCommand> =
-            Link::connect(&server.addr().to_string(), Duration::from_secs(2)).unwrap();
+        let game: Link<GameMessage, EditorCommand> = Link::connect(&server.addr().to_string(), Duration::from_secs(2)).unwrap();
         let editor: Link<EditorCommand, GameMessage> = wait(|| server.accept()).unwrap();
 
         assert!(game.send(GameMessage::Paused { paused: true }));

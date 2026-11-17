@@ -1,9 +1,7 @@
 //! Light collection and shadow maps: sun cascade-less map, point / spot shadow cubes.
 
 use bytemuck::Zeroable;
-use spark_core::{
-    Mat4, Vec3, Vec4,
-};
+use spark_core::{Mat4, Vec3, Vec4};
 
 use crate::consts::*;
 use crate::culling::*;
@@ -126,10 +124,8 @@ pub(crate) fn light_shadow_map(device: &wgpu::Device, size: u32, layers: u32) ->
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor {
-        dimension: Some(wgpu::TextureViewDimension::D2Array),
-        ..Default::default()
-    });
+    let view =
+        texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
     let layers = (0..layers)
         .map(|l| {
             texture.create_view(&wgpu::TextureViewDescriptor {
@@ -151,9 +147,8 @@ pub(crate) fn cube_face_mask(d: Vec3, r: f32) -> u8 {
     let a = d.abs();
     let reach = |axis: f32, o1: f32, o2: f32| axis - o1 >= slack && axis - o2 >= slack;
     let mut mask = 0;
-    for (i, (axis, o1, o2)) in [(d.x, a.y, a.z), (-d.x, a.y, a.z), (d.y, a.x, a.z), (-d.y, a.x, a.z), (d.z, a.x, a.y), (-d.z, a.x, a.y)]
-        .into_iter()
-        .enumerate()
+    for (i, (axis, o1, o2)) in
+        [(d.x, a.y, a.z), (-d.x, a.y, a.z), (d.y, a.x, a.z), (-d.y, a.x, a.z), (d.z, a.x, a.y), (-d.z, a.x, a.y)].into_iter().enumerate()
     {
         if reach(axis, o1, o2) {
             mask |= 1 << i;
@@ -173,7 +168,12 @@ pub(crate) fn light_face_view_proj(position: Vec3, range: f32, face: usize) -> M
         (Vec3::NEG_Z, Vec3::NEG_Y),
     ];
     let (dir, up) = FACES[face];
-    let proj = spark_core::glam::camera::rh::proj::directx::perspective(std::f32::consts::FRAC_PI_2, 1.0, LIGHT_SHADOW_NEAR, range.max(LIGHT_SHADOW_NEAR * 4.0));
+    let proj = spark_core::glam::camera::rh::proj::directx::perspective(
+        std::f32::consts::FRAC_PI_2,
+        1.0,
+        LIGHT_SHADOW_NEAR,
+        range.max(LIGHT_SHADOW_NEAR * 4.0),
+    );
     proj * spark_core::glam::camera::rh::view::look_to_mat4(position, dir, up)
 }
 
@@ -208,6 +208,7 @@ pub(crate) fn sun_view_proj(cam: &spark_core::Camera, sun_dir: Vec3, distance: f
 
 impl Renderer {
     /// Depth-only passes: the sun shadow map, then six faces per point / spot light cube (each draws that light's casters).
+    #[allow(clippy::too_many_arguments)] // too many arguments mirror the GPU API: each is a distinct wgpu resource; bundling them into a one-use struct would only move the list
     pub(crate) fn draw_shadow_passes(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -263,7 +264,9 @@ impl Renderer {
                     pass.set_pipeline(&self.light_shadow_pipeline);
                     pass.set_bind_group(0, &self.light_shadow_bind_group, &[(layer as u64 * self.light_shadow_stride) as u32]);
                     let bit = 1u8 << face;
-                    for (b, _) in light_batches.iter().zip(light_owner.iter().zip(light_faces)).filter(|(_, (o, f))| **o == k && **f & bit != 0) {
+                    for (b, _) in
+                        light_batches.iter().zip(light_owner.iter().zip(light_faces)).filter(|(_, (o, f))| **o == k && **f & bit != 0)
+                    {
                         pass.set_bind_group(1, &self.object_bind_group, &[b.offset]);
                         let mesh = self.meshes[b.mesh].as_ref().expect("uploaded mesh"); // candidates filtered to have uploaded meshes
                         pass.set_vertex_buffer(0, mesh.vertices.slice(..));

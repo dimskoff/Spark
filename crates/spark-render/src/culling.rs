@@ -1,8 +1,6 @@
 //! View frustum culling.
 
-use spark_core::{
-    Aabb, Mat4, Vec3, Vec4,
-};
+use spark_core::{Aabb, Mat4, Vec3, Vec4};
 
 /// Frustum planes (a, b, c, d) of a view-projection matrix (WebGPU depth 0..1, either direction), normals inward.
 pub(crate) fn frustum_planes(vp: &Mat4) -> [Vec4; 6] {

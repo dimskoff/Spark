@@ -54,7 +54,8 @@ impl Game for Hello {
             world.render = RenderSettings::default();
         }
         if world.input.pressed(Key::Num2) {
-            world.render = RenderSettings { height: Some(180), upscale: TextureFilter::Nearest, filter: TextureFilter::Nearest, ..Default::default() };
+            world.render =
+                RenderSettings { height: Some(180), upscale: TextureFilter::Nearest, filter: TextureFilter::Nearest, ..Default::default() };
         }
         if world.input.pressed(Key::Num3) {
             let shader = self.grayscale.expect("loaded in start");

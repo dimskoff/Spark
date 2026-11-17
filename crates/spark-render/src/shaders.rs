@@ -3,10 +3,7 @@
 use std::collections::HashMap;
 
 use spark_core::shader::MAX_PARAMS_SIZE;
-use spark_core::{
-    Assets, ShaderData,
-    ShaderKind, TextureId, Vertex,
-};
+use spark_core::{Assets, ShaderData, ShaderKind, TextureId, Vertex};
 
 use crate::consts::*;
 use crate::gpu_util::*;
@@ -28,7 +25,15 @@ impl Renderer {
                 }
             } else if self.shaders[i].textures != data.textures {
                 let s = &mut self.shaders[i];
-                s.resources = shader_resources(&self.device, &self.shader_layout, &self.texture_samplers, &self.white, &self.textures, &s.params, data.textures);
+                s.resources = shader_resources(
+                    &self.device,
+                    &self.shader_layout,
+                    &self.texture_samplers,
+                    &self.white,
+                    &self.textures,
+                    &s.params,
+                    data.textures,
+                );
                 s.textures = data.textures;
             }
             self.queue.write_buffer(&self.shaders[i].params, 0, &data.values);
@@ -181,6 +186,11 @@ pub(crate) fn ensure_pipeline(device: &wgpu::Device, layout: &wgpu::PipelineLayo
     } else {
         None
     };
+    // Opaque surfaces cut out pixels below 0.3 alpha (foliage, fences); blended ones only skip fully invisible pixels,
+    // so an alpha material at 0.2 is faint, not gone.
+    let cutoff = if transparent { 0.004 } else { 0.3 };
+    let fragment_constants: Vec<(&str, f64)> =
+        if s.kind == ShaderKind::Surface { vec![("SPARK_ALPHA_CUTOFF", cutoff)] } else { Vec::new() };
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let vertex_buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: size_of::<Vertex>() as u64,
@@ -218,7 +228,7 @@ pub(crate) fn ensure_pipeline(device: &wgpu::Device, layout: &wgpu::PipelineLayo
         fragment: Some(wgpu::FragmentState {
             module,
             entry_point: Some("spark_fs"),
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions { constants: &fragment_constants, ..Default::default() },
             targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })],
         }),
         multiview_mask: None,

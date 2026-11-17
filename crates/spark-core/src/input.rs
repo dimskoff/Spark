@@ -332,9 +332,7 @@ impl Input {
 
     /// Any key, mouse button or gamepad button went down this frame.
     pub fn any_pressed(&self) -> bool {
-        !self.pressed.is_empty()
-            || self.mouse_pressed.iter().any(|b| *b)
-            || self.pads.iter().any(|p| p.pressed.iter().any(|b| *b))
+        !self.pressed.is_empty() || self.mouse_pressed.iter().any(|b| *b) || self.pads.iter().any(|p| p.pressed.iter().any(|b| *b))
     }
 
     /// Gamepad by 1-based number; `None` = not connected.
@@ -421,11 +419,7 @@ impl Input {
     }
 
     fn take_edges(&mut self) -> Edges {
-        let pads = self
-            .pads
-            .iter_mut()
-            .map(|p| (p.id, std::mem::take(&mut p.pressed), std::mem::take(&mut p.released)))
-            .collect();
+        let pads = self.pads.iter_mut().map(|p| (p.id, std::mem::take(&mut p.pressed), std::mem::take(&mut p.released))).collect();
         Edges {
             pressed: std::mem::take(&mut self.pressed),
             released: std::mem::take(&mut self.released),

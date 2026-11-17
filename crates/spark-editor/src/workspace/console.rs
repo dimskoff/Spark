@@ -89,7 +89,11 @@ impl Console {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.search).hint_text(format!("{} {}", icon::SEARCH, t("console.filter"))).desired_width(200.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.search)
+                    .hint_text(format!("{} {}", icon::SEARCH, t("console.filter")))
+                    .desired_width(200.0),
+            );
             ui.separator();
             ui.toggle_value(&mut self.show_debug, t("console.debug"));
             ui.toggle_value(&mut self.show_info, t("console.info"));
@@ -129,11 +133,15 @@ impl Console {
                     let color = level_color(line.level, line.stream);
                     match &line.location {
                         Some(loc) => {
-                            let r = ui.add(egui::Label::new(RichText::new(&line.text).font(font.clone()).color(color).underline()).sense(egui::Sense::click()));
+                            let r = ui.add(
+                                egui::Label::new(RichText::new(&line.text).font(font.clone()).color(color).underline())
+                                    .sense(egui::Sense::click()),
+                            );
                             if r.clicked() {
                                 actions.push(Action::OpenAt(PathBuf::from(&loc.file), loc.line));
                             }
-                            r.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tf("console.open_at", &[("file", &loc.file), ("line", &loc.line)]));
+                            r.on_hover_cursor(egui::CursorIcon::PointingHand)
+                                .on_hover_text(tf("console.open_at", &[("file", &loc.file), ("line", &loc.line)]));
                         }
                         None => {
                             ui.label(RichText::new(&line.text).font(font.clone()).color(color));

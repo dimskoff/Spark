@@ -118,7 +118,11 @@ fn read_node(r: &mut Reader, wide: bool, depth: usize) -> Result<Option<Node>, S
     if depth > 64 {
         return Err("nodes are nested too deeply".into());
     }
-    let (end, nprops, plen) = if wide { (r.u64()? as usize, r.u64()? as usize, r.u64()? as usize) } else { (r.u32()? as usize, r.u32()? as usize, r.u32()? as usize) };
+    let (end, nprops, plen) = if wide {
+        (r.u64()? as usize, r.u64()? as usize, r.u64()? as usize)
+    } else {
+        (r.u32()? as usize, r.u32()? as usize, r.u32()? as usize)
+    };
     let name_len = r.u8()? as usize;
     if end == 0 && nprops == 0 && plen == 0 && name_len == 0 {
         return Ok(None);
@@ -163,10 +167,14 @@ fn read_node(r: &mut Reader, wide: bool, depth: usize) -> Result<Option<Node>, S
                     return Err("array is shorter than its count".into());
                 }
                 match t {
-                    b'f' => Prop::Floats(data.chunks_exact(4).take(count).map(|c| f32::from_le_bytes(c.try_into().unwrap()) as f64).collect()),
+                    b'f' => {
+                        Prop::Floats(data.chunks_exact(4).take(count).map(|c| f32::from_le_bytes(c.try_into().unwrap()) as f64).collect())
+                    }
                     b'd' => Prop::Floats(data.chunks_exact(8).take(count).map(|c| f64::from_le_bytes(c.try_into().unwrap())).collect()),
                     b'l' => Prop::Ints(data.chunks_exact(8).take(count).map(|c| i64::from_le_bytes(c.try_into().unwrap())).collect()),
-                    b'i' => Prop::Ints(data.chunks_exact(4).take(count).map(|c| i32::from_le_bytes(c.try_into().unwrap()) as i64).collect()),
+                    b'i' => {
+                        Prop::Ints(data.chunks_exact(4).take(count).map(|c| i32::from_le_bytes(c.try_into().unwrap()) as i64).collect())
+                    }
                     _ => Prop::Ints(data.iter().take(count).map(|&b| b as i64).collect()),
                 }
             }
@@ -207,7 +215,6 @@ fn parse(bytes: &[u8]) -> Result<(u32, Vec<Node>), String> {
     }
     Ok((version, roots))
 }
-
 
 // ----------------------------------------------------------------------------- ASCII parser
 
@@ -453,7 +460,6 @@ impl Layer {
     }
 }
 
-
 // ----------------------------------------------------------------------------- textures
 
 #[derive(Clone, Default)]
@@ -465,7 +471,10 @@ struct TextureSet {
     has_alpha: bool,
 }
 
-fn dir_files<'a>(dir: &Path, cache: &'a mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> &'a [(String, std::path::PathBuf)] {
+fn dir_files<'a>(
+    dir: &Path,
+    cache: &'a mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> &'a [(String, std::path::PathBuf)] {
     cache.entry(dir.to_path_buf()).or_insert_with(|| {
         let mut out = Vec::new();
         if let Ok(rd) = std::fs::read_dir(dir) {
@@ -486,8 +495,17 @@ fn norm_name(s: &str) -> String {
 
 /// Finds `file` (as written in the FBX, any directory) next to the model: same name ignoring case, spaces vs
 /// underscores and the image extension.
-fn locate_texture(dir: &Path, model: &Path, file: &str, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+fn locate_texture(
+    dir: &Path,
+    model: &Path,
+    file: &str,
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> Option<std::path::PathBuf> {
     let base = file.rsplit(['/', '\\']).next().unwrap_or(file);
+    // C:name.png joined to a folder is drive-relative on Windows: never leave the model's folder.
+    if base.is_empty() || base.contains([':', '\0']) || base == ".." {
+        return None;
+    }
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(base);
     let want = norm_name(stem);
     let model_stem = model.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -500,21 +518,29 @@ fn locate_texture(dir: &Path, model: &Path, file: &str, cache: &mut HashMap<std:
         }
         let files = dir_files(&d, cache);
         let image_ext = |n: &str| matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg"));
-        if let Some((_, p)) = files.iter().find(|(n, _)| image_ext(n) && norm_name(n.rsplit_once('.').map(|(s, _)| s).unwrap_or(n)) == want) {
+        if let Some((_, p)) = files.iter().find(|(n, _)| image_ext(n) && norm_name(n.rsplit_once('.').map(|(s, _)| s).unwrap_or(n)) == want)
+        {
             return Some(p.clone());
         }
     }
     None
 }
 
-const COLOR_SUFFIXES: &[&str] = &["_basecolor", "_base_color", "_albedo", "_diffusemap", "_diffuse", "_color_1k", "_color", "_rgba", "_col", "_d"];
+const COLOR_SUFFIXES: &[&str] =
+    &["_basecolor", "_base_color", "_albedo", "_diffusemap", "_diffuse", "_color_1k", "_color", "_rgba", "_col", "_d"];
 
-fn find_sibling(dir: &Path, prefix: &str, suffixes: &[&str], cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+fn find_sibling(
+    dir: &Path,
+    prefix: &str,
+    suffixes: &[&str],
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> Option<std::path::PathBuf> {
     let files = dir_files(dir, cache);
     for s in suffixes {
         let want = format!("{prefix}{s}");
         if let Some((_, p)) = files.iter().find(|(n, _)| {
-            matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg")) && norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n)) == want
+            matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg"))
+                && norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n)) == want
         }) {
             return Some(p.clone());
         }
@@ -524,9 +550,14 @@ fn find_sibling(dir: &Path, prefix: &str, suffixes: &[&str], cache: &mut HashMap
 
 /// Last resort for generic material names ("bark_mat", "cluster_mat_spring_ex"): a color texture whose name contains
 /// every meaningful word of the material name ("summer" preferred when several seasons match).
-fn find_by_tokens(dir: &Path, mat_name: &str, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+fn find_by_tokens(
+    dir: &Path,
+    mat_name: &str,
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> Option<std::path::PathBuf> {
     const SKIP: &[&str] = &["mat", "material", "ex", "tex", "default", "lod", "mtl", "shader", "m"];
-    let tokens: Vec<&str> = mat_name.split('_').filter(|w| w.len() > 1 && !SKIP.contains(w) && !w.chars().all(|c| c.is_ascii_digit())).collect();
+    let tokens: Vec<&str> =
+        mat_name.split('_').filter(|w| w.len() > 1 && !SKIP.contains(w) && !w.chars().all(|c| c.is_ascii_digit())).collect();
     if tokens.is_empty() {
         return None;
     }
@@ -539,10 +570,14 @@ fn find_by_tokens(dir: &Path, mat_name: &str, cache: &mut HashMap<std::path::Pat
         let stem = norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n));
         // the color suffix is optional here ("Cluster_Bare.png"); the file must share at least one word with the material
         let matched = tokens.iter().filter(|w| stem.contains(**w)).count() as i32;
-        if matched == 0 || stem.ends_with("_opacity") || stem.ends_with("_normal") || stem.ends_with("_ao") || stem.ends_with("_roughness") {
+        if matched == 0 || stem.ends_with("_opacity") || stem.ends_with("_normal") || stem.ends_with("_ao") || stem.ends_with("_roughness")
+        {
             continue;
         }
-        let score = matched * 10 + if COLOR_SUFFIXES.iter().any(|s| stem.ends_with(s)) { 3 } else { 0 } + if stem.contains("summer") { 2 } else { 0 } - (stem.len() as i32 / 64);
+        let score = matched * 10
+            + if COLOR_SUFFIXES.iter().any(|s| stem.ends_with(s)) { 3 } else { 0 }
+            + if stem.contains("summer") { 2 } else { 0 }
+            - (stem.len() as i32 / 64);
         if best.is_none_or(|(s, _)| score > s) {
             best = Some((score, p));
         }
@@ -566,7 +601,11 @@ fn load_plain_texture(path: &Path, assets: &mut Assets, cache: &mut HashMap<std:
 
 /// Base color (with an opacity map merged into alpha), normal map and a packed ORM map found next to the color
 /// texture by name: `<name>_AO`, `<name>_Roughness`, `<name>_Metallic`, `<name>_Opacity` / `_alfa` ...
-fn build_texture_set(color_path: &Path, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>, assets: &mut Assets) -> TextureSet {
+fn build_texture_set(
+    color_path: &Path,
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+    assets: &mut Assets,
+) -> TextureSet {
     let mut set = TextureSet::default();
     let Some(mut color) = read_image(color_path) else { return set };
     let dir = color_path.parent().unwrap_or(Path::new("."));
@@ -667,7 +706,16 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
         if let Some(gs) = top.iter().find(|n| n.name == "GlobalSettings") {
             let g = |k: &str| gs.property(k).and_then(|v| v.first().copied());
-            log::warn!("{name}: axes up={:?}/{:?} front={:?}/{:?} coord={:?}/{:?} unit={:?}", g("UpAxis"), g("UpAxisSign"), g("FrontAxis"), g("FrontAxisSign"), g("CoordAxis"), g("CoordAxisSign"), g("UnitScaleFactor"));
+            log::warn!(
+                "{name}: axes up={:?}/{:?} front={:?}/{:?} coord={:?}/{:?} unit={:?}",
+                g("UpAxis"),
+                g("UpAxisSign"),
+                g("FrontAxis"),
+                g("FrontAxisSign"),
+                g("CoordAxis"),
+                g("CoordAxisSign"),
+                g("UnitScaleFactor")
+            );
         }
     }
     let meters = (unit * 0.01) as f32;
@@ -697,7 +745,16 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 model_ids.push(id);
                 let tf = Transform::of(o);
                 if std::env::var_os("SPARK_FBX_DEBUG").is_some() && clean_name(o.text(1).unwrap_or("")) == "Bip01" {
-                    log::warn!("{name}: Bip01 props: t={:?} pre={:?} r={:?} post={:?} s={:?} order={} all={:?}", tf.t, tf.pre, tf.r, tf.post, tf.s, tf.order, o.child("Properties70").map(|p| p.all("P").map(|n| n.text(0).unwrap_or("").to_owned()).collect::<Vec<_>>()));
+                    log::warn!(
+                        "{name}: Bip01 props: t={:?} pre={:?} r={:?} post={:?} s={:?} order={} all={:?}",
+                        tf.t,
+                        tf.pre,
+                        tf.r,
+                        tf.post,
+                        tf.s,
+                        tf.order,
+                        o.child("Properties70").map(|p| p.all("P").map(|n| n.text(0).unwrap_or("").to_owned()).collect::<Vec<_>>())
+                    );
                 }
                 model.nodes.push(ModelNode {
                     name: clean_name(o.text(1).unwrap_or("node")),
@@ -714,7 +771,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     }
     for &id in &model_ids {
         let ni = node_of[&id];
-        let parent = conns.iter().find(|c| c.src == id && c.kind == "OO" && node_of.contains_key(&c.dst)).map(|c| node_of[&c.dst]).unwrap_or(0);
+        let parent =
+            conns.iter().find(|c| c.src == id && c.kind == "OO" && node_of.contains_key(&c.dst)).map(|c| node_of[&c.dst]).unwrap_or(0);
         model.nodes[ni].parent = Some(parent);
     }
     for i in 1..model.nodes.len() {
@@ -725,7 +783,14 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
         for &c in &model.nodes[0].children.clone() {
             let n = &model.nodes[c];
-            log::warn!("{name}: top node {} t={:?} r={:?} s={:?} children={}", n.name, n.translation, n.rotation.to_euler(glam::EulerRot::XYZ), n.scale, n.children.len());
+            log::warn!(
+                "{name}: top node {} t={:?} r={:?} s={:?} children={}",
+                n.name,
+                n.translation,
+                n.rotation.to_euler(glam::EulerRot::XYZ),
+                n.scale,
+                n.children.len()
+            );
         }
     }
 
@@ -736,7 +801,13 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
 
     let texture_file = |tex_id: i64| -> Option<String> {
         let t = objects.get(&tex_id)?;
-        let f = |n: &Node| n.child("RelativeFilename").and_then(|c| c.text(0)).filter(|s| !s.is_empty()).or_else(|| n.child("FileName").and_then(|c| c.text(0)).filter(|s| !s.is_empty())).map(str::to_owned);
+        let f = |n: &Node| {
+            n.child("RelativeFilename")
+                .and_then(|c| c.text(0))
+                .filter(|s| !s.is_empty())
+                .or_else(|| n.child("FileName").and_then(|c| c.text(0)).filter(|s| !s.is_empty()))
+                .map(str::to_owned)
+        };
         f(t).or_else(|| {
             conns.iter().filter(|c| c.dst == tex_id).filter_map(|c| objects.get(&c.src)).find(|o| o.name == "Video").and_then(|v| f(v))
         })
@@ -787,7 +858,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                     m.normal_map = load_plain_texture(&path_found, assets, &mut tex_cache);
                 }
             } else if (lp.contains("diffuse") || lp.contains("base") || lp == "color") && m.texture.is_none() {
-                let set = set_cache.entry(path_found.clone()).or_insert_with(|| build_texture_set(&path_found, &mut dir_cache, assets)).clone();
+                let set =
+                    set_cache.entry(path_found.clone()).or_insert_with(|| build_texture_set(&path_found, &mut dir_cache, assets)).clone();
                 m.texture = set.color;
                 if m.texture.is_some() {
                     m.color = Color::rgba(1.0, 1.0, 1.0, m.color.a);
@@ -816,7 +888,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
             if !mat_name.is_empty() {
                 let mut suffixes: Vec<&str> = vec![""];
                 suffixes.extend_from_slice(COLOR_SUFFIXES);
-                let found = find_sibling(dir, &mat_name, &suffixes, &mut dir_cache).or_else(|| find_by_tokens(dir, &mat_name, &mut dir_cache));
+                let found =
+                    find_sibling(dir, &mat_name, &suffixes, &mut dir_cache).or_else(|| find_by_tokens(dir, &mat_name, &mut dir_cache));
                 if let Some(p) = found {
                     let set = set_cache.entry(p.clone()).or_insert_with(|| build_texture_set(&p, &mut dir_cache, assets)).clone();
                     m.texture = set.color;
@@ -878,9 +951,17 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     let mut skin_of_node: HashMap<usize, usize> = HashMap::new();
     for &mid in &model_ids {
         let ni = node_of[&mid];
-        let Some(geo_conn) = conns.iter().find(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Geometry").unwrap_or(false)) else { continue };
+        let Some(geo_conn) =
+            conns.iter().find(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Geometry").unwrap_or(false))
+        else {
+            continue;
+        };
         let geo = objects[&geo_conn.src];
-        let mats: Vec<i64> = conns.iter().filter(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Material").unwrap_or(false)).map(|c| c.src).collect();
+        let mats: Vec<i64> = conns
+            .iter()
+            .filter(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Material").unwrap_or(false))
+            .map(|c| c.src)
+            .collect();
         let verts = geo.child("Vertices").map(|n| n.floats()).unwrap_or_default();
         let pvi = geo.child("PolygonVertexIndex").map(|n| n.ints()).unwrap_or_default();
         if verts.len() < 9 || pvi.len() < 3 {
@@ -918,7 +999,13 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 let mut worst_name = String::new();
                 for c in cl {
                     let global = root_inv * model.node_matrix(c.bone_node);
-                    let d = (global.to_cols_array().iter().zip(c.link.to_cols_array().iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max)) / c.link.col(3).truncate().length().max(1.0);
+                    let d = (global
+                        .to_cols_array()
+                        .iter()
+                        .zip(c.link.to_cols_array().iter())
+                        .map(|(a, b)| (a - b).abs())
+                        .fold(0.0f32, f32::max))
+                        / c.link.col(3).truncate().length().max(1.0);
                     if d > worst {
                         worst = d;
                         worst_name = model.nodes[c.bone_node].name.clone();
@@ -932,10 +1019,22 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         let mut cur = Some(c.bone_node);
                         while let Some(i) = cur {
                             let m = &model.nodes[i];
-                            chain.push(format!("{} t={:?} r={:?} s={:?}", m.name, m.translation, m.rotation.to_euler(glam::EulerRot::XYZ), m.scale));
+                            chain.push(format!(
+                                "{} t={:?} r={:?} s={:?}",
+                                m.name,
+                                m.translation,
+                                m.rotation.to_euler(glam::EulerRot::XYZ),
+                                m.scale
+                            ));
                             cur = m.parent;
                         }
-                        log::warn!("  bone {} link={:?}\n    global={:?}\n    chain: {}", n.name, c.link.to_cols_array(), (root_inv * model.node_matrix(c.bone_node)).to_cols_array(), chain.join(" <- "));
+                        log::warn!(
+                            "  bone {} link={:?}\n    global={:?}\n    chain: {}",
+                            n.name,
+                            c.link.to_cols_array(),
+                            (root_inv * model.node_matrix(c.bone_node)).to_cols_array(),
+                            chain.join(" <- ")
+                        );
                     }
                 }
             }
@@ -976,7 +1075,12 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 } else {
                     mi
                 };
-                let g = groups.entry(mi).or_insert_with(|| Group { vertices: Vec::new(), cps: Vec::new(), indices: Vec::new(), lookup: HashMap::new() });
+                let g = groups.entry(mi).or_insert_with(|| Group {
+                    vertices: Vec::new(),
+                    cps: Vec::new(),
+                    indices: Vec::new(),
+                    lookup: HashMap::new(),
+                });
                 let mut ids = Vec::with_capacity(poly.len());
                 for &(cp, pvi_) in &poly {
                     let ni_ = normals.as_ref().map(|l| l.slot(pvi_, cp, poly_index)).unwrap_or(usize::MAX);
@@ -985,14 +1089,17 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                     let id = *g.lookup.entry(key).or_insert_with(|| {
                         let p = Vec3::new(verts[cp * 3] as f32, verts[cp * 3 + 1] as f32, verts[cp * 3 + 2] as f32);
                         let nrm = match &normals {
-                            Some(l) if l.values.len() >= (ni_ + 1) * 3 => Vec3::new(l.values[ni_ * 3] as f32, l.values[ni_ * 3 + 1] as f32, l.values[ni_ * 3 + 2] as f32),
+                            Some(l) if l.values.len() >= (ni_ + 1) * 3 => {
+                                Vec3::new(l.values[ni_ * 3] as f32, l.values[ni_ * 3 + 1] as f32, l.values[ni_ * 3 + 2] as f32)
+                            }
                             _ => Vec3::ZERO,
                         };
                         let uv = match &uvs {
                             Some(l) if l.values.len() >= (ui_ + 1) * 2 => [l.values[ui_ * 2] as f32, 1.0 - l.values[ui_ * 2 + 1] as f32],
                             _ => [0.0, 0.0],
                         };
-                        let (p, nrm) = if skin_index.is_some() { (bake.transform_point3(p), normal_bake.transform_vector3(nrm)) } else { (p, nrm) };
+                        let (p, nrm) =
+                            if skin_index.is_some() { (bake.transform_point3(p), normal_bake.transform_vector3(nrm)) } else { (p, nrm) };
                         g.vertices.push(Vertex { position: p.to_array(), normal: nrm.normalize_or_zero().to_array(), uv });
                         g.cps.push(cp);
                         (g.vertices.len() - 1) as u32
@@ -1034,7 +1141,11 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         w[k] = wt;
                     }
                     let s: f32 = w.iter().sum();
-                    if s > 0.0 { w = w.map(|x| x / s) } else { w = [1.0, 0.0, 0.0, 0.0] }
+                    if s > 0.0 {
+                        w = w.map(|x| x / s)
+                    } else {
+                        w = [1.0, 0.0, 0.0, 0.0]
+                    }
                     joints.push(j);
                     weights.push(w);
                 }
@@ -1044,7 +1155,15 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
             };
             let material = build_material(mats.get(mi).copied(), assets);
             if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
-                log::warn!("{name}: mesh {} verts={} tex={} normal={} orm={} color={:?}", model.nodes[ni].name, g.vertices.len(), material.texture.is_some(), material.normal_map.is_some(), material.orm_map.is_some(), material.color);
+                log::warn!(
+                    "{name}: mesh {} verts={} tex={} normal={} orm={} color={:?}",
+                    model.nodes[ni].name,
+                    g.vertices.len(),
+                    material.texture.is_some(),
+                    material.normal_map.is_some(),
+                    material.orm_map.is_some(),
+                    material.color
+                );
             }
             let mesh: MeshId = assets.add_mesh(MeshData::new(g.vertices, g.indices));
             prims.push(Primitive { mesh, material, skin });
@@ -1074,7 +1193,9 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         for layer in layers {
             for cn in children_of(layer, "AnimationCurveNode") {
                 let cn_id = cn.src;
-                let Some(target) = conns.iter().find(|c| c.src == cn_id && c.kind == "OP" && node_of.contains_key(&c.dst)) else { continue };
+                let Some(target) = conns.iter().find(|c| c.src == cn_id && c.kind == "OP" && node_of.contains_key(&c.dst)) else {
+                    continue;
+                };
                 let node = node_of[&target.dst];
                 let prop_name = target.prop.clone().unwrap_or_default();
                 let property = match prop_name.as_str() {
@@ -1093,7 +1214,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         Some("d|Z") => 2,
                         _ => continue,
                     };
-                    let times: Vec<f64> = curve.child("KeyTime").map(|n| n.ints().iter().map(|&t| t as f64 / TICKS).collect()).unwrap_or_default();
+                    let times: Vec<f64> =
+                        curve.child("KeyTime").map(|n| n.ints().iter().map(|&t| t as f64 / TICKS).collect()).unwrap_or_default();
                     let vals = curve.child("KeyValueFloat").map(|n| n.floats()).unwrap_or_default();
                     if !times.is_empty() && times.len() == vals.len() {
                         axes[axis] = Some((times, vals));
@@ -1147,7 +1269,13 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 }
                 let end = *times.last().unwrap() as f32;
                 clip.duration = clip.duration.max(end);
-                clip.channels.push(Channel { node, property, interpolation: Interpolation::Linear, times: times.iter().map(|&t| t as f32).collect(), values });
+                clip.channels.push(Channel {
+                    node,
+                    property,
+                    interpolation: Interpolation::Linear,
+                    times: times.iter().map(|&t| t as f32).collect(),
+                    values,
+                });
             }
         }
         if !clip.channels.is_empty() {

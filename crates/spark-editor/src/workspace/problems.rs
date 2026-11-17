@@ -57,12 +57,15 @@ impl Problems {
         self.items.retain(|p| p.source != Source::Runtime);
         if let Some(msg) = message {
             let loc = find_location(msg);
-            self.items.insert(0, Problem {
-                source: Source::Runtime,
-                file: loc.as_ref().map(|l| l.file.clone()),
-                line: loc.map(|l| l.line),
-                message: msg.to_string(),
-            });
+            self.items.insert(
+                0,
+                Problem {
+                    source: Source::Runtime,
+                    file: loc.as_ref().map(|l| l.file.clone()),
+                    line: loc.map(|l| l.line),
+                    message: msg.to_string(),
+                },
+            );
         }
     }
 
@@ -78,7 +81,10 @@ impl Problems {
                 let (color, text) = if ok {
                     (theme::OK, tf("problems.check_ok", &[("frames", &frames), ("objects", &objects)]))
                 } else {
-                    (theme::ERROR, tf("problems.check_failed", &[("count", &self.items.iter().filter(|p| p.source == Source::Check).count())]))
+                    (
+                        theme::ERROR,
+                        tf("problems.check_failed", &[("count", &self.items.iter().filter(|p| p.source == Source::Check).count())]),
+                    )
                 };
                 ui.label(RichText::new(text).color(color));
             }

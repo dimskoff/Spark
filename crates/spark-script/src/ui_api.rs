@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use mlua::{Lua, Value};
 use spark_core::{Rect, Vec2};
 
-use crate::convert::{rt, to_color, with, LuaResult};
+use crate::convert::{LuaResult, Num, ONum, rt, to_color, with};
 
 /// Widget ids: any string or integer that stays the same between frames.
 fn widget_id(v: &Value, what: &str) -> LuaResult<u64> {
@@ -23,7 +23,12 @@ fn widget_id(v: &Value, what: &str) -> LuaResult<u64> {
         Value::String(s) => s.as_bytes().hash(&mut h),
         Value::Integer(i) => i.hash(&mut h),
         Value::Number(n) if n.fract() == 0.0 => (*n as i64).hash(&mut h),
-        _ => return Err(rt(format!("{what}: the first argument is the widget id (a string or an integer that stays the same every frame), got {}", v.type_name()))),
+        _ => {
+            return Err(rt(format!(
+                "{what}: the first argument is the widget id (a string or an integer that stays the same every frame), got {}",
+                v.type_name()
+            )));
+        }
     }
     Ok(h.finish())
 }
@@ -37,7 +42,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
 
     ui.set(
         "panel",
-        lua.create_function(|lua, (x, y, width, height, bg, border): (f32, f32, f32, f32, Value, Value)| {
+        lua.create_function(|lua, (Num(x), Num(y), Num(width), Num(height), bg, border): (Num, Num, Num, Num, Value, Value)| {
             with(lua, |w| {
                 let bg = color_or(&bg, w.ui.style.panel, "ui.panel color")?;
                 let border = if border.is_nil() { None } else { Some((1.0, to_color(&border, "ui.panel border")?)) };
@@ -48,7 +53,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
 
     ui.set(
         "button",
-        lua.create_function(|lua, (id, x, y, width, height, text): (Value, f32, f32, f32, f32, String)| {
+        lua.create_function(|lua, (id, Num(x), Num(y), Num(width), Num(height), text): (Value, Num, Num, Num, Num, String)| {
             let id = widget_id(&id, "ui.button")?;
             with(lua, |w| Ok(w.ui.button(&mut w.canvas, id, Rect::new(x, y, width, height), &text)))
         })?,
@@ -56,7 +61,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
 
     ui.set(
         "label",
-        lua.create_function(|lua, (x, y, text, size, color): (f32, f32, String, Option<f32>, Value)| {
+        lua.create_function(|lua, (Num(x), Num(y), text, ONum(size), color): (Num, Num, String, ONum, Value)| {
             with(lua, |w| {
                 let color = color_or(&color, w.ui.style.text, "ui.label color")?;
                 w.ui.label(&mut w.canvas, Vec2::new(x, y), &text, size.unwrap_or(16.0), color);
@@ -67,7 +72,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
 
     ui.set(
         "image",
-        lua.create_function(|lua, (x, y, width, height, texture): (f32, f32, f32, f32, Value)| {
+        lua.create_function(|lua, (Num(x), Num(y), Num(width), Num(height), texture): (Num, Num, Num, Num, Value)| {
             with(lua, |w| {
                 let tex = crate::draw::texture_of(w, &texture, "ui.image")?;
                 w.ui.image(&mut w.canvas, Rect::new(x, y, width, height), tex);
@@ -79,7 +84,17 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
     ui.set(
         "slider",
         lua.create_function(
-            |lua, (id, x, y, width, height, value, min, max): (Value, f32, f32, f32, f32, f32, Option<f32>, Option<f32>)| {
+            |lua,
+             (id, Num(x), Num(y), Num(width), Num(height), Num(value), ONum(min), ONum(max)): (
+                Value,
+                Num,
+                Num,
+                Num,
+                Num,
+                Num,
+                ONum,
+                ONum,
+            )| {
                 let id = widget_id(&id, "ui.slider")?;
                 let (min, max) = (min.unwrap_or(0.0), max.unwrap_or(1.0));
                 with(lua, |w| Ok(w.ui.slider(&mut w.canvas, id, Rect::new(x, y, width, height), value, min, max).unwrap_or(value)))
@@ -89,7 +104,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
 
     ui.set(
         "checkbox",
-        lua.create_function(|lua, (id, x, y, size, checked): (Value, f32, f32, f32, bool)| {
+        lua.create_function(|lua, (id, Num(x), Num(y), Num(size), checked): (Value, Num, Num, Num, bool)| {
             let id = widget_id(&id, "ui.checkbox")?;
             with(lua, |w| Ok(w.ui.checkbox(&mut w.canvas, id, Rect::new(x, y, size, size), checked).unwrap_or(checked)))
         })?,
@@ -97,7 +112,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
 
     ui.set(
         "progress",
-        lua.create_function(|lua, (x, y, width, height, progress, color): (f32, f32, f32, f32, f32, Value)| {
+        lua.create_function(|lua, (Num(x), Num(y), Num(width), Num(height), Num(progress), color): (Num, Num, Num, Num, Num, Value)| {
             with(lua, |w| {
                 let color = color_or(&color, w.ui.style.fill, "ui.progress color")?;
                 w.ui.progress(&mut w.canvas, Rect::new(x, y, width, height), progress, color);

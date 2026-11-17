@@ -24,6 +24,7 @@ spark-script = { path = "crates/spark-script" }
 spark-discord = { path = "crates/spark-discord" }
 spark-devtools = { path = "crates/spark-devtools" }
 spark-project = { path = "crates/spark-project" }
+spark-api = { path = "crates/spark-api" }
 
 glam = { version = "0.34", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }

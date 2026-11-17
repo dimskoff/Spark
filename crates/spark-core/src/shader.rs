@@ -52,6 +52,7 @@ pub enum ParamType {
 
 impl ParamType {
     /// Number of components.
+    #[allow(clippy::len_without_is_empty)] // a parameter type is never empty; len is the component count
     pub fn len(self) -> usize {
         match self {
             Self::F32 | Self::I32 | Self::U32 => 1,
@@ -185,10 +186,7 @@ fn defines_fn(code: &str, name: &str) -> bool {
 
 fn defines_struct(code: &str, name: &str) -> bool {
     let code = strip_comments(code);
-    code.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-        .collect::<Vec<_>>()
-        .windows(2)
-        .any(|w| w[0] == "struct" && w[1] == name)
+    code.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).collect::<Vec<_>>().windows(2).any(|w| w[0] == "struct" && w[1] == name)
         || code.contains(&format!("struct {name}{{"))
 }
 
@@ -309,11 +307,11 @@ impl ShaderData {
             v[i] = *x;
         }
         let at = p.offset as usize;
-        for i in 0..n {
+        for (i, x) in v.iter().take(n).enumerate() {
             let bytes = match p.ty {
-                ParamType::I32 => (v[i] as i32).to_le_bytes(),
-                ParamType::U32 => (v[i].max(0.0) as u32).to_le_bytes(),
-                _ => v[i].to_le_bytes(),
+                ParamType::I32 => (*x as i32).to_le_bytes(),
+                ParamType::U32 => (x.max(0.0) as u32).to_le_bytes(),
+                _ => x.to_le_bytes(),
             };
             self.values[at + i * 4..at + i * 4 + 4].copy_from_slice(&bytes);
         }
@@ -341,7 +339,7 @@ impl ShaderData {
 
 /// Compiler messages use box-drawing characters; game fonts may not have them.
 fn ascii(msg: String) -> String {
-    msg.replace("┌─", "-->").replace('│', "|").replace('─', "-").replace('·', "-").trim_end().to_string()
+    msg.replace("┌─", "-->").replace('│', "|").replace(['─', '·'], "-").trim_end().to_string()
 }
 
 /// Fields of `struct Params` (if the game declared one) and the uniform size.
@@ -443,8 +441,16 @@ pub enum PostFxKind {
 impl PostFxKind {
     pub const COUNT: usize = 10;
     pub const ALL: [Self; 10] = [
-        Self::Tonemap, Self::Bloom, Self::Ssao, Self::MotionBlur, Self::Dof,
-        Self::ColorGrade, Self::Fxaa, Self::ChromaticAberration, Self::FilmGrain, Self::Vignette,
+        Self::Tonemap,
+        Self::Bloom,
+        Self::Ssao,
+        Self::MotionBlur,
+        Self::Dof,
+        Self::ColorGrade,
+        Self::Fxaa,
+        Self::ChromaticAberration,
+        Self::FilmGrain,
+        Self::Vignette,
     ];
 
     pub fn shader_source(self) -> &'static str {
@@ -494,7 +500,8 @@ mod tests {
 
     #[test]
     fn post_with_depth_and_errors_point_at_user_lines() {
-        let ok = "fn post(p: PostInput) -> vec4<f32> {\n  let d = linear_depth(p.uv);\n  return vec4<f32>(input_color(p.uv).rgb / d, 1.0);\n}\n";
+        let ok =
+            "fn post(p: PostInput) -> vec4<f32> {\n  let d = linear_depth(p.uv);\n  return vec4<f32>(input_color(p.uv).rgb / d, 1.0);\n}\n";
         assert_eq!(ShaderData::compile("fog.wgsl", ok).unwrap().kind, ShaderKind::Post);
         let bad = "fn post(p: PostInput) -> vec4<f32> {\n  return input_color(p.uv) * oops;\n}\n";
         let err = ShaderData::compile("bad.wgsl", bad).unwrap_err();

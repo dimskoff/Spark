@@ -90,12 +90,28 @@ pub enum Tab {
 }
 
 enum Dialog {
-    NewFile { dir: PathBuf, name: String, error: Option<String> },
-    NewFolder { dir: PathBuf, name: String, error: Option<String> },
-    Rename { path: PathBuf, name: String, error: Option<String> },
-    Delete { path: PathBuf },
+    NewFile {
+        dir: PathBuf,
+        name: String,
+        error: Option<String>,
+    },
+    NewFolder {
+        dir: PathBuf,
+        name: String,
+        error: Option<String>,
+    },
+    Rename {
+        path: PathBuf,
+        name: String,
+        error: Option<String>,
+    },
+    Delete {
+        path: PathBuf,
+    },
     /// Closing a document with unsaved changes.
-    CloseUnsaved { path: PathBuf },
+    CloseUnsaved {
+        path: PathBuf,
+    },
     /// Leaving the project with unsaved documents.
     CloseProject,
     Settings,
@@ -230,15 +246,24 @@ impl Workspace {
         let mut actions = Vec::new();
         self.shortcuts(ui, &mut actions);
 
-        egui::Panel::top("ws-menu").frame(egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(6, 2))).show(ui, |ui| {
-            self.menu_bar(ui, &mut actions);
-        });
-        egui::Panel::top("ws-toolbar").frame(egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(8, 4))).show(ui, |ui| {
-            self.toolbar(ui, &mut actions);
-        });
-        egui::Panel::bottom("ws-status").frame(egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(8, 3))).show(ui, |ui| {
-            self.status_bar(ui);
-        });
+        egui::Panel::top("ws-menu").frame(egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(6, 2))).show(
+            ui,
+            |ui| {
+                self.menu_bar(ui, &mut actions);
+            },
+        );
+        egui::Panel::top("ws-toolbar").frame(egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(8, 4))).show(
+            ui,
+            |ui| {
+                self.toolbar(ui, &mut actions);
+            },
+        );
+        egui::Panel::bottom("ws-status").frame(egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(8, 3))).show(
+            ui,
+            |ui| {
+                self.status_bar(ui);
+            },
+        );
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
             self.dock_ui(ui, settings, &mut actions);
         });
@@ -279,7 +304,9 @@ impl Workspace {
                     }
                 }
                 SessionEvent::GameExited => self.problems.set_runtime(None),
-                SessionEvent::BuildDone(true) => toasts.success(tf("game.build_ok_path", &[("path", &self.project.root.join("dist").display())])),
+                SessionEvent::BuildDone(true) => {
+                    toasts.success(tf("game.build_ok_path", &[("path", &self.project.root.join("dist").display())]))
+                }
                 SessionEvent::BuildDone(false) => {
                     toasts.error(t("game.build_failed_toast"));
                     self.show_tab(Tab::Console);
@@ -490,11 +517,19 @@ impl Workspace {
             }
             ui.separator();
             let checking = self.game.is_checking();
-            if ui.add_enabled(!checking, egui::Button::new(format!("{} {}", icon::CHECK, t("game.check")))).on_hover_text(format!("{} (F8)", t("game.check_hint"))).clicked() {
+            if ui
+                .add_enabled(!checking, egui::Button::new(format!("{} {}", icon::CHECK, t("game.check"))))
+                .on_hover_text(format!("{} (F8)", t("game.check_hint")))
+                .clicked()
+            {
                 actions.push(Action::Check);
             }
             let building = self.game.is_building();
-            if ui.add_enabled(!building, egui::Button::new(format!("{} {}", icon::BUILD, t("game.build")))).on_hover_text(t("game.build_hint")).clicked() {
+            if ui
+                .add_enabled(!building, egui::Button::new(format!("{} {}", icon::BUILD, t("game.build"))))
+                .on_hover_text(t("game.build_hint"))
+                .clicked()
+            {
                 actions.push(Action::Build);
             }
             if checking || building {
@@ -509,7 +544,11 @@ impl Workspace {
                     Some(fps) if running => format!("{} {label} · {fps:.0} FPS", icon::DOT),
                     _ => format!("{} {label}", icon::DOT),
                 };
-                if ui.add(egui::Label::new(RichText::new(text).color(color)).sense(egui::Sense::click())).on_hover_text(t("tab.debug")).clicked() {
+                if ui
+                    .add(egui::Label::new(RichText::new(text).color(color)).sense(egui::Sense::click()))
+                    .on_hover_text(t("tab.debug"))
+                    .clicked()
+                {
                     actions.push(Action::ShowTab(Tab::Debug));
                 }
             });
@@ -523,7 +562,11 @@ impl Workspace {
             let (warnings, errors) = self.console.counts();
             let problems = self.problems.count();
             if problems > 0 {
-                ui.label(RichText::new(format!("{} {}", icon::ERROR, tf("status.problems", &[("count", &problems)]))).small().color(theme::ERROR));
+                ui.label(
+                    RichText::new(format!("{} {}", icon::ERROR, tf("status.problems", &[("count", &problems)])))
+                        .small()
+                        .color(theme::ERROR),
+                );
             }
             if warnings + errors > 0 {
                 ui.label(RichText::new(tf("status.log", &[("warnings", &warnings), ("errors", &errors)])).small().color(theme::TEXT_DIM));
@@ -532,7 +575,11 @@ impl Workspace {
                 if let Some(doc) = self.active_doc.as_deref().and_then(|p| self.docs.get(p)) {
                     ui.label(RichText::new(doc.lang.name()).small().color(theme::TEXT_DIM));
                     ui.label(RichText::new("UTF-8").small().color(theme::TEXT_DIM));
-                    ui.label(RichText::new(tf("status.cursor", &[("line", &doc.cursor.0), ("col", &doc.cursor.1)])).small().color(theme::TEXT_DIM));
+                    ui.label(
+                        RichText::new(tf("status.cursor", &[("line", &doc.cursor.0), ("col", &doc.cursor.1)]))
+                            .small()
+                            .color(theme::TEXT_DIM),
+                    );
                     if doc.is_dirty() {
                         ui.label(RichText::new(t("status.unsaved")).small().color(theme::WARN));
                     }
@@ -595,14 +642,21 @@ impl Workspace {
         }
         // The active document was closed by its tab button.
         if let Some(p) = &self.active_doc
-            && self.docs.get(p).is_none() {
-                self.active_doc = self.dock.iter_all_tabs().find_map(|(_, t)| if let Tab::Doc(p) = t { Some(p.clone()) } else { None });
-            }
+            && self.docs.get(p).is_none()
+        {
+            self.active_doc = self.dock.iter_all_tabs().find_map(|(_, t)| if let Tab::Doc(p) = t { Some(p.clone()) } else { None });
+        }
     }
 
     // ------------------------------------------------------------------ dialogs
 
-    fn dialogs(&mut self, ctx: &egui::Context, settings: &mut Settings, toasts: &mut Toasts, actions: &mut Vec<Action>) -> Option<AppAction> {
+    fn dialogs(
+        &mut self,
+        ctx: &egui::Context,
+        settings: &mut Settings,
+        toasts: &mut Toasts,
+        actions: &mut Vec<Action>,
+    ) -> Option<AppAction> {
         let is_file = matches!(self.dialog, Some(Dialog::NewFile { .. }));
         let dialog = self.dialog.as_mut()?;
         let mut close = false;
@@ -614,7 +668,9 @@ impl Workspace {
                 Dialog::NewFile { dir, name, error } | Dialog::NewFolder { dir, name, error } => {
                     ui.heading(if is_file { t("dialog.new_file") } else { t("dialog.new_folder") });
                     let rel = dir.strip_prefix(&self.project.root).unwrap_or(dir);
-                    ui.label(RichText::new(tf("dialog.in_folder", &[("path", &format!("/{}", rel.display()))])).small().color(theme::TEXT_DIM));
+                    ui.label(
+                        RichText::new(tf("dialog.in_folder", &[("path", &format!("/{}", rel.display()))])).small().color(theme::TEXT_DIM),
+                    );
                     ui.add_space(6.0);
                     let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
                     if focus {
@@ -695,7 +751,8 @@ impl Workspace {
                     if ok {
                         match trash::delete(&*path) {
                             Ok(()) => {
-                                let mut gone: Vec<PathBuf> = self.docs.iter().map(|d| d.path.clone()).filter(|p| p.starts_with(&*path)).collect();
+                                let mut gone: Vec<PathBuf> =
+                                    self.docs.iter().map(|d| d.path.clone()).filter(|p| p.starts_with(&*path)).collect();
                                 gone.extend(self.dock.iter_all_tabs().filter_map(|(_, t)| match t {
                                     Tab::Asset(p) if p.starts_with(&*path) => Some(p.clone()),
                                     _ => None,
@@ -855,7 +912,8 @@ impl Workspace {
             }
             Action::ShowTab(tab) => self.show_tab(tab),
             Action::ResetLayout => {
-                let open: Vec<Tab> = self.dock.iter_all_tabs().filter(|(_, t)| matches!(t, Tab::Doc(_) | Tab::Asset(_))).map(|(_, t)| t.clone()).collect();
+                let open: Vec<Tab> =
+                    self.dock.iter_all_tabs().filter(|(_, t)| matches!(t, Tab::Doc(_) | Tab::Asset(_))).map(|(_, t)| t.clone()).collect();
                 self.dock = default_layout();
                 self.dock_lang = None;
                 for tab in open {

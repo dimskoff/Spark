@@ -48,8 +48,14 @@ pub enum Shape {
     Box(Vec3),
     Sphere(f32),
     /// Capsule along Y. `height` is the total height including the caps.
-    Capsule { radius: f32, height: f32 },
-    Cylinder { radius: f32, height: f32 },
+    Capsule {
+        radius: f32,
+        height: f32,
+    },
+    Cylinder {
+        radius: f32,
+        height: f32,
+    },
 }
 
 /// A rigid body attached to an object (`Object::body`).

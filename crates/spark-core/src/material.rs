@@ -232,10 +232,7 @@ mod tests {
 
     #[test]
     fn material_builder_chain() {
-        let m = Material::color(Color::RED)
-            .with_blend(BlendMode::Additive)
-            .with_double_sided(true)
-            .with_tiling(2.0, 3.0);
+        let m = Material::color(Color::RED).with_blend(BlendMode::Additive).with_double_sided(true).with_tiling(2.0, 3.0);
         assert_eq!(m.blend, BlendMode::Additive);
         assert!(m.double_sided);
         assert_eq!(m.tiling, Vec2::new(2.0, 3.0));

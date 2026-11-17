@@ -17,7 +17,10 @@ use crate::workspace::Workspace;
 pub enum AppAction {
     OpenProject(PathBuf),
     /// New game from the template in `dir` (created), then open it.
-    CreateProject { dir: PathBuf, title: String },
+    CreateProject {
+        dir: PathBuf,
+        title: String,
+    },
     CloseProject,
     /// Language / scale / ... changed: apply and save.
     SettingsChanged,
@@ -129,10 +132,11 @@ impl EditorApp {
             return;
         }
         if let Screen::Workspace(ws) = &self.screen
-            && ws.has_unsaved() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.confirm_quit = true;
-            }
+            && ws.has_unsaved()
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.confirm_quit = true;
+        }
     }
 
     fn quit_dialog(&mut self, ctx: &egui::Context) {
@@ -159,9 +163,10 @@ impl EditorApp {
         });
         if let Some(save) = choice {
             if let Screen::Workspace(ws) = &mut self.screen
-                && save {
-                    ws.save_all(&mut self.toasts);
-                }
+                && save
+            {
+                ws.save_all(&mut self.toasts);
+            }
             self.confirm_quit = false;
             self.quit_confirmed = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);

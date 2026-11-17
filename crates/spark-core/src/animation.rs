@@ -289,13 +289,7 @@ pub fn is_playing(world: &World, root: ObjectId, clip: Option<&str>) -> bool {
 
 /// Playback time (seconds) of the current clip.
 pub fn time(world: &World, root: ObjectId) -> f32 {
-    world
-        .animator
-        .instances
-        .get(&root)
-        .and_then(|i| i.tracks.iter().rev().find(|t| t.target > 0.0))
-        .map(|t| t.time)
-        .unwrap_or(0.0)
+    world.animator.instances.get(&root).and_then(|i| i.tracks.iter().rev().find(|t| t.target > 0.0)).map(|t| t.time).unwrap_or(0.0)
 }
 
 /// Advances all instances, poses their node objects and deforms skinned meshes.

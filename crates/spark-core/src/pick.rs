@@ -67,7 +67,7 @@ impl World {
     /// `ignore` skips that object and all its children (e.g. the player's own model).
     pub fn pick(&self, origin: Vec3, dir: Vec3, max: f32, ignore: Option<ObjectId>) -> Option<PickHit> {
         let d = dir.normalize_or_zero();
-        if d == Vec3::ZERO || !(max > 0.0) {
+        if d == Vec3::ZERO || max.is_nan() || max <= 0.0 {
             return None;
         }
         let inv_d = d.recip();

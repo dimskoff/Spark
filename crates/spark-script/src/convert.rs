@@ -31,12 +31,85 @@ pub(crate) fn vv(v: Vec3) -> Vector {
     Vector::new(v.x, v.y, v.z)
 }
 
-pub(crate) fn to_num(v: &Value, what: &str) -> LuaResult<f32> {
-    match v {
-        Value::Number(n) => Ok(*n as f32),
-        Value::Integer(i) => Ok(*i as f32),
-        _ => Err(rt(format!("{what}: expected a number, got {}", v.type_name()))),
+/// Error for a NaN / infinite number passed to the API.
+pub(crate) fn not_finite(what: &str, n: f64) -> mlua::Error {
+    let hint = if n.is_nan() { "0/0 or math.sqrt(-1) somewhere?" } else { "a division by zero somewhere?" };
+    rt(format!("{what}: expected a finite number, got {n} ({hint})"))
+}
+
+/// Any Luau number as f64, NaN / infinity rejected.
+pub(crate) fn to_num64(v: &Value, what: &str) -> LuaResult<f64> {
+    let n = match v {
+        Value::Number(n) => *n,
+        Value::Integer(i) => *i as f64,
+        _ => return Err(rt(format!("{what}: expected a number, got {}", v.type_name()))),
+    };
+    if !n.is_finite() {
+        return Err(not_finite(what, n));
     }
+    Ok(n)
+}
+
+pub(crate) fn to_num(v: &Value, what: &str) -> LuaResult<f32> {
+    let n = to_num64(v, what)? as f32;
+    // A finite f64 can still overflow f32 (1e300).
+    if !n.is_finite() {
+        return Err(rt(format!("{what}: number is too large (max about 3.4e38)")));
+    }
+    Ok(n)
+}
+
+/// A finite number argument (`Num` = f32, `Num64` = f64). Used as a closure pattern, e.g. `|lua, this, Num(v): Num|`, so
+/// every number the API takes is checked in one place; NaN, infinity and overflow are errors, never silent values.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Num(pub f32);
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Num64(pub f64);
+/// Optional finite f32 argument: `nil` / missing is `None`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ONum(pub Option<f32>);
+
+impl mlua::FromLua for Num {
+    fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+        to_num(&v, "argument").map(Self)
+    }
+}
+
+impl mlua::FromLua for Num64 {
+    fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+        to_num64(&v, "argument").map(Self)
+    }
+}
+
+impl mlua::FromLua for ONum {
+    fn from_lua(v: Value, _: &Lua) -> LuaResult<Self> {
+        if v.is_nil() { Ok(Self(None)) } else { to_num(&v, "argument").map(|n| Self(Some(n))) }
+    }
+}
+
+/// Range check with a message that says what is allowed (what = camera.fov).
+pub(crate) fn in_range(v: f32, lo: f32, hi: f32, what: &str, unit: &str) -> LuaResult<f32> {
+    if (lo..=hi).contains(&v) { Ok(v) } else { Err(rt(format!("{what}: must be between {lo} and {hi}{unit}, got {v}"))) }
+}
+
+/// Must be strictly positive (sizes, radii, masses).
+pub(crate) fn positive(v: f32, what: &str) -> LuaResult<f32> {
+    if v > 0.0 { Ok(v) } else { Err(rt(format!("{what}: must be greater than 0, got {v}"))) }
+}
+
+/// Must be zero or more.
+pub(crate) fn non_negative(v: f32, what: &str) -> LuaResult<f32> {
+    if v >= 0.0 { Ok(v) } else { Err(rt(format!("{what}: must be 0 or more, got {v}"))) }
+}
+
+/// Checks every component of a vector.
+pub(crate) fn finite_vec(v: Vec3, what: &str) -> LuaResult<Vec3> {
+    for (c, x) in ["x", "y", "z"].iter().zip(v.to_array()) {
+        if !x.is_finite() {
+            return Err(not_finite(&format!("{what}.{c}"), x as f64));
+        }
+    }
+    Ok(v)
 }
 
 pub(crate) fn to_bool(v: &Value, what: &str) -> LuaResult<bool> {
@@ -56,7 +129,7 @@ pub(crate) fn to_str(v: &Value, what: &str) -> LuaResult<String> {
 
 pub(crate) fn to_vec3(v: &Value, what: &str) -> LuaResult<Vec3> {
     match v {
-        Value::Vector(v) => Ok(Vec3::new(v.x(), v.y(), v.z())),
+        Value::Vector(v) => finite_vec(Vec3::new(v.x(), v.y(), v.z()), what),
         Value::Table(t) => {
             let get = |a: &str, i: i64| -> LuaResult<f32> {
                 let v: Value = t.get(a)?;
@@ -109,11 +182,13 @@ pub(crate) fn to_color(v: &Value, what: &str) -> LuaResult<Color> {
         Value::Number(_) | Value::Integer(_) => Ok(Color::hex(to_num(v, what)? as u32)),
         Value::String(s) => {
             let s = s.to_string_lossy();
-            Color::parse(&s).ok_or_else(|| {
-                rt(format!("{what}: unknown color '{s}' (use \"#rrggbb\", 0xrrggbb or a name: {})", color_names()))
-            })
+            Color::parse(&s)
+                .ok_or_else(|| rt(format!("{what}: unknown color '{s}' (use \"#rrggbb\", 0xrrggbb or a name: {})", color_names())))
         }
-        Value::Vector(c) => Ok(Color::rgb(c.x(), c.y(), c.z())),
+        Value::Vector(c) => {
+            let c = finite_vec(Vec3::new(c.x(), c.y(), c.z()), what)?;
+            Ok(Color::rgb(c.x, c.y, c.z))
+        }
         Value::Table(t) => {
             let get = |a: &str, i: i64, d: f32| -> LuaResult<f32> {
                 let v: Value = t.get(a)?;

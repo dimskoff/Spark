@@ -1,0 +1,23 @@
+# Spark
+
+> Spark 0.1.0 is a code-first game and app engine: a Rust + wgpu core scripted in Luau, one native executable per game. It is built so that an AI agent can write, run, inspect and test a game without a human: every CLI command has `--json`, errors carry `file:line` and a fix hint, and runs are headless and deterministic.
+
+Conventions: Y-up, right-handed, 1 unit = 1 meter, objects look along -Z, angles in radians (camera.fov in degrees), colors sRGB, paths relative to the game folder. Numbers must be finite; asset paths cannot leave the game folder.
+
+## Docs
+
+- [Guide and concepts](docs/SPARK_API.md): game structure, frame order, objects, physics, UI, audio, saving, testing
+- [API reference](docs/API_REFERENCE.md): every function, table and class with its signature
+- [Type definitions](docs/spark.d.luau): luau-lsp definitions (`spark check --types`)
+- [Shaders](docs/SPARK_SHADERS.md): WGSL surface and post shaders
+- [Machine-readable API](docs/api.json): the registry as JSON
+
+## Working loop
+
+1. `spark new mygame` (templates: 3d, 2d, empty)
+2. Write `main.luau` and `src/*.luau`
+3. `spark check mygame --json` finds script errors without a window
+4. `spark test mygame --json` runs scenario tests in `tests/*.luau`
+5. `spark mygame --headless --frames 120 --screenshot shot.png` then look at the picture
+6. `spark api search <word>` looks a function up in the API
+

@@ -65,10 +65,9 @@ pub fn apply(ctx: &egui::Context, ui_scale: f32) {
 fn fonts() -> FontDefinitions {
     let mut fonts = FontDefinitions::default();
     // The engine's font: complete Latin + Cyrillic coverage, matches the in-game look.
-    fonts.font_data.insert(
-        "noto".into(),
-        Arc::new(FontData::from_static(include_bytes!("../../spark-core/assets/fonts/NotoSans-Regular.ttf"))),
-    );
+    fonts
+        .font_data
+        .insert("noto".into(), Arc::new(FontData::from_static(include_bytes!("../../spark-core/assets/fonts/NotoSans-Regular.ttf"))));
     if let Some(p) = fonts.families.get_mut(&FontFamily::Proportional) {
         p.insert(0, "noto".into());
     }
@@ -128,7 +127,9 @@ fn visuals() -> Visuals {
 
 /// The orange call-to-action button.
 pub fn primary_button<'a>(text: impl Into<egui::WidgetText>) -> egui::Button<'a> {
-    egui::Button::new(egui::RichText::from(text.into().text()).color(Color32::WHITE).strong()).fill(ACCENT_DIM).stroke(Stroke::new(1.0, ACCENT))
+    egui::Button::new(egui::RichText::from(text.into().text()).color(Color32::WHITE).strong())
+        .fill(ACCENT_DIM)
+        .stroke(Stroke::new(1.0, ACCENT))
 }
 
 pub fn token_color(token: Token) -> Color32 {

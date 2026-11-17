@@ -3,12 +3,12 @@ use crate::assets::{Assets, MeshId};
 use crate::audio::Audio;
 use crate::branding::Branding;
 use crate::canvas::Canvas;
-use crate::physics::Physics;
 use crate::input::Input;
 use crate::material::Material;
 use crate::mesh::MeshData;
-use crate::scene::{Object, ObjectId, Scene};
+use crate::physics::Physics;
 use crate::render::RenderSettings;
+use crate::scene::{Object, ObjectId, Scene};
 use crate::time::Time;
 
 /// Window state a game can change at runtime. The app applies changes every frame.

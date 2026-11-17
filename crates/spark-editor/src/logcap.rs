@@ -30,11 +30,14 @@ impl Log for Tee {
         if self.inner.matches(record) {
             self.inner.log(record);
         }
-        if CAPTURE.load(Ordering::Relaxed) && from_engine(record.target()) && record.level() <= Level::Info
+        if CAPTURE.load(Ordering::Relaxed)
+            && from_engine(record.target())
+            && record.level() <= Level::Info
             && let Ok(mut lines) = LINES.lock()
-                && lines.len() < MAX_LINES {
-                    lines.push((record.level(), record.args().to_string()));
-                }
+            && lines.len() < MAX_LINES
+        {
+            lines.push((record.level(), record.args().to_string()));
+        }
     }
 
     fn flush(&self) {
@@ -55,10 +58,9 @@ pub fn init(default_filter: &str) {
 /// Starts / stops copying engine messages (the viewport turns it on while its game exists).
 pub fn capture(on: bool) {
     CAPTURE.store(on, Ordering::Relaxed);
-    if !on
-        && let Ok(mut lines) = LINES.lock() {
-            lines.clear();
-        }
+    if !on && let Ok(mut lines) = LINES.lock() {
+        lines.clear();
+    }
 }
 
 /// Engine messages since the last call.

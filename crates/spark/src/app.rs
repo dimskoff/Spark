@@ -77,23 +77,18 @@ impl RunArgs {
             let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} needs a value"));
             match arg.as_str() {
                 "--headless" => out.headless = true,
-                "--frames" => {
-                    out.frames = Some(value("--frames")?.parse().map_err(|_| "--frames: expected a whole number".to_string())?)
-                }
+                "--frames" => out.frames = Some(value("--frames")?.parse().map_err(|_| "--frames: expected a whole number".to_string())?),
                 "--screenshot" => out.screenshot = Some(PathBuf::from(value("--screenshot")?)),
                 "--dump-scene" => out.dump_scene = true,
                 "--dump-scene-json" => out.dump_scene_json = Some(PathBuf::from(value("--dump-scene-json")?)),
                 "--screenshot-every" => {
-                    let n: u64 = value("--screenshot-every")?.parse().map_err(|_| "--screenshot-every: expected a whole number".to_string())?;
+                    let n: u64 =
+                        value("--screenshot-every")?.parse().map_err(|_| "--screenshot-every: expected a whole number".to_string())?;
                     out.screenshot_every = Some(n.max(1));
                 }
                 "--input" => out.input = Some(PathBuf::from(value("--input")?)),
-                "--timeout" => {
-                    out.timeout = Some(value("--timeout")?.parse().map_err(|_| "--timeout: expected seconds".to_string())?)
-                }
-                "--max-fps" => {
-                    out.max_fps = Some(value("--max-fps")?.parse().map_err(|_| "--max-fps: expected a number".to_string())?)
-                }
+                "--timeout" => out.timeout = Some(value("--timeout")?.parse().map_err(|_| "--timeout: expected seconds".to_string())?),
+                "--max-fps" => out.max_fps = Some(value("--max-fps")?.parse().map_err(|_| "--max-fps: expected a number".to_string())?),
                 "--size" => {
                     let v = value("--size")?;
                     let bad = || format!("--size: expected WIDTHxHEIGHT like 1280x720, got '{v}'");
@@ -111,11 +106,57 @@ impl RunArgs {
                 "--windowed" => out.windowed = true,
                 "--devtools" => out.devtools = Some(value("--devtools")?),
                 "--help" | "-h" => out.help = true,
+                // A mistyped flag must not silently open a window (`--headles`): fail with a suggestion.
+                a if a.starts_with("--") => return Err(unknown_flag(a)),
                 _ => out.rest.push(arg),
             }
         }
         Ok(out)
     }
+}
+
+const FLAGS: &[&str] = &[
+    "--headless",
+    "--frames",
+    "--screenshot",
+    "--dump-scene",
+    "--dump-scene-json",
+    "--screenshot-every",
+    "--input",
+    "--timeout",
+    "--max-fps",
+    "--size",
+    "--fixed-dt",
+    "--no-vsync",
+    "--mute",
+    "--splash",
+    "--no-splash",
+    "--fullscreen",
+    "--windowed",
+    "--devtools",
+    "--help",
+];
+
+fn unknown_flag(flag: &str) -> String {
+    let near = FLAGS.iter().map(|f| (edit_distance(flag, f), *f)).min().filter(|(d, f)| *d <= 2.max(f.len() / 4));
+    match near {
+        Some((_, f)) => format!("unknown flag '{flag}' (did you mean '{f}'?)"),
+        None => format!("unknown flag '{flag}'"),
+    }
+}
+
+/// Levenshtein distance (flags are short).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut cur = vec![i + 1];
+        for (j, cb) in b.iter().enumerate() {
+            cur.push((prev[j] + usize::from(ca != cb)).min(prev[j + 1] + 1).min(cur[j] + 1));
+        }
+        prev = cur;
+    }
+    prev[b.len()]
 }
 
 /// Runs a [`Game`] in a window (or headless with `--headless`).
@@ -229,7 +270,7 @@ impl App {
         let result = if self.args.headless { run_headless(self, game) } else { run_windowed(self, game) };
         if let Err(e) = result {
             log::error!("{e}");
-            report_fatal(&format!("{e}"));
+            report_fatal(&e.to_string());
             std::process::exit(1);
         }
     }
@@ -613,9 +654,7 @@ impl<G: Game> Runner<G> {
         }
         let Some(window) = &self.window else { return };
         if want {
-            let grabbed = window
-                .set_cursor_grab(CursorGrabMode::Locked)
-                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
+            let grabbed = window.set_cursor_grab(CursorGrabMode::Locked).or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
             if let Err(e) = grabbed {
                 log::warn!("cannot capture the mouse: {e}");
             }
@@ -682,8 +721,7 @@ impl<G: Game> Runner<G> {
         }
         // Draw debug overlay on the canvas before rendering (on top of game content). Paused frames keep
         // the previous canvas (it is cleared by run_frame), so the overlay is not drawn twice.
-        let (gpu_name, stats) =
-            self.renderer.as_ref().map(|r| (r.info().name.clone(), r.last_stats())).unwrap_or_default();
+        let (gpu_name, stats) = self.renderer.as_ref().map(|r| (r.info().name.clone(), r.last_stats())).unwrap_or_default();
         if ran_logic {
             draw_debug_overlay(&mut self.world, &gpu_name, stats);
         }
@@ -795,11 +833,7 @@ impl<G: Game> ApplicationHandler for Runner<G> {
             if key.state.is_pressed() && !key.repeat && key.physical_key == PhysicalKey::Code(KeyCode::F12) {
                 self.screenshot_requested = true;
             }
-            if self.world.debug.hotkey
-                && key.state.is_pressed()
-                && !key.repeat
-                && key.physical_key == PhysicalKey::Code(KeyCode::F1)
-            {
+            if self.world.debug.hotkey && key.state.is_pressed() && !key.repeat && key.physical_key == PhysicalKey::Code(KeyCode::F1) {
                 self.world.debug.toggle();
                 if self.world.debug.enabled() {
                     self.world.debug.reset_min_max();
@@ -809,8 +843,8 @@ impl<G: Game> ApplicationHandler for Runner<G> {
                 }
             }
             let alt = self.world.input.down(spark_core::Key::LAlt) || self.world.input.down(spark_core::Key::RAlt);
-            let toggle = key.physical_key == PhysicalKey::Code(KeyCode::F11)
-                || (alt && key.physical_key == PhysicalKey::Code(KeyCode::Enter));
+            let toggle =
+                key.physical_key == PhysicalKey::Code(KeyCode::F11) || (alt && key.physical_key == PhysicalKey::Code(KeyCode::Enter));
             if key.state.is_pressed() && !key.repeat && toggle {
                 self.world.window.fullscreen = !self.world.window.fullscreen;
                 self.apply_window();
@@ -875,8 +909,24 @@ mod input_script_tests {
     use super::*;
 
     #[test]
+    fn mistyped_flags_are_errors_with_a_suggestion() {
+        let args = |a: &[&str]| RunArgs::parse(a.iter().map(|s| s.to_string()));
+        assert!(args(&["game", "--headless", "--frames", "5"]).unwrap().headless);
+        assert_eq!(args(&["game"]).unwrap().rest, vec!["game".to_string()]);
+        let e = args(&["game", "--headles"]).unwrap_err();
+        assert!(e.contains("did you mean '--headless'"), "{e}");
+        let e = args(&["--frame", "3"]).unwrap_err();
+        assert!(e.contains("'--frames'"), "{e}");
+        let e = args(&["--zzzzzzzzzz"]).unwrap_err();
+        assert!(!e.contains("did you mean"), "{e}");
+    }
+
+    #[test]
     fn parses_events() {
-        let ev = parse_input_script("# test\n10 key down space\n5 mouse 100 200\n12 key up space\n20 mouse_button down left\n21 text hi there\n").unwrap();
+        let ev = parse_input_script(
+            "# test\n10 key down space\n5 mouse 100 200\n12 key up space\n20 mouse_button down left\n21 text hi there\n",
+        )
+        .unwrap();
         assert_eq!(ev[0], (5, InputEvent::Move(100.0, 200.0)));
         assert_eq!(ev[1], (10, InputEvent::Key(spark_core::Key::Space, true)));
         assert_eq!(ev[4], (21, InputEvent::Text("hi there".into())));

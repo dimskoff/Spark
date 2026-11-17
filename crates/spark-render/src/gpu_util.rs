@@ -37,12 +37,7 @@ pub(crate) fn texture_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgp
 }
 
 pub(crate) fn sampler_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility,
-        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-        count: None,
-    }
+    wgpu::BindGroupLayoutEntry { binding, visibility, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }
 }
 
 pub(crate) fn uniform_buffer(device: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
@@ -71,6 +66,7 @@ pub(crate) fn object_buffer(device: &wgpu::Device, layout: &wgpu::BindGroupLayou
     (buffer, bind_group)
 }
 
+#[allow(clippy::too_many_arguments)] // too many arguments mirror the GPU API: each is a distinct wgpu resource; bundling them into a one-use struct would only move the list
 pub(crate) fn frame_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,

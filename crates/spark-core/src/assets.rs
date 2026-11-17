@@ -101,6 +101,8 @@ pub struct Assets {
     generation: u64,
     /// Base folder for relative asset paths.
     pub root: PathBuf,
+    /// Only paths inside [Assets::root] may be loaded (set for game scripts; see [crate::vfs::game_relative]).
+    pub confine: bool,
 }
 
 impl Assets {
@@ -146,7 +148,7 @@ impl Assets {
 
     /// Loads a glTF model (`.glb` / `.gltf`) once; later calls with the same path return the same id.
     pub fn load_model(&mut self, path: &str) -> Result<ModelId, String> {
-        let full = self.resolve(path);
+        let full = self.resolve(path)?;
         if let Some(&id) = self.model_paths.get(&full) {
             return Ok(id);
         }
@@ -172,7 +174,7 @@ impl Assets {
 
     /// Loads an image file once; later calls with the same path return the same id.
     pub fn load_texture(&mut self, path: &str) -> Result<TextureId, String> {
-        let full = self.resolve(path);
+        let full = self.resolve(path)?;
         if let Some(&id) = self.texture_paths.get(&full) {
             return Ok(id);
         }
@@ -208,7 +210,7 @@ impl Assets {
     /// Loads a cubemap once from a horizontal strip image (6 square faces side by side, in
     /// +X, -X, +Y, -Y, +Z, -Z order, so the image is 6 times wider than tall).
     pub fn load_cubemap(&mut self, path: &str) -> Result<CubemapId, String> {
-        let full = self.resolve(path);
+        let full = self.resolve(path)?;
         if let Some(&id) = self.cubemap_paths.get(&full) {
             return Ok(id);
         }
@@ -234,7 +236,7 @@ impl Assets {
 
     /// Loads and compiles a `.wgsl` file once; later calls with the same path return the same id.
     pub fn load_shader(&mut self, path: &str) -> Result<ShaderId, String> {
-        let full = self.resolve(path);
+        let full = self.resolve(path)?;
         if let Some(&id) = self.shader_paths.get(&full) {
             return Ok(id);
         }
@@ -261,10 +263,13 @@ impl Assets {
         self.shader_paths.iter().map(|(p, id)| (p.as_path(), *id))
     }
 
-    /// Resolves a path relative to [`Assets::root`].
-    pub fn resolve(&self, path: &str) -> PathBuf {
+    /// Resolves a path relative to [`Assets::root`]. With [`Assets::confine`] the path must stay inside the root.
+    pub fn resolve(&self, path: &str) -> Result<PathBuf, String> {
+        if self.confine {
+            return crate::vfs::jail(&self.root, path);
+        }
         let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() } else { self.root.join(p) }
+        Ok(if p.is_absolute() { p.to_path_buf() } else { self.root.join(p) })
     }
 
     /// Removes everything. Old ids become invalid.

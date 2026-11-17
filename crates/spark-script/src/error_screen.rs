@@ -84,7 +84,8 @@ impl ParsedError {
                     out.line = Some(n);
                     let before = clean(line[..start].trim().trim_end_matches(['[', '"', '\'', '(', '@', '<']));
                     let after = line[end..].trim();
-                    let joined = if before.is_empty() || before.starts_with("[string") { after.to_string() } else { format!("{before} {after}") };
+                    let joined =
+                        if before.is_empty() || before.starts_with("[string") { after.to_string() } else { format!("{before} {after}") };
                     message.push(joined.trim().to_string());
                     continue;
                 }
@@ -103,7 +104,11 @@ impl ParsedError {
                 let Some((_, end, file, n)) = find_location(l) else { continue };
                 let func = l[end..].trim().trim_start_matches("in ").trim();
                 let func = func.strip_prefix("function ").unwrap_or(func).trim_matches(['\'', '<', '>']);
-                let func = if func.starts_with(file.as_str()) || func.is_empty() || func == "?" { "(main chunk)".to_string() } else { func.to_string() };
+                let func = if func.starts_with(file.as_str()) || func.is_empty() || func == "?" {
+                    "(main chunk)".to_string()
+                } else {
+                    func.to_string()
+                };
                 let at = format!("{file}:{n}");
                 if out.stack.last().is_none_or(|(a, _)| *a != at) {
                     out.stack.push((at, func));

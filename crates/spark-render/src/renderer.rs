@@ -1,12 +1,10 @@
 //! The `Renderer` type: construction, window surface, device recovery and the per-frame entry points.
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
-use spark_core::{
-    ImageData, Mat4, World,
-};
+use spark_core::{ImageData, Mat4, World};
 
 use crate::consts::*;
 use crate::init::*;
@@ -141,8 +139,7 @@ impl Renderer {
         W: wgpu::rwh::HasWindowHandle + wgpu::rwh::HasDisplayHandle + std::fmt::Debug + Send + Sync + 'static,
     {
         sanitize_backend_env();
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(window.clone())));
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(window.clone())));
         let surface = instance.create_surface(window.clone()).map_err(|e| format!("cannot create window surface: {e}"))?;
         let adapter = request_adapter(&instance, Some(&surface))?;
         let (device, queue) = request_device(&adapter)?;
@@ -200,12 +197,7 @@ impl Renderer {
     }
 
     /// Draws the world into any texture view of `format` (sized like [`Self::size`]).
-    pub fn render_to_view(
-        &mut self,
-        world: &World,
-        view: &wgpu::TextureView,
-        format: wgpu::TextureFormat,
-    ) -> Result<FrameStats, String> {
+    pub fn render_to_view(&mut self, world: &World, view: &wgpu::TextureView, format: wgpu::TextureFormat) -> Result<FrameStats, String> {
         if self.is_device_lost() {
             return Err("GPU device lost".into());
         }
@@ -362,5 +354,4 @@ impl Renderer {
             }
         }
     }
-
 }

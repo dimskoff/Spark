@@ -36,8 +36,7 @@ pub(crate) fn set_parent(w: &mut World, id: ObjectId, parent: Option<ObjectId>) 
     w.scene.set_parent(id, parent).map_err(rt)
 }
 
-const PROPS: &str =
-    "name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod";
+const PROPS: &str = "name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod";
 
 /// `nil` / `false` -> none, else a Texture or an image path.
 fn to_normal_map(w: &mut World, v: &Value, what: &str) -> LuaResult<Option<TextureId>> {
@@ -63,7 +62,7 @@ fn to_lod(v: &Value, what: &str) -> LuaResult<Vec<(f32, MeshId)>> {
         let d = to_num(&d, what)?;
         let Value::UserData(ud) = m else { return Err(bad()) };
         let mesh = ud.borrow::<LuaMesh>().map_err(|_| bad())?.0;
-        if !(d >= 0.0) {
+        if d < 0.0 {
             return Err(rt(format!("{what}: distances must be 0 or more, got {d}")));
         }
         out.push((d, mesh));
@@ -188,9 +187,9 @@ impl UserData for Obj {
         f.add_field_method_get("x", |lua, this| read(lua, this.0, |_, o| o.position.x));
         f.add_field_method_get("y", |lua, this| read(lua, this.0, |_, o| o.position.y));
         f.add_field_method_get("z", |lua, this| read(lua, this.0, |_, o| o.position.z));
-        f.add_field_method_set("x", |lua, this, v: f32| write(lua, this.0, |o| o.position.x = v));
-        f.add_field_method_set("y", |lua, this, v: f32| write(lua, this.0, |o| o.position.y = v));
-        f.add_field_method_set("z", |lua, this, v: f32| write(lua, this.0, |o| o.position.z = v));
+        f.add_field_method_set("x", |lua, this, Num(v): Num| write(lua, this.0, |o| o.position.x = v));
+        f.add_field_method_set("y", |lua, this, Num(v): Num| write(lua, this.0, |o| o.position.y = v));
+        f.add_field_method_set("z", |lua, this, Num(v): Num| write(lua, this.0, |o| o.position.z = v));
         f.add_field_method_get("rotation", |lua, this| read(lua, this.0, |_, o| vv(euler(o.rotation))));
         f.add_field_method_set("rotation", |lua, this, v: Value| {
             let r = from_euler(to_vec3(&v, "rotation")?);
@@ -221,9 +220,9 @@ impl UserData for Obj {
         f.add_field_method_get("pbr", |lua, this| read(lua, this.0, |_, o| o.material.pbr));
         f.add_field_method_set("pbr", |lua, this, v: bool| write(lua, this.0, |o| o.material.pbr = v));
         f.add_field_method_get("metallic", |lua, this| read(lua, this.0, |_, o| o.material.metallic));
-        f.add_field_method_set("metallic", |lua, this, v: f32| write(lua, this.0, |o| o.material = o.material.with_metallic(v)));
+        f.add_field_method_set("metallic", |lua, this, Num(v): Num| write(lua, this.0, |o| o.material = o.material.with_metallic(v)));
         f.add_field_method_get("roughness", |lua, this| read(lua, this.0, |_, o| o.material.roughness));
-        f.add_field_method_set("roughness", |lua, this, v: f32| write(lua, this.0, |o| o.material = o.material.with_roughness(v)));
+        f.add_field_method_set("roughness", |lua, this, Num(v): Num| write(lua, this.0, |o| o.material = o.material.with_roughness(v)));
         f.add_field_method_get("emissive", |lua, this| read(lua, this.0, |_, o| LuaColor(o.material.emissive)));
         f.add_field_method_set("emissive", |lua, this, v: Value| {
             let c = to_color(&v, "emissive")?;
@@ -305,9 +304,9 @@ impl UserData for Obj {
         crate::model::add_object_methods(m);
         m.add_method("exists", |lua, this, ()| with(lua, |w| Ok(w.scene.contains(this.0))));
         m.add_method("destroy", |lua, this, ()| with(lua, |w| Ok(w.scene.destroy(this.0))));
-        m.add_method("rotate_x", |lua, this, a: f32| write(lua, this.0, |o| o.rotate_x(a)));
-        m.add_method("rotate_y", |lua, this, a: f32| write(lua, this.0, |o| o.rotate_y(a)));
-        m.add_method("rotate_z", |lua, this, a: f32| write(lua, this.0, |o| o.rotate_z(a)));
+        m.add_method("rotate_x", |lua, this, Num(a): Num| write(lua, this.0, |o| o.rotate_x(a)));
+        m.add_method("rotate_y", |lua, this, Num(a): Num| write(lua, this.0, |o| o.rotate_y(a)));
+        m.add_method("rotate_z", |lua, this, Num(a): Num| write(lua, this.0, |o| o.rotate_z(a)));
         m.add_method("translate", |lua, this, v: Value| {
             let d = to_vec3(&v, "translate")?;
             write(lua, this.0, |o| o.translate(d))
@@ -329,9 +328,7 @@ impl UserData for Obj {
             let p = to_parent(&v, "set_parent")?;
             with(lua, |w| set_parent(w, this.0, p))
         });
-        m.add_method("children", |lua, this, ()| {
-            with(lua, |w| Ok(w.scene.children(this.0).into_iter().map(Obj).collect::<Vec<_>>()))
-        });
+        m.add_method("children", |lua, this, ()| with(lua, |w| Ok(w.scene.children(this.0).into_iter().map(Obj).collect::<Vec<_>>())));
         m.add_method("world_position", |lua, this, ()| read(lua, this.0, |w, _| vv(w.scene.world_position(this.0))));
         m.add_method("forward", |lua, this, ()| read(lua, this.0, |_, o| vv(o.forward())));
         m.add_method("right", |lua, this, ()| read(lua, this.0, |_, o| vv(o.rotation * Vec3::X)));
@@ -408,8 +405,8 @@ impl UserData for LuaColor {
         f.add_field_method_get("a", |_, this| Ok(this.0.a));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("lerp", |_, this, (other, t): (Value, f32)| Ok(LuaColor(this.0.lerp(to_color(&other, "lerp")?, t))));
-        m.add_method("with_alpha", |_, this, a: f32| Ok(LuaColor(this.0.with_alpha(a))));
+        m.add_method("lerp", |_, this, (other, Num(t)): (Value, Num)| Ok(LuaColor(this.0.lerp(to_color(&other, "lerp")?, t))));
+        m.add_method("with_alpha", |_, this, Num(a): Num| Ok(LuaColor(this.0.with_alpha(a))));
         m.add_meta_method(MetaMethod::Eq, |_, this, other: Value| Ok(to_color(&other, "==").map(|c| c == this.0).unwrap_or(false)));
         m.add_meta_method(MetaMethod::ToString, |_, this, ()| {
             let [r, g, b, a] = this.0.to_rgba8();
@@ -439,20 +436,18 @@ impl UserData for LuaMaterial {
         f.add_field_method_get("orm_map", |_, this| Ok(this.0.orm_map.map(LuaTexture)));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("tiling", |_, this, (x, y): (f32, Option<f32>)| Ok(LuaMaterial(this.0.with_tiling(x, y.unwrap_or(x)))));
+        m.add_method("tiling", |_, this, (Num(x), ONum(y)): (Num, ONum)| Ok(LuaMaterial(this.0.with_tiling(x, y.unwrap_or(x)))));
         m.add_method("with_color", |_, this, c: Value| Ok(LuaMaterial(this.0.with_color(to_color(&c, "with_color")?))));
         m.add_method("with_blend", |_, this, v: Value| Ok(LuaMaterial(this.0.with_blend(to_blend(&v, "with_blend")?))));
-        m.add_method("with_double_sided", |_, this, on: Option<bool>| {
-            Ok(LuaMaterial(this.0.with_double_sided(on.unwrap_or(true))))
-        });
+        m.add_method("with_double_sided", |_, this, on: Option<bool>| Ok(LuaMaterial(this.0.with_double_sided(on.unwrap_or(true)))));
         m.add_method("with_cast_shadow", |_, this, on: Option<bool>| {
             let mut m = this.0;
             m.cast_shadow = on.unwrap_or(true);
             Ok(LuaMaterial(m))
         });
         m.add_method("with_unlit", |_, this, on: Option<bool>| Ok(LuaMaterial(this.0.with_unlit(on.unwrap_or(true)))));
-        m.add_method("with_metallic", |_, this, v: f32| Ok(LuaMaterial(this.0.with_metallic(v))));
-        m.add_method("with_roughness", |_, this, v: f32| Ok(LuaMaterial(this.0.with_roughness(v))));
+        m.add_method("with_metallic", |_, this, Num(v): Num| Ok(LuaMaterial(this.0.with_metallic(v))));
+        m.add_method("with_roughness", |_, this, Num(v): Num| Ok(LuaMaterial(this.0.with_roughness(v))));
         m.add_method("with_emissive", |_, this, c: Value| Ok(LuaMaterial(this.0.with_emissive(to_color(&c, "with_emissive")?))));
         m.add_method("with_normal_map", |lua, this, v: Value| {
             let t = with(lua, |w| to_normal_map(w, &v, "with_normal_map"))?;
@@ -462,9 +457,7 @@ impl UserData for LuaMaterial {
             let t = with(lua, |w| to_normal_map(w, &v, "with_orm_map"))?;
             Ok(LuaMaterial(this.0.with_orm_map(t)))
         });
-        m.add_method("with_shader", |_, this, s: Value| {
-            Ok(LuaMaterial(this.0.with_shader(crate::shader::to_shader(&s, "with_shader")?)))
-        });
+        m.add_method("with_shader", |_, this, s: Value| Ok(LuaMaterial(this.0.with_shader(crate::shader::to_shader(&s, "with_shader")?))));
         m.add_method("with_data", |_, this, v: mlua::Variadic<Value>| Ok(LuaMaterial(this.0.with_data(to_data(&v, "with_data")?))));
         m.add_meta_method(MetaMethod::ToString, |_, this, ()| {
             let [r, g, b, _] = this.0.color.to_rgba8();
@@ -485,25 +478,70 @@ impl UserData for Cam {
         f.add_field_method_get("position", |lua, _| with(lua, |w| Ok(vv(w.scene.camera.position))));
         f.add_field_method_set("position", |lua, _, v: Value| {
             let p = to_vec3(&v, "camera.position")?;
-            with(lua, |w| Ok(w.scene.camera.position = p))
+            with(lua, |w| {
+                w.scene.camera.position = p;
+                Ok(())
+            })
         });
         f.add_field_method_get("x", |lua, _| with(lua, |w| Ok(w.scene.camera.position.x)));
         f.add_field_method_get("y", |lua, _| with(lua, |w| Ok(w.scene.camera.position.y)));
         f.add_field_method_get("z", |lua, _| with(lua, |w| Ok(w.scene.camera.position.z)));
-        f.add_field_method_set("x", |lua, _, v: f32| with(lua, |w| Ok(w.scene.camera.position.x = v)));
-        f.add_field_method_set("y", |lua, _, v: f32| with(lua, |w| Ok(w.scene.camera.position.y = v)));
-        f.add_field_method_set("z", |lua, _, v: f32| with(lua, |w| Ok(w.scene.camera.position.z = v)));
+        f.add_field_method_set("x", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.scene.camera.position.x = v;
+                Ok(())
+            })
+        });
+        f.add_field_method_set("y", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.scene.camera.position.y = v;
+                Ok(())
+            })
+        });
+        f.add_field_method_set("z", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.scene.camera.position.z = v;
+                Ok(())
+            })
+        });
         f.add_field_method_get("rotation", |lua, _| with(lua, |w| Ok(vv(euler(w.scene.camera.rotation)))));
         f.add_field_method_set("rotation", |lua, _, v: Value| {
             let r = from_euler(to_vec3(&v, "camera.rotation")?);
-            with(lua, |w| Ok(w.scene.camera.rotation = r))
+            with(lua, |w| {
+                w.scene.camera.rotation = r;
+                Ok(())
+            })
         });
         f.add_field_method_get("fov", |lua, _| with(lua, |w| Ok(w.scene.camera.fov)));
-        f.add_field_method_set("fov", |lua, _, v: f32| with(lua, |w| Ok(w.scene.camera.fov = v)));
+        f.add_field_method_set("fov", |lua, _, Num(v): Num| {
+            let v = in_range(v, 1.0, 179.0, "camera.fov", " degrees (vertical field of view)")?;
+            with(lua, |w| {
+                w.scene.camera.fov = v;
+                Ok(())
+            })
+        });
         f.add_field_method_get("near", |lua, _| with(lua, |w| Ok(w.scene.camera.near)));
-        f.add_field_method_set("near", |lua, _, v: f32| with(lua, |w| Ok(w.scene.camera.near = v)));
+        f.add_field_method_set("near", |lua, _, Num(v): Num| {
+            let v = positive(v, "camera.near")?;
+            with(lua, |w| {
+                if v >= w.scene.camera.far {
+                    return Err(rt(format!("camera.near ({v}) must be smaller than camera.far ({})", w.scene.camera.far)));
+                }
+                w.scene.camera.near = v;
+                Ok(())
+            })
+        });
         f.add_field_method_get("far", |lua, _| with(lua, |w| Ok(w.scene.camera.far)));
-        f.add_field_method_set("far", |lua, _, v: f32| with(lua, |w| Ok(w.scene.camera.far = v)));
+        f.add_field_method_set("far", |lua, _, Num(v): Num| {
+            let v = positive(v, "camera.far")?;
+            with(lua, |w| {
+                if v <= w.scene.camera.near {
+                    return Err(rt(format!("camera.far ({v}) must be greater than camera.near ({})", w.scene.camera.near)));
+                }
+                w.scene.camera.far = v;
+                Ok(())
+            })
+        });
         // nil / false = perspective, a number = orthographic with that many meters visible vertically.
         f.add_field_method_get("ortho", |lua, _| with(lua, |w| Ok(w.scene.camera.ortho)));
         f.add_field_method_set("ortho", |lua, _, v: Value| {
@@ -511,7 +549,10 @@ impl UserData for Cam {
                 Value::Nil | Value::Boolean(false) => None,
                 _ => Some(to_num(&v, "camera.ortho")?.max(0.001)),
             };
-            with(lua, |w| Ok(w.scene.camera.ortho = o))
+            with(lua, |w| {
+                w.scene.camera.ortho = o;
+                Ok(())
+            })
         });
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
@@ -524,7 +565,10 @@ impl UserData for Cam {
         });
         m.add_method("translate", |lua, _, v: Value| {
             let d = to_vec3(&v, "camera:translate")?;
-            with(lua, |w| Ok(w.scene.camera.position += d))
+            with(lua, |w| {
+                w.scene.camera.position += d;
+                Ok(())
+            })
         });
         m.add_method("forward", |lua, _, ()| with(lua, |w| Ok(vv(w.scene.camera.forward()))));
         // World point -> screen pixel (x, y, depth 0..1) or nil when behind the camera.
@@ -540,7 +584,7 @@ impl UserData for Cam {
             })
         });
         // Screen pixel (default: the mouse) -> origin, direction of a world ray.
-        m.add_method("screen_to_ray", |lua, _, (x, y): (Option<f32>, Option<f32>)| {
+        m.add_method("screen_to_ray", |lua, _, (ONum(x), ONum(y)): (ONum, ONum)| {
             with(lua, |w| {
                 let (sw, sh) = w.canvas.output_size();
                 let m = w.input.mouse_position;
@@ -570,18 +614,24 @@ impl UserData for TimeRef {
         f.add_field_method_get("unscaled_dt", |lua, _| with(lua, |w| Ok(w.time.unscaled_dt)));
         f.add_field_method_get("unscaled_elapsed", |lua, _| with(lua, |w| Ok(w.time.unscaled_elapsed)));
         f.add_field_method_get("scale", |lua, _| with(lua, |w| Ok(w.time.scale)));
-        f.add_field_method_set("scale", |lua, _, v: f32| {
+        f.add_field_method_set("scale", |lua, _, Num(v): Num| {
             if !(v >= 0.0 && v.is_finite()) {
                 return Err(rt("time.scale must be a number >= 0 (0 = paused, 1 = normal)"));
             }
-            with(lua, |w| Ok(w.time.scale = v))
+            with(lua, |w| {
+                w.time.scale = v;
+                Ok(())
+            })
         });
         f.add_field_method_get("fixed_dt", |lua, _| with(lua, |w| Ok(w.time.fixed_dt)));
-        f.add_field_method_set("fixed_dt", |lua, _, v: f32| {
-            if !(v >= 0.001 && v <= 1.0) {
+        f.add_field_method_set("fixed_dt", |lua, _, Num(v): Num| {
+            if !(0.001..=1.0).contains(&v) {
                 return Err(rt("time.fixed_dt must be between 0.001 and 1 seconds (default 1/60)"));
             }
-            with(lua, |w| Ok(w.time.fixed_dt = v))
+            with(lua, |w| {
+                w.time.fixed_dt = v;
+                Ok(())
+            })
         });
         f.add_field_method_get("frame", |lua, _| with(lua, |w| Ok(w.time.frame)));
         f.add_field_method_get("fps", |lua, _| with(lua, |w| Ok(w.time.fps)));

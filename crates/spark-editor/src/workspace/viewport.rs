@@ -26,8 +26,10 @@ const EDIT_DT: f32 = 1.0 / 60.0;
 /// Saved files are applied to the frozen preview after this pause (editors save in bursts).
 const RELOAD_DELAY: Duration = Duration::from_millis(250);
 /// Files that change what the game shows (not error.log, not editor files).
-const GAME_FILES: &[&str] =
-    &["luau", "lua", "toml", "json", "png", "jpg", "jpeg", "ktx2", "hdr", "glb", "gltf", "obj", "wav", "ogg", "mp3", "flac", "wgsl", "ttf", "otf"];
+const GAME_FILES: &[&str] = &[
+    "luau", "lua", "toml", "json", "png", "jpg", "jpeg", "ktx2", "hdr", "glb", "gltf", "obj", "wav", "ogg", "mp3", "flac", "wgsl", "ttf",
+    "otf",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -64,9 +66,15 @@ enum Grab {
     /// RMB held: fly-camera look; the cursor is kept at `anchor`.
     /// `last`: where the cursor was put back to; `None` until the first motion (that one is skipped:
     /// it may still be the jump of the first warp).
-    Look { anchor: Pos2, last: Option<Pos2> },
+    Look {
+        anchor: Pos2,
+        last: Option<Pos2>,
+    },
     /// The game asked for `input.lock_mouse` (first-person look); kept at the panel center.
-    Game { anchor: Pos2, last: Option<Pos2> },
+    Game {
+        anchor: Pos2,
+        last: Option<Pos2>,
+    },
 }
 
 /// The editor camera.
@@ -198,9 +206,9 @@ impl Viewport {
 
     /// Files changed on disk: rebuild the frozen preview soon.
     pub fn files_changed(&mut self, changes: &HashSet<PathBuf>) {
-        let relevant = changes.iter().any(|p| {
-            p.extension().and_then(|e| e.to_str()).is_some_and(|e| GAME_FILES.contains(&e.to_ascii_lowercase().as_str()))
-        });
+        let relevant = changes
+            .iter()
+            .any(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| GAME_FILES.contains(&e.to_ascii_lowercase().as_str())));
         if relevant {
             self.stale_since = Some(Instant::now());
         }
@@ -249,10 +257,12 @@ impl Viewport {
         let mut game = ScriptGame::new(self.entry.clone()).hot_reload(play);
         let mut world = World::new();
         world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
-        if play && !self.mute
-            && let Some(audio) = engine::audio::KiraBackend::new() {
-                world.audio.set_backend(Box::new(audio));
-            }
+        if play
+            && !self.mute
+            && let Some(audio) = engine::audio::KiraBackend::new()
+        {
+            world.audio.set_backend(Box::new(audio));
+        }
         if let Some(t) = &self.target {
             world.canvas.set_output_size(t.size.0, t.size.1);
         }
@@ -404,16 +414,19 @@ impl Viewport {
                 )
             });
         }
-        if self.focused && !focused
-            && let Some(s) = &mut self.session {
-                s.world.input.release_all();
-            }
+        if self.focused
+            && !focused
+            && let Some(s) = &mut self.session
+        {
+            s.world.input.release_all();
+        }
         self.focused = focused;
 
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
-        let pointer_moved = ui.input(|i| i.events.iter().rev().find_map(|e| if let egui::Event::PointerMoved(p) = e { Some(*p) } else { None }));
+        let pointer_moved =
+            ui.input(|i| i.events.iter().rev().find_map(|e| if let egui::Event::PointerMoved(p) = e { Some(*p) } else { None }));
 
         if self.mode == Mode::Play {
             if self.grab != Grab::None && !matches!(self.grab, Grab::Game { .. }) {
@@ -462,7 +475,11 @@ impl Viewport {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if self.mode == Mode::Edit {
-                if ui.add(theme::primary_button(format!("{} {}", icon::RUN, t("viewport.play")))).on_hover_text(format!("{} (Ctrl+P)", t("viewport.play_hint"))).clicked() {
+                if ui
+                    .add(theme::primary_button(format!("{} {}", icon::RUN, t("viewport.play"))))
+                    .on_hover_text(format!("{} (Ctrl+P)", t("viewport.play_hint")))
+                    .clicked()
+                {
                     self.play();
                 }
             } else if ui.button(format!("{} {}", icon::STOP, t("viewport.stop"))).on_hover_text("Ctrl+P").clicked() {
@@ -481,9 +498,10 @@ impl Viewport {
             }
             ui.separator();
             if ui.button("🎥").on_hover_text(t("viewport.camera_reset")).clicked()
-                && let Some(s) = &self.session {
-                    self.cam = FlyCam::from_camera(&s.world.scene.camera, self.cam.speed);
-                }
+                && let Some(s) = &self.session
+            {
+                self.cam = FlyCam::from_camera(&s.world.scene.camera, self.cam.speed);
+            }
             let sound = if self.mute { "🔇" } else { "🔊" };
             if ui.selectable_label(!self.mute, sound).on_hover_text(t("viewport.sound_hint")).clicked() {
                 self.mute = !self.mute;
@@ -587,11 +605,10 @@ impl Viewport {
             sync_modifier(input, i.modifiers.ctrl, SKey::LCtrl, SKey::RCtrl);
             sync_modifier(input, i.modifiers.alt, SKey::LAlt, SKey::RAlt);
         });
-        if !locked
-            && let Some(p) = pointer_moved {
-                let local = (p - rect.min) * ppp;
-                input.mouse_moved(Vec2::new(local.x, local.y));
-            }
+        if !locked && let Some(p) = pointer_moved {
+            let local = (p - rect.min) * ppp;
+            input.mouse_moved(Vec2::new(local.x, local.y));
+        }
         if release_grab {
             // Esc frees the mouse (the game still sees the key, e.g. to open its menu).
             ui.ctx().memory_mut(|m| {
@@ -631,9 +648,10 @@ impl Viewport {
             (true, Grab::Game { .. }) => {
                 let d = self.pinned_motion(ctx, pointer_moved);
                 if d != egui::Vec2::ZERO
-                    && let Some(s) = &mut self.session {
-                        s.world.input.mouse_motion(Vec2::new(d.x, d.y));
-                    }
+                    && let Some(s) = &mut self.session
+                {
+                    s.world.input.mouse_motion(Vec2::new(d.x, d.y));
+                }
             }
             (true, _) => {
                 // Pin at the panel center (the first motion only takes the cursor there).
@@ -664,12 +682,9 @@ impl Viewport {
                 })
                 .sum();
             let k = |key| if i.key_down(key) { 1.0 } else { 0.0 };
-            let keys = Vec3::new(
-                k(egui::Key::D) - k(egui::Key::A),
-                k(egui::Key::E) - k(egui::Key::Q),
-                k(egui::Key::W) - k(egui::Key::S),
-            );
-            let arrows = Vec3::new(k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft), 0.0, k(egui::Key::ArrowUp) - k(egui::Key::ArrowDown));
+            let keys = Vec3::new(k(egui::Key::D) - k(egui::Key::A), k(egui::Key::E) - k(egui::Key::Q), k(egui::Key::W) - k(egui::Key::S));
+            let arrows =
+                Vec3::new(k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft), 0.0, k(egui::Key::ArrowUp) - k(egui::Key::ArrowDown));
             (i.pointer.secondary_down(), i.pointer.button_pressed(egui::PointerButton::Secondary), wheel, (keys, arrows), i.modifiers.shift)
         });
         let hovered = response.hovered() || response.contains_pointer();
@@ -797,8 +812,7 @@ mod tests {
 
     #[test]
     fn fly_cam_matches_the_game_camera() {
-        let mut c = Camera::default();
-        c.position = Vec3::new(3.0, 4.0, 5.0);
+        let mut c = Camera { position: Vec3::new(3.0, 4.0, 5.0), ..Default::default() };
         c.look_at(Vec3::new(-2.0, 0.0, 1.0));
         let f = FlyCam::from_camera(&c, 6.0);
         assert!(f.forward().distance(c.forward()) < 1e-4, "{} vs {}", f.forward(), c.forward());

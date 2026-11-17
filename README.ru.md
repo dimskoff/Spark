@@ -178,7 +178,6 @@ end
 
 ```
 target/release/spark examples/demo        # 3D: физика, свои шейдеры, звук
-target/release/spark examples/starfall    # 2D-игра только на draw.* (клавиатура, мышь или геймпад)
 cargo run -p hello                        # то же самое на чистом Rust
 ```
 

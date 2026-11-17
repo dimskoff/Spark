@@ -62,30 +62,137 @@ pub enum Token {
 pub type Span = (Range<usize>, Token);
 
 const LUAU_KEYWORDS: &[&str] = &[
-    "and", "break", "continue", "do", "else", "elseif", "end", "export", "false", "for", "function", "if", "in", "local",
-    "nil", "not", "or", "repeat", "return", "then", "true", "type", "typeof", "until", "while", "self",
+    "and", "break", "continue", "do", "else", "elseif", "end", "export", "false", "for", "function", "if", "in", "local", "nil", "not",
+    "or", "repeat", "return", "then", "true", "type", "typeof", "until", "while", "self",
 ];
 
 /// Spark globals (docs/spark.d.luau) + the common Luau standard library.
 const LUAU_BUILTINS: &[&str] = &[
-    "spawn", "vec2", "vec3", "vec4", "input", "time", "camera", "graphics", "physics", "sound", "draw", "screen", "save",
-    "window", "Mesh", "Texture", "Material", "Color", "Model", "Shader", "Font", "ui", "debug", "events", "tween", "task",
-    "background", "sun", "ambient", "fog", "sky", "light", "length", "normalize", "dot", "cross", "lerp", "clamp", "quit",
-    "restart", "dump_scene", "require", "print", "warn", "error", "assert", "pcall", "xpcall", "ipairs", "pairs", "next",
-    "select", "setmetatable", "getmetatable", "tostring", "tonumber", "rawget", "rawset", "math", "string", "table",
-    "coroutine", "buffer", "bit32", "utf8", "os", "vector",
+    "spawn",
+    "vec2",
+    "vec3",
+    "vec4",
+    "input",
+    "time",
+    "camera",
+    "graphics",
+    "physics",
+    "sound",
+    "draw",
+    "screen",
+    "save",
+    "window",
+    "Mesh",
+    "Texture",
+    "Material",
+    "Color",
+    "Model",
+    "Shader",
+    "Font",
+    "ui",
+    "debug",
+    "events",
+    "tween",
+    "task",
+    "background",
+    "sun",
+    "ambient",
+    "fog",
+    "sky",
+    "light",
+    "length",
+    "normalize",
+    "dot",
+    "cross",
+    "lerp",
+    "clamp",
+    "quit",
+    "restart",
+    "dump_scene",
+    "require",
+    "print",
+    "warn",
+    "error",
+    "assert",
+    "pcall",
+    "xpcall",
+    "ipairs",
+    "pairs",
+    "next",
+    "select",
+    "setmetatable",
+    "getmetatable",
+    "tostring",
+    "tonumber",
+    "rawget",
+    "rawset",
+    "math",
+    "string",
+    "table",
+    "coroutine",
+    "buffer",
+    "bit32",
+    "utf8",
+    "os",
+    "vector",
 ];
 
 const WGSL_KEYWORDS: &[&str] = &[
-    "fn", "let", "var", "const", "override", "struct", "return", "if", "else", "for", "while", "loop", "break", "continue",
-    "switch", "case", "default", "discard", "true", "false", "alias", "enable", "requires",
+    "fn", "let", "var", "const", "override", "struct", "return", "if", "else", "for", "while", "loop", "break", "continue", "switch",
+    "case", "default", "discard", "true", "false", "alias", "enable", "requires",
 ];
 
 const WGSL_BUILTINS: &[&str] = &[
-    "f32", "f16", "i32", "u32", "bool", "vec2", "vec3", "vec4", "vec2f", "vec3f", "vec4f", "vec2i", "vec3i", "vec4i",
-    "vec2u", "vec3u", "vec4u", "mat2x2", "mat3x3", "mat4x4", "mat4x4f", "mat3x3f", "array", "texture_2d", "sampler",
-    "textureSample", "mix", "clamp", "saturate", "smoothstep", "step", "dot", "cross", "normalize", "length", "sin",
-    "cos", "tan", "pow", "exp", "log", "sqrt", "abs", "min", "max", "fract", "floor", "ceil", "select", "reflect",
+    "f32",
+    "f16",
+    "i32",
+    "u32",
+    "bool",
+    "vec2",
+    "vec3",
+    "vec4",
+    "vec2f",
+    "vec3f",
+    "vec4f",
+    "vec2i",
+    "vec3i",
+    "vec4i",
+    "vec2u",
+    "vec3u",
+    "vec4u",
+    "mat2x2",
+    "mat3x3",
+    "mat4x4",
+    "mat4x4f",
+    "mat3x3f",
+    "array",
+    "texture_2d",
+    "sampler",
+    "textureSample",
+    "mix",
+    "clamp",
+    "saturate",
+    "smoothstep",
+    "step",
+    "dot",
+    "cross",
+    "normalize",
+    "length",
+    "sin",
+    "cos",
+    "tan",
+    "pow",
+    "exp",
+    "log",
+    "sqrt",
+    "abs",
+    "min",
+    "max",
+    "fract",
+    "floor",
+    "ceil",
+    "select",
+    "reflect",
 ];
 
 /// Highlights one whole document.
@@ -110,10 +217,12 @@ fn push(out: &mut Vec<Span>, range: Range<usize>, token: Token) {
         return;
     }
     if let Some((last, t)) = out.last_mut()
-        && *t == token && last.end == range.start {
-            last.end = range.end;
-            return;
-        }
+        && *t == token
+        && last.end == range.start
+    {
+        last.end = range.end;
+        return;
+    }
     out.push((range, token));
 }
 
@@ -154,11 +263,12 @@ fn code(text: &str, keywords: &[&str], builtins: &[&str], comments: Comments) ->
         };
         if line_comment {
             if comments == Comments::Luau
-                && let Some(level) = long_bracket(&s[i + 2..]) {
-                    i = find_long_close(s, i + 4 + level, level);
-                    push(&mut out, start..i, Token::Comment);
-                    continue;
-                }
+                && let Some(level) = long_bracket(&s[i + 2..])
+            {
+                i = find_long_close(s, i + 4 + level, level);
+                push(&mut out, start..i, Token::Comment);
+                continue;
+            }
             while i < s.len() && s[i] != b'\n' {
                 i += 1;
             }
@@ -188,11 +298,12 @@ fn code(text: &str, keywords: &[&str], builtins: &[&str], comments: Comments) ->
             continue;
         }
         if comments == Comments::Luau
-            && let Some(level) = long_bracket(&s[i..]) {
-                i = find_long_close(s, i + 2 + level, level);
-                push(&mut out, start..i, Token::String);
-                continue;
-            }
+            && let Some(level) = long_bracket(&s[i..])
+        {
+            i = find_long_close(s, i + 2 + level, level);
+            push(&mut out, start..i, Token::String);
+            continue;
+        }
         // Numbers
         if c.is_ascii_digit() || (c == b'.' && s.get(i + 1).is_some_and(u8::is_ascii_digit)) {
             i += 1;

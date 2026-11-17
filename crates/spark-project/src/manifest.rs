@@ -207,13 +207,7 @@ fn parse_value(v: &str) -> Result<Val, String> {
         return parse_string(v).map(Val::Str);
     }
     if let Some(inner) = v.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-        return inner
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(parse_string)
-            .collect::<Result<Vec<_>, _>>()
-            .map(Val::List);
+        return inner.split(',').map(str::trim).filter(|s| !s.is_empty()).map(parse_string).collect::<Result<Vec<_>, _>>().map(Val::List);
     }
     match v {
         "true" => Ok(Val::Bool(true)),

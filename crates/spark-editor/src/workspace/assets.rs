@@ -289,7 +289,11 @@ impl ImagePreview {
                 self.zoom = None;
                 self.pan = Vec2::ZERO;
             }
-            if ui.selectable_label(self.zoom.is_some_and(|z| (z * ppp - 1.0).abs() < 1e-3), "1:1").on_hover_text(t("asset.actual_hint")).clicked() {
+            if ui
+                .selectable_label(self.zoom.is_some_and(|z| (z * ppp - 1.0).abs() < 1e-3), "1:1")
+                .on_hover_text(t("asset.actual_hint"))
+                .clicked()
+            {
                 self.zoom = Some(1.0 / ppp);
                 self.pan = Vec2::ZERO;
             }
@@ -358,7 +362,8 @@ impl ImagePreview {
             painter.rect_filled(visible, 0.0, Color32::from_gray(0x9a));
             let cell = 10.0;
             let (x0, y0) = (((visible.left() - shown.left()) / cell).floor() as i64, ((visible.top() - shown.top()) / cell).floor() as i64);
-            let (x1, y1) = (((visible.right() - shown.left()) / cell).ceil() as i64, ((visible.bottom() - shown.top()) / cell).ceil() as i64);
+            let (x1, y1) =
+                (((visible.right() - shown.left()) / cell).ceil() as i64, ((visible.bottom() - shown.top()) / cell).ceil() as i64);
             for y in y0..y1 {
                 for x in x0..x1 {
                     if (x + y) % 2 == 0 {
@@ -413,7 +418,8 @@ struct SoundPreview {
 
 impl SoundPreview {
     fn new(path: PathBuf) -> Self {
-        let mut p = Self { path, job: None, sound: None, error: None, size_on_disk: 0, handle: None, looping: false, volume: 0.8, cursor: 0.0 };
+        let mut p =
+            Self { path, job: None, sound: None, error: None, size_on_disk: 0, handle: None, looping: false, volume: 0.8, cursor: 0.0 };
         p.reload();
         p
     }
@@ -514,7 +520,13 @@ impl SoundPreview {
         }
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, audio: &mut Option<AudioManager<DefaultBackend>>, audio_error: &mut Option<String>, actions: &mut Vec<Action>) {
+    fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        audio: &mut Option<AudioManager<DefaultBackend>>,
+        audio_error: &mut Option<String>,
+        actions: &mut Vec<Action>,
+    ) {
         let ctx = ui.ctx().clone();
         self.poll(&ctx);
         let ready = self.sound.is_some();
@@ -610,7 +622,10 @@ impl SoundPreview {
         }
         if let Some(p) = response.hover_pos() {
             let at = (((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64) * duration;
-            painter.line_segment([Pos2::new(p.x, rect.top()), Pos2::new(p.x, rect.bottom())], egui::Stroke::new(1.0, Color32::from_white_alpha(60)));
+            painter.line_segment(
+                [Pos2::new(p.x, rect.top()), Pos2::new(p.x, rect.bottom())],
+                egui::Stroke::new(1.0, Color32::from_white_alpha(60)),
+            );
             response.clone().on_hover_text_at_pointer(fmt_time(at));
         }
         hint(&painter, rect, t("asset.sound_hint"));
@@ -843,14 +858,17 @@ impl ModelPreview {
             let selected = self.clip.and_then(|c| names.get(c).cloned()).unwrap_or_else(|| t("asset.rest_pose").to_string());
             let mut pick = self.clip;
             ui.add_enabled_ui(!self.clips.is_empty(), |ui| {
-                egui::ComboBox::from_id_salt(("model-clip", &self.path)).selected_text(selected).width(180.0).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut pick, None, t("asset.rest_pose"));
-                    for (i, n) in names.iter().enumerate() {
-                        ui.selectable_value(&mut pick, Some(i), n);
-                    }
-                })
-                .response
-                .on_hover_text(t("asset.animation"));
+                egui::ComboBox::from_id_salt(("model-clip", &self.path))
+                    .selected_text(selected)
+                    .width(180.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut pick, None, t("asset.rest_pose"));
+                        for (i, n) in names.iter().enumerate() {
+                            ui.selectable_value(&mut pick, Some(i), n);
+                        }
+                    })
+                    .response
+                    .on_hover_text(t("asset.animation"));
             });
             if pick != self.clip {
                 self.play_clip(pick);
@@ -862,9 +880,10 @@ impl ModelPreview {
                 }
                 ui.label(t("asset.speed"));
                 if ui.add(egui::DragValue::new(&mut self.speed).speed(0.02).range(0.0..=5.0).suffix("×")).changed()
-                    && let (Some(world), Some(root)) = (&mut self.world, self.root) {
-                        engine::animation::set_speed(world, root, self.speed);
-                    }
+                    && let (Some(world), Some(root)) = (&mut self.world, self.root)
+                {
+                    engine::animation::set_speed(world, root, self.speed);
+                }
             }
             ui.separator();
             ui.toggle_value(&mut self.spin, "⟲").on_hover_text(t("asset.spin_hint"));
@@ -924,9 +943,10 @@ impl ModelPreview {
 
         let animating = self.clip.is_some() && !self.paused;
         if let Some(world) = &mut self.world
-            && animating {
-                engine::animation::update(world, dt);
-            }
+            && animating
+        {
+            engine::animation::update(world, dt);
+        }
         if self.spin && !response.dragged() {
             self.orbit.yaw += dt * 0.6;
         }
@@ -944,9 +964,20 @@ impl ModelPreview {
         let s = &self.stats;
         let mut text = tf(
             "asset.stats",
-            &[("nodes", &fmt_count(s.nodes)), ("meshes", &fmt_count(s.meshes)), ("vertices", &fmt_count(s.vertices)), ("triangles", &fmt_count(s.triangles))],
+            &[
+                ("nodes", &fmt_count(s.nodes)),
+                ("meshes", &fmt_count(s.meshes)),
+                ("vertices", &fmt_count(s.vertices)),
+                ("triangles", &fmt_count(s.triangles)),
+            ],
         );
-        text.push_str(&format!("\n{}", tf("asset.size_m", &[("x", &format!("{:.2}", s.size.x)), ("y", &format!("{:.2}", s.size.y)), ("z", &format!("{:.2}", s.size.z))])));
+        text.push_str(&format!(
+            "\n{}",
+            tf(
+                "asset.size_m",
+                &[("x", &format!("{:.2}", s.size.x)), ("y", &format!("{:.2}", s.size.y)), ("z", &format!("{:.2}", s.size.z))]
+            )
+        ));
         if !self.clips.is_empty() || s.skins > 0 {
             text.push_str(&format!("\n{}", tf("asset.anim_stats", &[("clips", &self.clips.len()), ("skins", &s.skins)])));
         }

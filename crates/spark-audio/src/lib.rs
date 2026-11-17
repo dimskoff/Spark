@@ -80,10 +80,8 @@ impl KiraBackend {
 
     fn play(&mut self, id: SoundId, path: &Path, p: PlayParams) {
         let Some(data) = self.load(path) else { return };
-        let mut data = data
-            .volume(db(p.volume))
-            .playback_rate(PlaybackRate(p.pitch.max(0.01) as f64))
-            .panning(Panning(p.pan.clamp(-1.0, 1.0)));
+        let mut data =
+            data.volume(db(p.volume)).playback_rate(PlaybackRate(p.pitch.max(0.01) as f64)).panning(Panning(p.pan.clamp(-1.0, 1.0)));
         if p.looped {
             data = data.loop_region(..);
         }

@@ -22,7 +22,6 @@ mod draw;
 pub mod error_screen;
 mod flow;
 mod light;
-mod ui_api;
 mod model;
 mod modules;
 mod physics;
@@ -32,6 +31,7 @@ mod shader;
 pub mod testing;
 mod tween;
 mod types;
+mod ui_api;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -48,11 +48,6 @@ pub use save::default_save_path;
 use convert::Shared;
 use runtime::SharedRuntime;
 
-/// Runs a Luau script as a [`Game`].
-///
-/// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
-/// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
-/// -> render. `start()` runs once as a task (may `wait`).
 thread_local! {
     /// Time the running callback spent loading assets (models, textures, cube maps): it does not count towards the
     /// "script ran too long" limit, big files may take seconds to decode.
@@ -67,6 +62,11 @@ pub(crate) fn untimed<R>(f: impl FnOnce() -> R) -> R {
     r
 }
 
+/// Runs a Luau script as a [`Game`].
+///
+/// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
+/// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
+/// -> render. `start()` runs once as a task (may `wait`).
 pub struct ScriptGame {
     path: PathBuf,
     shared: Rc<RefCell<World>>,
@@ -250,6 +250,7 @@ impl ScriptGame {
         world.reset();
         let root = self.path.parent().map(Path::to_path_buf).unwrap_or_default();
         world.assets.root = root.clone();
+        world.assets.confine = true;
         let source = match spark_core::vfs::read_string(&self.path) {
             Ok(s) => s,
             Err(e) => return self.fail(e),
@@ -258,6 +259,10 @@ impl ScriptGame {
         self.modules = Some(modules.clone());
         let name = self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "main.luau".into());
         let lua = Lua::new();
+        // A runaway script (or a mod) must not take the machine's memory: allocation fails with a Lua error instead.
+        if let Err(e) = lua.set_memory_limit(MEMORY_LIMIT) {
+            log::warn!("cannot set the Luau memory limit: {e}");
+        }
         let deadline = self.deadline.clone();
         let limit = self.timeout;
         lua.set_interrupt(move |_| {
@@ -276,9 +281,13 @@ impl ScriptGame {
         lua.set_app_data::<SharedRuntime>(Rc::default());
         lua.set_app_data(save::SavePath(self.save_path.clone()));
         self.lua = Some(lua);
+        let test_shared = self.test.as_ref().map(|t| t.shared.clone());
         self.run(world, |lua| {
             api::install(lua)?;
             modules::install(lua, &lua.globals(), modules)?;
+            if let Some(shared) = test_shared {
+                testing::install(lua, shared)?;
+            }
             lua.load(source.as_str()).set_name(format!("@{name}")).exec()?;
             if matches!(lua.globals().get::<Value>("draw")?, Value::Function(_)) {
                 return Err(mlua::Error::runtime(
@@ -319,10 +328,9 @@ impl ScriptGame {
             Ok(s) => s,
             Err(e) => return self.fail(format!("{}: {e}", t.name)),
         };
-        let (name, shared) = (t.name.clone(), t.shared.clone());
+        let name = t.name.clone();
         let mut status = None;
         self.run(world, |lua| {
-            testing::install(lua, shared)?;
             let f = lua.load(source.as_str()).set_name(format!("@{name}")).into_function()?;
             status = Some(runtime::spawn_task(lua, f, MultiValue::new()).map_err(|e| e.context("in test"))?.status);
             Ok(())
@@ -340,9 +348,10 @@ impl ScriptGame {
         }
         self.last_check = Instant::now();
         let m = modified(&self.path);
-        let changed_module = self.modules.as_ref().and_then(|ms| {
-            ms.borrow().files.iter().find(|(p, t)| t.is_some() && modified(p) != *t).map(|(p, _)| p.clone())
-        });
+        let changed_module = self
+            .modules
+            .as_ref()
+            .and_then(|ms| ms.borrow().files.iter().find(|(p, t)| t.is_some() && modified(p) != *t).map(|(p, _)| p.clone()));
         if (m.is_some() && m != self.modified) || changed_module.is_some() {
             log::info!("reloading {}", changed_module.as_deref().unwrap_or(&self.path).display());
             self.shader_mtimes.clear();
@@ -351,8 +360,7 @@ impl ScriptGame {
             self.load(world);
             return;
         }
-        let files: Vec<(PathBuf, spark_core::ShaderId)> =
-            world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
+        let files: Vec<(PathBuf, spark_core::ShaderId)> = world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
         for (path, id) in files {
             let m = modified(&path);
             match self.shader_mtimes.get(&path) {
@@ -361,9 +369,8 @@ impl ScriptGame {
                 }
                 Some(old) if *old != m => {
                     self.shader_mtimes.insert(path.clone(), m);
-                    let result = spark_core::vfs::read_string(&path).and_then(|code| {
-                        world.assets.shader_mut(id).ok_or_else(|| "shader was unloaded".to_string())?.recompile(&code)
-                    });
+                    let result = spark_core::vfs::read_string(&path)
+                        .and_then(|code| world.assets.shader_mut(id).ok_or_else(|| "shader was unloaded".to_string())?.recompile(&code));
                     match result {
                         Ok(()) => {
                             log::info!("shader reloaded: {}", path.display());
@@ -411,6 +418,9 @@ impl ScriptGame {
 fn modified(path: &Path) -> Option<SystemTime> {
     spark_core::vfs::modified(path)
 }
+
+/// Most memory one game's Luau state may use: past it an allocation is a Lua error ("not enough memory"), not an OOM kill.
+const MEMORY_LIMIT: usize = 1 << 30;
 
 /// `main.luau` longer than this (and no modules) gets a one-time hint to split it.
 const BIG_MAIN: usize = 800;
@@ -469,7 +479,8 @@ impl Game for ScriptGame {
             if let Some(f) = lua.globals().get::<Option<Function>>("render")? {
                 f.call::<()>(()).map_err(|e| e.context("in render()"))?;
             }
-            save::flush(lua)
+            save::flush_frame(lua);
+            Ok(())
         });
         if let Some(v) = &self.shader_view {
             error_screen::draw(world, v);
