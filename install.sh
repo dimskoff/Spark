@@ -76,10 +76,9 @@ else
         elif command -v shasum >/dev/null 2>&1; then
             actual="$(shasum -a 256 "$tmp/spark.tar.gz" | cut -d' ' -f1)"
         else
-            actual=""
-            echo "spark install: warning: no sha256sum / shasum, the download is not verified" >&2
+            fail "neither sha256sum nor shasum is installed, so the download cannot be verified (install coreutils / perl, or set SPARK_ALLOW_UNVERIFIED=1)"
         fi
-        if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
+        if [ "$actual" != "$expected" ]; then
             fail "checksum mismatch for $asset (expected $expected, got $actual)"
         fi
     elif [ -z "${SPARK_ALLOW_UNVERIFIED:-}" ]; then

@@ -1,4 +1,4 @@
-﻿# STATE (handoff)
+# STATE (handoff)
 
 Branch: `overhaul/phase-0-1` (from `main` @ aa92d4b). Nothing is pushed to `main`.
 
@@ -15,7 +15,11 @@ cargo test --workspace
 cargo test -p spark-script --test flow validation     # NaN + path regression script
 ```
 
-## In progress / next (ROADMAP "Next steps")
+## 2nd session
+Done: API registry + drift tests, agent CLI (api/doctor/screenshot/inspect/golden/diff/mcp, --json), range checks, memory limit, alpha cutoff, 12 examples + goldens, CI examples/audit, release metadata (SHA256SUMS, optional minisign), devtools protocol v2 (game side).
+Continue with **docs/NEXT_PROMPT.md** (general) and **docs/EDITOR_PROMPT.md** (editor redesign).
+
+## Older notes (superseded by NEXT_PROMPT.md)
 1. Range validation (fov, sizes, near/far); FBX panics (`fbx.rs` control-point indexing, inflate limit); `ImageData` invariants.
 2. API registry -> generated SPARK_API.md / spark.d.luau / llms.txt + drift test.
 3. Strict globals + did-you-mean, `SPK-` codes, `--json` on all commands, `spark doctor/inspect`.

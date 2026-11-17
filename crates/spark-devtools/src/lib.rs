@@ -21,7 +21,10 @@ pub use link::{Link, Server};
 pub use protocol::*;
 
 /// Bumped on incompatible changes of [`GameMessage`] / [`EditorCommand`].
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
+
+/// Environment variable with the session token the editor hands to the game (sent back in `Hello`).
+pub const TOKEN_ENV: &str = "SPARK_DEVTOOLS_TOKEN";
 
 /// The runner flag that enables devtools: `spark game --devtools 127.0.0.1:50123`.
 pub const FLAG: &str = "--devtools";

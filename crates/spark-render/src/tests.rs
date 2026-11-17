@@ -97,6 +97,27 @@ fn headless_render_draws_scene() {
     assert!(!r.is_device_lost());
 }
 
+/// A material at 20% alpha is faint, not gone (the opaque cutout of 0.3 must not apply to blended materials).
+#[test]
+fn faint_alpha_material_is_still_drawn() {
+    let mut r = match Renderer::new_headless(64, 64) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("skipping GPU test: {e}");
+            return;
+        }
+    };
+    let mut world = World::default();
+    world.scene.background = Color::BLACK;
+    let cube = world.add_mesh(MeshData::cube(2.0));
+    world.spawn(cube, Material::unlit(Color::WHITE.with_alpha(0.2)));
+    world.scene.camera.position = Vec3::new(0.0, 0.0, 4.0);
+    world.scene.camera.look_at(Vec3::ZERO);
+    let image = r.screenshot(&world).expect("screenshot");
+    let center = image.pixel(32, 32);
+    assert!(center[0] > 20 && center[0] < 200, "alpha 0.2 should give a dim cube, got {center:?}");
+}
+
 fn test_world() -> World {
     let mut world = World::default();
     world.scene.background = Color::BLACK;

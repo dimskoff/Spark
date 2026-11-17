@@ -1,0 +1,8 @@
+test.step("the door starts closed")
+test.wait_text("Press E")
+local door = test.find("door")
+test.step("E opens it")
+test.tap("e")
+test.wait(0.8)
+test.expect(door.x > 2.9, "the door should slide to the side")
+test.wait_text("Door open")

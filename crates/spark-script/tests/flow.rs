@@ -105,6 +105,11 @@ fn validation_contract() {
 }
 
 #[test]
+fn memory_bomb_is_an_error() {
+    run_script("memory_bomb.luau", 10);
+}
+
+#[test]
 fn debug_contract() {
     run_script("debug.luau", 10);
 }

@@ -186,6 +186,11 @@ pub(crate) fn ensure_pipeline(device: &wgpu::Device, layout: &wgpu::PipelineLayo
     } else {
         None
     };
+    // Opaque surfaces cut out pixels below 0.3 alpha (foliage, fences); blended ones only skip fully invisible pixels,
+    // so an alpha material at 0.2 is faint, not gone.
+    let cutoff = if transparent { 0.004 } else { 0.3 };
+    let fragment_constants: Vec<(&str, f64)> =
+        if s.kind == ShaderKind::Surface { vec![("SPARK_ALPHA_CUTOFF", cutoff)] } else { Vec::new() };
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let vertex_buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: size_of::<Vertex>() as u64,
@@ -223,7 +228,7 @@ pub(crate) fn ensure_pipeline(device: &wgpu::Device, layout: &wgpu::PipelineLayo
         fragment: Some(wgpu::FragmentState {
             module,
             entry_point: Some("spark_fs"),
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions { constants: &fragment_constants, ..Default::default() },
             targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })],
         }),
         multiview_mask: None,

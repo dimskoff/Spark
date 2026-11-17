@@ -174,7 +174,7 @@ function update(dt)
 end
 ```
 
-Examples in this repo:
+Examples in this repo (see [examples/README.md](examples/README.md); agents: `spark api search <word>`, `spark mcp`, `spark doctor`):
 
 ```
 target/release/spark examples/demo        # 3D: physics, custom shaders, sound

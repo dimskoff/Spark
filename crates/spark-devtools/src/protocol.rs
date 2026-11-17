@@ -7,7 +7,15 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GameMessage {
     /// First message after connecting.
-    Hello { protocol: u32, engine: String, pid: u32, gpu: String },
+    /// `token` is the value of `SPARK_DEVTOOLS_TOKEN` the editor gave the game (checked by the editor once it hands out tokens).
+    Hello {
+        protocol: u32,
+        engine: String,
+        pid: u32,
+        gpu: String,
+        #[serde(default)]
+        token: String,
+    },
     /// Frame numbers, a few times per second.
     Stats(Stats),
     /// The whole scene (see [`SceneSnapshot`]), when the editor subscribed with [`EditorCommand::WatchScene`].
@@ -34,6 +42,21 @@ pub enum EditorCommand {
     WatchScene { interval_ms: Option<u32> },
     /// Turn the in-game F1 debug overlay on / off.
     Overlay { on: bool },
+    /// Edit one object of the running scene (id = the id of the scene dump). Only the fields that are Some change;
+    /// values must be finite. Reverted by the next Reload like every runtime change.
+    SetObject {
+        id: u32,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        position: Option<[f32; 3]>,
+        #[serde(default)]
+        rotation_deg: Option<[f32; 3]>,
+        #[serde(default)]
+        scale: Option<[f32; 3]>,
+        #[serde(default)]
+        visible: Option<bool>,
+    },
     /// Close the game gracefully.
     Quit,
 }
@@ -114,7 +137,7 @@ mod tests {
     #[test]
     fn round_trip() {
         let msgs = [
-            GameMessage::Hello { protocol: 1, engine: "0.1.0".into(), pid: 7, gpu: "x".into() },
+            GameMessage::Hello { protocol: 2, engine: "0.1.0".into(), pid: 7, gpu: "x".into(), token: "t".into() },
             GameMessage::Stats(Stats { frame: 3, fps: 60.0, ..Default::default() }),
             GameMessage::Paused { paused: true },
             GameMessage::ScriptError { message: Some("main.luau:3: boom".into()) },
@@ -129,6 +152,18 @@ mod tests {
         let line = serde_json::to_string(&c).unwrap();
         assert_eq!(line, r#"{"type":"watch_scene","interval_ms":250}"#);
         assert_eq!(serde_json::from_str::<EditorCommand>(&line).unwrap(), c);
+        let set = EditorCommand::SetObject {
+            id: 4,
+            name: None,
+            position: Some([1.0, 2.0, 3.0]),
+            rotation_deg: None,
+            scale: None,
+            visible: Some(false),
+        };
+        assert_eq!(serde_json::from_str::<EditorCommand>(&serde_json::to_string(&set).unwrap()).unwrap(), set);
+        // an old game without a token still parses (the editor then rejects it)
+        let old = r#"{"type":"hello","protocol":1,"engine":"0.1.0","pid":1,"gpu":"g"}"#;
+        assert!(matches!(serde_json::from_str::<GameMessage>(old).unwrap(), GameMessage::Hello { token, .. } if token.is_empty()));
     }
 
     #[test]

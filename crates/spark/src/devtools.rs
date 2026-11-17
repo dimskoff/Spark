@@ -35,6 +35,7 @@ impl Devtools {
                     engine: VERSION.to_string(),
                     pid: std::process::id(),
                     gpu: gpu.to_string(),
+                    token: std::env::var(spark_devtools::TOKEN_ENV).unwrap_or_default(),
                 });
                 log::info!("devtools: connected to {addr}");
                 Some(Self { link, paused: false, steps: 0, scene_every: None, last_scene: None, last_stats: None, last_error: None })
@@ -82,6 +83,9 @@ impl Devtools {
                     self.last_scene = None;
                 }
                 EditorCommand::Overlay { on } => world.debug.set_enabled(on),
+                EditorCommand::SetObject { id, name, position, rotation_deg, scale, visible } => {
+                    apply_set_object(world, id, name, position, rotation_deg, scale, visible);
+                }
                 EditorCommand::Quit => world.quit(),
             }
         }
@@ -139,5 +143,39 @@ impl Devtools {
         if self.link.send(GameMessage::Bye) {
             std::thread::sleep(Duration::from_millis(30));
         }
+    }
+}
+
+/// Applies an editor edit to one object; non-finite values and unknown ids are ignored with a warning.
+fn apply_set_object(
+    world: &mut World,
+    id: u32,
+    name: Option<String>,
+    position: Option<[f32; 3]>,
+    rotation_deg: Option<[f32; 3]>,
+    scale: Option<[f32; 3]>,
+    visible: Option<bool>,
+) {
+    use spark_core::glam::{EulerRot, Quat, Vec3};
+    let finite = |v: &[f32; 3]| v.iter().all(|x| x.is_finite());
+    let Some(oid) = world.scene.id_of_index(id) else {
+        log::warn!("devtools: SetObject: no object #{id}");
+        return;
+    };
+    let Some(o) = world.scene.get_mut(oid) else { return };
+    if let Some(n) = name {
+        o.name = n;
+    }
+    if let Some(p) = position.filter(finite) {
+        o.position = Vec3::from_array(p);
+    }
+    if let Some(r) = rotation_deg.filter(finite) {
+        o.rotation = Quat::from_euler(EulerRot::YXZ, r[1].to_radians(), r[0].to_radians(), r[2].to_radians());
+    }
+    if let Some(s) = scale.filter(finite) {
+        o.scale = Vec3::from_array(s);
+    }
+    if let Some(v) = visible {
+        o.visible = v;
     }
 }

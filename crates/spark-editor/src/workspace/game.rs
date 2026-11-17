@@ -243,7 +243,7 @@ impl GameSession {
             let alive = link.is_alive();
             for msg in messages {
                 match msg {
-                    GameMessage::Hello { protocol, engine, pid, gpu } => {
+                    GameMessage::Hello { protocol, engine, pid, gpu, .. } => {
                         if protocol != spark_devtools::PROTOCOL_VERSION {
                             lines.push(editor_line(
                                 JobKind::Run,

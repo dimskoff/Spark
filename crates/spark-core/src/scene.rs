@@ -364,6 +364,12 @@ impl Scene {
         self.get(id).is_some()
     }
 
+    /// The live object in slot index (what ObjectId::index / the scene dump report), if any.
+    pub fn id_of_index(&self, index: u32) -> Option<ObjectId> {
+        let s = self.slots.get(index as usize)?;
+        s.object.as_ref().map(|_| ObjectId { index, generation: s.generation })
+    }
+
     pub fn get(&self, id: ObjectId) -> Option<&Object> {
         self.slots.get(id.index as usize).filter(|s| s.generation == id.generation).and_then(|s| s.object.as_ref())
     }

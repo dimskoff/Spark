@@ -17,6 +17,7 @@ read the entries below for your old version and the new one, fix the code, then 
 - `obj:every(0, fn)` is an error like the global `every(0, fn)`.
 
 ### Fixes
+- Materials with alpha < 0.3 and blending (alpha / additive) are no longer cut out (the 0.3 cutout applies to opaque materials only).
 - `save`: a failed write no longer loses the "unsaved" mark; the file is written with fsync + atomic rename, a failure while
   playing is logged and retried every 2 s instead of stopping the game; real cycle detection (the old "cycle?" appeared on any
   table nested deeper than 32 levels); a 100k-value limit per `save.set`.
@@ -28,6 +29,11 @@ read the entries below for your old version and the new one, fix the code, then 
 ### Tooling
 - CI runs `cargo fmt --check` and `clippy -D warnings` with no allowed lints; `rustfmt.toml` added.
 ### Added
+- **API registry**: `docs/API_REFERENCE.md`, `docs/api.json`, `llms.txt`, `llms-full.txt` are generated from `docs/spark.d.luau`; tests fail when the docs and the engine disagree. `spark new` ships them plus `CLAUDE.md`.
+- **Agent CLI**: `spark api search|show|list`, `spark doctor`, `spark screenshot`, `spark inspect`, `spark golden`, `spark diff`, `spark mcp` (Model Context Protocol server on stdio); `--json` on `new`, `docs`, `build`, `update`. Exit codes: 0 ok, 1 failed, 2 usage/environment.
+- Range checks: `camera.fov` 1..179, `near`/`far`, mesh sizes and radii, body `mass`/`friction`.
+- Devtools protocol 2: `SetObject` (edit a running object), `Hello.token`. Luau memory limit (1 GiB).
+- 12 examples (`examples/01-hello` ... `showcase/`) with golden images; the old `starfall` example was removed.
 - **FBX import** (`.fbx` in `Model.load` / `spawn`): binary and ASCII 7.x, hierarchy, meshes per material, skins, animation stacks,
   unit / up-axis conversion, texture lookup next to the file with automatic PBR sets (`_Normal`, `_AO`, `_Roughness`, `_Metallic`, `_Opacity`).
 - `spawn(model, { node = "name" })` and `model.nodes`: use one part of a model that holds a whole kit.
