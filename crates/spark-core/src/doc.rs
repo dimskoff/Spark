@@ -36,11 +36,12 @@ use crate::command::{Command, CommandError, MeshDoc, MeshState, NodeDoc, SceneDo
 use crate::mesh_source::MeshSource;
 use crate::node_id::NodeId;
 use crate::registry::registry;
-use crate::scene::{Fog, Object, ObjectId, Scene, Sky, Sun};
+use crate::scene::{Fog, Object, ObjectId, Scene, ScriptComponent, Sky, Sun};
 use crate::world::World;
 
-/// Components ADR 0003 names but the registry does not know yet (C-16 `script`, C-17 `camera`). A file may contain
-/// them: they are kept as plain maps, written back unchanged, and ignored by [`instantiate`] (with a warning).
+/// Components ADR 0003 names that are not in the reflection registry: `script` (free-form props, interpreted since
+/// C-16: [`ScriptComponent`]) and `camera` (C-17). They are kept as plain maps in a document and written back
+/// unchanged; [`instantiate`] attaches `script` and ignores `camera` (with a warning).
 pub const RESERVED_COMPONENTS: &[&str] = &["camera", "script"];
 
 /// Every component name a file may use, in canonical order: the registry's, then [`RESERVED_COMPONENTS`].
@@ -495,6 +496,9 @@ pub fn mesh_from_value(v: &Value) -> Result<(MeshSource, Vec<(f32, MeshSource)>)
 pub fn normalize_component(name: &str, v: &Value) -> Result<Value, ComponentError> {
     let reg = registry();
     let Some(info) = reg.component(name) else {
+        if name == "script" {
+            return ScriptComponent::from_value(v).map(|s| s.to_value()).map_err(ComponentError::Invalid);
+        }
         if RESERVED_COMPONENTS.contains(&name) {
             return match v {
                 Value::Map(_) => Ok(v.clone()),
@@ -560,6 +564,9 @@ pub fn capture(world: &mut World) -> SceneFile {
                 node.components.push((c.name.to_string(), round_angles(c.info(), strip_transient(c.info(), v, true))));
             }
         }
+        if let Some(s) = obj.script() {
+            node.components.push(("script".into(), s.to_value()));
+        }
         file.nodes.push(node);
     }
     file
@@ -575,8 +582,9 @@ pub struct Instantiated {
     pub roots: Vec<NodeId>,
     /// Number of objects created.
     pub count: usize,
-    /// Parts of the document that were ignored because the engine does not interpret them yet (`camera`, `script`,
-    /// `tags`) or that were not expanded (prefab instances: see `spark_scene::expand`).
+    /// Parts of the document that were ignored because the engine does not interpret them yet (`camera`, `tags`) or
+    /// that were not expanded (prefab instances: see `spark_scene::expand`). A `script` is attached (the script host
+    /// starts it on its next frame).
     pub warnings: Vec<String>,
     /// Removes what was created (the environment is not restored).
     pub undo: Command,
@@ -688,6 +696,10 @@ fn node_doc(n: &FileNode, warnings: &mut Vec<String>) -> Result<NodeDoc, Instant
     let reg = registry();
     for (name, v) in &n.components {
         let Some(info) = reg.component(name) else {
+            if name == "script" {
+                d.script = Some(ScriptComponent::from_value(v).map_err(|e| fail(name, ComponentError::Invalid(e)))?);
+                continue;
+            }
             if RESERVED_COMPONENTS.contains(&name.as_str()) {
                 warnings.push(format!("node '{}': component '{name}' is not supported yet and was ignored", n.id));
                 continue;
@@ -709,6 +721,14 @@ fn node_doc(n: &FileNode, warnings: &mut Vec<String>) -> Result<NodeDoc, Instant
     d.material = o.material;
     d.body = o.body;
     d.light = o.light;
+    if let Some(s) = &d.script {
+        if s.path.trim().is_empty() {
+            return Err(fail(
+                "script",
+                ComponentError::Invalid(ReflectError::WrongType { path: "path".into(), expected: "a file path", got: "empty string" }),
+            ));
+        }
+    }
     if !n.tags.is_empty() {
         warnings.push(format!("node '{}': tags are not supported yet and were ignored", n.id));
     }
@@ -841,5 +861,30 @@ mod tests {
         let r = instantiate(&f, &mut w).unwrap();
         assert_eq!(r.warnings.len(), 2);
         assert_eq!(w.scene.len(), 1);
+    }
+
+    #[test]
+    fn scripts_are_attached_captured_and_not_warned_about() {
+        let mut f = SceneFile::new(FileKind::Scene);
+        for (id, speed) in [("a", 2), ("b", 3)] {
+            let mut n = FileNode::new(nid(id));
+            let s = ScriptComponent { path: "src/door.luau".into(), props: vec![("speed".into(), Value::Int(speed))] };
+            n.set_component("script", s.to_value());
+            f.nodes.push(n);
+        }
+        let mut w = World::new();
+        let r = instantiate(&f, &mut w).unwrap();
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        let order: Vec<u32> = w.scene.scripted().iter().map(|(_, o)| o.index()).collect();
+        assert_eq!(order.len(), 2);
+        assert_eq!(capture(&mut w), f);
+        // A misspelled key is an error with a suggestion.
+        let mut bad = f.clone();
+        bad.nodes[0].set_component("script", Value::Map(vec![("pth".into(), Value::Str("x".into()))]));
+        let e = instantiate(&bad, &mut World::new()).unwrap_err().to_string();
+        assert!(e.contains("path"), "{e}");
+        // Undo removes the objects and their script entries.
+        w.apply(&r.undo).unwrap();
+        assert!(w.scene.scripted().is_empty());
     }
 }

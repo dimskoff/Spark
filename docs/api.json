@@ -923,6 +923,11 @@
           "doc": ""
         },
         {
+          "name": "script",
+          "ty": "string?",
+          "doc": "path of the attached object script (nil = none); assigning a path attaches it, nil detaches it"
+        },
+        {
           "name": "body",
           "ty": "BodyType?",
           "doc": "physics (see \"Physics\"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below"
@@ -1239,6 +1244,31 @@
               "optional": false
             }
           ],
+          "ret": "()",
+          "doc": ""
+        },
+        {
+          "name": "attach_script",
+          "generics": "",
+          "params": [
+            {
+              "name": "path",
+              "ty": "string",
+              "optional": false
+            },
+            {
+              "name": "props",
+              "ty": "{ [string]: any }?",
+              "optional": true
+            }
+          ],
+          "ret": "()",
+          "doc": "object scripts (see \"Object scripts\"): `props` override the defaults the script declares"
+        },
+        {
+          "name": "detach_script",
+          "generics": "",
+          "params": [],
           "ret": "()",
           "doc": ""
         },

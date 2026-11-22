@@ -168,6 +168,24 @@ const TEXT: Color = Color::rgb(0.93, 0.92, 0.9);
 const DIM: Color = Color::rgb(0.55, 0.53, 0.52);
 const ACCENT: Color = Color::rgb(0.98, 0.78, 0.45);
 
+/// One red line at the bottom of the screen while object scripts are failed (the game keeps running; the full text is
+/// in the console, `error.log` is for fatal errors only).
+pub fn draw_object_banner(world: &mut World, failed: usize) {
+    let c = &mut world.canvas;
+    let prev = c.layer();
+    c.set_layer(Layer::Ui);
+    let size = c.size();
+    let s = (size.y / 720.0).clamp(0.6, 2.0);
+    let text = format!(
+        "{failed} object script{} failed and {} stopped (see the console)",
+        if failed == 1 { "" } else { "s" },
+        if failed == 1 { "is" } else { "are" }
+    );
+    let p = TextParams { size: 14.0 * s, color: RED, align: Align { x: 0.0, y: 1.0 }, ..Default::default() };
+    c.text(&text, Vec2::new(10.0 * s, size.y - 8.0 * s), &p);
+    c.set_layer(prev);
+}
+
 /// Draws the screen over the (frozen) game.
 pub fn draw(world: &mut World, v: &ErrorView) {
     let c = &mut world.canvas;

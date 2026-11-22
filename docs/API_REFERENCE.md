@@ -715,6 +715,7 @@ object.z: number
 object.material: Material?
 object.parent: Object?
 object.light: LightRef?
+object.script: string?
 object.body: BodyType?
 object.name: string
 object.visible: boolean
@@ -759,6 +760,8 @@ object:exists() -> boolean
 object:destroy()
 object:find(name: string) -> Object?
 object:paint(material: Material | ColorLike)
+object:attach_script(path: string, props: { [string]: any }?)
+object:detach_script()
 object:on(name: string, fn: (...any) -> any, opts: ListenerOptions?) -> Listener
 object:once(name: string, fn: (...any) -> any, opts: ListenerOptions?) -> Listener
 object:emit(name: string, ...: any) -> boolean
@@ -781,6 +784,7 @@ object:move(delta: vector) -> (vector, boolean)
 ```
 
 - `x`: shortcuts for position.x / .y / .z
+- `script`: path of the attached object script (nil = none); assigning a path attaches it, nil detaches it
 - `body`: physics (see "Physics"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below
 - `name`: Name shown in the hierarchy and used by `find(name)`.
 - `visible`: Drawn (children inherit it being off). Default true.
@@ -806,6 +810,7 @@ object:move(delta: vector) -> (vector, boolean)
 - `gravity_scale`: Multiplier of the world gravity for this body (0 = floats, negative = rises). Default 1.
 - `velocity`: World-space velocity (m/s). Written back by the simulation; set it to change it. Unit: m/s. Default vec3(0, 0, 0).
 - `angular_velocity`: World-space angular velocity (rad/s). Unit: rad/s. Default vec3(0, 0, 0).
+- `attach_script`: object scripts (see "Object scripts"): `props` override the defaults the script declares
 - `on`: events and timers owned by the object
 - `play`: animation (glTF models)
 - `add_body`: physics

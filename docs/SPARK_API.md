@@ -112,6 +112,7 @@ shared by `main.luau`, required modules and tasks, but a global can shadow a bui
 | `SPK-1005` | script ran too long (infinite loop; use `wait()` inside `task(function() ... end)`) |
 | `SPK-1006` | destroyed object used (check `obj:exists()`) |
 | `SPK-1007` | write to a built-in library or API table (`math.sin = nil`, `Mesh.cube = f`, `setmetatable(string, {})`) |
+| `SPK-1008` | object script: a prop that is not declared, has the wrong type or is named like an Object member (see "Object scripts") |
 | `SPK-1100` | syntax error |
 | `SPK-1101` | type error from `--types` (luau-lsp) |
 
@@ -358,6 +359,61 @@ Object methods:
 | `obj:distance_to(obj_or_vec)` | |
 | `obj:exists()`, `obj:destroy()` | using a destroyed object raises an error |
 | `a == b`, `tostring(obj)` | |
+| `obj.script`, `obj:attach_script(path, props?)`, `obj:detach_script()` | the object's script, see "Object scripts" |
+
+## Object scripts
+
+A script can belong to one object instead of living in `main.luau`. The module returns a table with optional
+`props` (declared properties and their defaults) and callbacks; every object that uses it gets its own instance:
+
+```lua
+-- src/door.luau
+local Door = {}
+Door.props = { open_angle = 90, speed = 2 }          -- types come from the defaults
+function Door:start() self.closed = self.rotation end -- self.rotation is the object's rotation
+function Door:update(dt)
+    self.object:rotate_y(self.speed * dt)             -- self.object is the Object
+end
+function Door:on_collision(other, info) end
+function Door:on_destroy() end
+return Door
+
+-- main.luau
+function start()
+    local door = spawn(Mesh.cube(), "brown", { name = "Door" })
+    door:attach_script("src/door.luau", { speed = 4 })   -- or `script = "src/door.luau"` in a .scene file
+end
+```
+
+In a `.scene` / `.prefab` file the same is `[node.script]` with `path = "src/door.luau"` and `[node.script.props]`
+(see `docs/dev/adr/0003-scene-and-prefab-format.md`); loading the scene attaches the scripts.
+
+- **Callbacks** (all optional): `start(self)`, `update(self, dt)`, `fixed_update(self, dt)`, `late_update(self, dt)`,
+  `on_collision(self, other, info)` (when a contact starts; `info` like in `obj:on("collision", ...)`) and `on_destroy(self)`.
+  They run after the global callback of the same name, one object after the other **in the order the scripts were
+  attached** (not slot order), the same on every run. `start` runs once, before the first `update` of the object,
+  at the first frame stage after the script was attached (so `door:attach_script(...)` in `start()` works).
+  `on_destroy` runs when the object is destroyed (`obj:destroy()` / `destroy(obj)`: the object still exists; any other
+  removal: it is already gone, only `self` state is usable) or the script is detached or replaced. A game restart or
+  hot reload recreates everything without calling `on_destroy`.
+- **`self`**: a table per object. `self.object` is the `Object`. Reading or writing a member of the Object on `self`
+  (`self.position`, `self.visible`, `self:rotate_y(a)`) goes to the object; any other key is your own instance state
+  (`self.closed`). Methods of the module are found on `self` too. `self.object:rotate_y(a)` skips the forwarding and is
+  slightly faster in hot loops.
+- **`props`**: values from the scene file / `attach_script` override the declared defaults and must have the same type
+  (number, string, boolean, vector, table). A name the script does not declare is an error with a "did you mean". A
+  prop name that is also an Object member (`position`, `color`, `visible`, `id`, ...) or `object` is rejected when the
+  script loads. Props are initial values: changing `self.speed` at run time is not written back to the scene.
+- **Errors are isolated**: an error in a callback of one object (including an infinite loop cut by the 5 s limit, or
+  a bad prop) marks only that object failed. It is logged once with the code, the script, the callback, the object name
+  and its node id, shown as a line at the bottom of the screen, and sent to the editor; the game and all other
+  objects keep running, and the failed object's callbacks are skipped until the game restarts. (An error in the global
+  `main.luau` callbacks still stops the game, as before.) Codes: `SPK-1002` misspelled callback in the script,
+  `SPK-1005` too long, `SPK-1008` bad prop, `SPK-1000` other.
+- Misspelled callbacks (`Update`, `on_colision`) and a `render` function in an object script are errors with a hint.
+- `obj.script` is the path (or `nil`); `obj.script = "src/x.luau"` attaches without props, `obj.script = nil` detaches.
+  Attaching again replaces the script (the old one gets `on_destroy`, the new one `start`).
+- Scripts are loaded through `require`: the module is cached per path, saving it reloads the game.
 
 ## Scenes and prefabs
 

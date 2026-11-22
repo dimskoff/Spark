@@ -105,6 +105,12 @@ fn find_file(root: &std::path::Path, rel: &str) -> Result<String, Vec<String>> {
     Err(candidates)
 }
 
+/// Loads (or takes from the cache) the module at a game-relative path, like `require("@game/<path>")`. Used for the
+/// scripts attached to objects, so they share the cache, the sandbox and hot reload with `require`.
+pub(crate) fn require_game(lua: &Lua, path: &str) -> LuaResult<Value> {
+    require(lua, format!("@game/{path}"))
+}
+
 fn require(lua: &Lua, spec: String) -> LuaResult<Value> {
     let from = caller(lua);
     let modules = lua.app_data_ref::<SharedModules>().ok_or_else(|| rt("require is not available here"))?.clone();

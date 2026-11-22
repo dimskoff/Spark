@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 
 use glam::{EulerRot, Mat4, Quat, Vec3};
-use spark_reflect::{Reflect, ReflectEnum};
+use spark_reflect::{Reflect, ReflectEnum, ReflectError, Value};
 
 use crate::assets::{CubemapId, MeshId};
 use crate::camera::Camera;
@@ -60,6 +60,74 @@ impl Default for Transform {
     }
 }
 
+/// The `script` component (ADR 0005, section 4): a Luau script attached to an object, with the values of its
+/// `props`. In a document it is the map `{ path = "src/door.luau", props = { open_angle = 90 } }`.
+///
+/// ```
+/// use spark_core::scene::ScriptComponent;
+/// use spark_reflect::Value;
+///
+/// let s = ScriptComponent { path: "src/door.luau".into(), props: vec![("speed".into(), Value::Int(2))] };
+/// assert_eq!(ScriptComponent::from_value(&s.to_value()).unwrap(), s);
+/// ```
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ScriptComponent {
+    /// Game-relative path of the script module (`src/door.luau`).
+    pub path: String,
+    /// Initial values of the script's props, by name (they override the defaults the script declares).
+    pub props: Vec<(String, Value)>,
+}
+
+impl ScriptComponent {
+    pub fn new(path: &str) -> Self {
+        Self { path: path.to_string(), props: Vec::new() }
+    }
+
+    /// The document form: a map with `path` and, when there are props, `props`.
+    pub fn to_value(&self) -> Value {
+        let mut pairs = vec![("path".to_string(), Value::Str(self.path.clone()))];
+        if !self.props.is_empty() {
+            pairs.push(("props".to_string(), Value::Map(self.props.clone())));
+        }
+        Value::Map(pairs)
+    }
+
+    /// Reads the document form. Unknown keys are errors with did-you-mean suggestions.
+    pub fn from_value(v: &Value) -> Result<Self, ReflectError> {
+        let Value::Map(pairs) = v else {
+            return Err(ReflectError::WrongType { path: String::new(), expected: "map", got: v.type_name() });
+        };
+        let mut s = Self::default();
+        let mut has_path = false;
+        for (k, val) in pairs {
+            match (k.as_str(), val) {
+                ("path", Value::Str(p)) => {
+                    s.path = p.clone();
+                    has_path = true;
+                }
+                ("path", other) => {
+                    return Err(ReflectError::WrongType { path: "path".into(), expected: "string", got: other.type_name() });
+                }
+                ("props", Value::Map(p)) => s.props = p.clone(),
+                ("props", other) => {
+                    return Err(ReflectError::WrongType { path: "props".into(), expected: "map", got: other.type_name() });
+                }
+                _ => {
+                    return Err(ReflectError::UnknownField {
+                        ty: "script",
+                        path: k.clone(),
+                        suggestions: spark_reflect::did_you_mean(k, ["path", "props"]),
+                    });
+                }
+            }
+        }
+        if !has_path {
+            return Err(ReflectError::WrongType { path: "path".into(), expected: "string", got: "none" });
+        }
+        Ok(s)
+    }
+}
+
 /// Something in the world: a transform plus an optional mesh.
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -77,6 +145,9 @@ pub struct Object {
     pub body: Option<Body>,
     /// Light emitted from the object's position (spot lights shine along -Z).
     pub light: Option<Light>,
+    /// Script attached to the object (`None` = none). Changed through [`Scene::set_script`] (or set before
+    /// [`Scene::add`]) so that the scene can list the scripted objects in spawn order.
+    pub(crate) script: Option<ScriptComponent>,
     /// Stable id for commands and scene files, assigned lazily (see [`crate::node_id`]). Cleared by [`Scene::add`].
     pub(crate) node_id: Option<NodeId>,
     pub(crate) parent: Option<ObjectId>,
@@ -110,6 +181,7 @@ impl Object {
             visible: true,
             body: None,
             light: None,
+            script: None,
             node_id: None,
             parent: None,
             children: Vec::new(),
@@ -144,6 +216,11 @@ impl Object {
 
     pub fn parent(&self) -> Option<ObjectId> {
         self.parent
+    }
+
+    /// The script attached to this object, if any.
+    pub fn script(&self) -> Option<&ScriptComponent> {
+        self.script.as_ref()
     }
 
     /// Stable node id, if one was assigned (see [`crate::World::node_id`]).
@@ -372,6 +449,12 @@ pub struct Scene {
     pub fog: Option<Fog>,
     /// Sky behind everything; `None` = clear to `background`.
     pub sky: Option<Sky>,
+    /// Objects that have a script, in the order the scripts were attached (a monotonic sequence number, not the slot
+    /// index, so the order does not depend on slot reuse). Sorted by sequence number.
+    scripted: Vec<(u64, ObjectId)>,
+    script_seq: u64,
+    /// Bumped whenever `scripted` changes (the script host compares it to skip work).
+    script_epoch: u64,
 }
 
 impl Default for Scene {
@@ -392,7 +475,48 @@ impl Scene {
             background: Color::rgb(0.08, 0.09, 0.12),
             fog: None,
             sky: None,
+            scripted: Vec::new(),
+            script_seq: 0,
+            script_epoch: 0,
         }
+    }
+
+    /// Objects with a script as `(sequence number, object)`, ordered by when the script was attached. A script that is
+    /// replaced or re-attached gets a new, larger number.
+    pub fn scripted(&self) -> &[(u64, ObjectId)] {
+        &self.scripted
+    }
+
+    /// Changes whenever [`Scene::scripted`] does.
+    pub fn script_epoch(&self) -> u64 {
+        self.script_epoch
+    }
+
+    fn register_script(&mut self, id: ObjectId) {
+        self.script_seq += 1;
+        self.scripted.push((self.script_seq, id));
+        self.script_epoch += 1;
+    }
+
+    fn unregister_script(&mut self, id: ObjectId) {
+        self.scripted.retain(|(_, o)| *o != id);
+        self.script_epoch += 1;
+    }
+
+    /// Attaches, replaces (`Some`) or removes (`None`) the script of an object. Returns false if the object does not
+    /// exist. Attaching again counts as a new script: the script host restarts it.
+    pub fn set_script(&mut self, id: ObjectId, script: Option<ScriptComponent>) -> bool {
+        let Some(o) = self.get_mut(id) else { return false };
+        let had = o.script.is_some();
+        let has = script.is_some();
+        o.script = script;
+        if had {
+            self.unregister_script(id);
+        }
+        if has {
+            self.register_script(id);
+        }
+        true
     }
 
     /// Adds an object. Prefer `World::spawn`, which also sets mesh bounds.
@@ -413,6 +537,9 @@ impl Scene {
         if let Some(p) = parent {
             self[p].children.push(id);
         }
+        if self[id].script.is_some() {
+            self.register_script(id);
+        }
         id
     }
 
@@ -430,10 +557,14 @@ impl Scene {
                 continue;
             }
             let Some(o) = slot.object.take() else { continue };
+            let scripted = o.script.is_some();
             stack.extend(o.children);
             slot.generation = slot.generation.wrapping_add(1);
             self.free.push(cur.index);
             self.count -= 1;
+            if scripted {
+                self.unregister_script(cur);
+            }
         }
         true
     }
@@ -448,6 +579,10 @@ impl Scene {
         }
         self.free.reverse();
         self.count = 0;
+        if !self.scripted.is_empty() {
+            self.scripted.clear();
+            self.script_epoch += 1;
+        }
     }
 
     pub fn contains(&self, id: ObjectId) -> bool {

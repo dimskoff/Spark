@@ -449,7 +449,12 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
     )?;
     g.set(
         "destroy",
-        lua.create_function(|lua, o: Option<UserDataRef<Obj>>| with(lua, |w| Ok(o.map(|o| w.scene.destroy(o.0)).unwrap_or(false))))?,
+        lua.create_function(|lua, o: Option<UserDataRef<Obj>>| {
+            if let Some(o) = &o {
+                crate::object_scripts::before_destroy(lua, o.0)?;
+            }
+            with(lua, |w| Ok(o.map(|o| w.scene.destroy(o.0)).unwrap_or(false)))
+        })?,
     )?;
     g.set("camera", lua.create_userdata(Cam)?)?;
     g.set(

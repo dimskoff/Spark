@@ -39,7 +39,7 @@ use crate::mesh_source::MeshSource;
 use crate::node_id::NodeId;
 use crate::physics::Body;
 use crate::registry::registry;
-use crate::scene::{Light, Object, ObjectId, Transform};
+use crate::scene::{Light, Object, ObjectId, ScriptComponent, Transform};
 use crate::world::World;
 
 /// An edit of the world. See the module docs.
@@ -204,6 +204,8 @@ pub struct NodeDoc {
     pub body: Option<Body>,
     pub light: Option<Light>,
     pub mesh: Option<MeshState>,
+    /// The attached script and its props.
+    pub script: Option<ScriptComponent>,
     pub children: Vec<NodeDoc>,
 }
 
@@ -218,6 +220,7 @@ impl Default for NodeDoc {
             body: None,
             light: None,
             mesh: None,
+            script: None,
             children: Vec::new(),
         }
     }
@@ -410,6 +413,7 @@ impl World {
         o.material = n.material;
         o.body = n.body.clone();
         o.light = n.light;
+        o.script = n.script.clone();
         o.parent = parent;
         if let Some(ms) = &n.mesh {
             let (mesh, lod) = self.resolve_mesh_state(ms)?;
@@ -463,6 +467,7 @@ impl World {
                 body: ob.body.clone(),
                 light: ob.light,
                 mesh: self.mesh_state(ob),
+                script: ob.script.clone(),
                 children: Vec::new(),
             }));
         }

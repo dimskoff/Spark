@@ -175,6 +175,10 @@ pub enum FieldDecision {
     Node,
     /// Part of the named component.
     Component(&'static str),
+    /// A component outside the reflection registry because its data is free-form (`script`: the props are whatever
+    /// the script declares). Documents carry it as a plain map ([`crate::doc::RESERVED_COMPONENTS`]); scripts and
+    /// the scene API read and write it through [`crate::Scene::set_script`].
+    Free(&'static str),
     /// The hierarchy (`parent`, `children`): changed with `Scene::set_parent`, later by the `Reparent` command.
     Hierarchy,
     /// A cache derived from other fields (`local_bounds` from the mesh): never stored or edited.
@@ -196,6 +200,7 @@ pub const OBJECT_FIELDS: &[(&str, FieldDecision)] = &[
     ("node_id", FieldDecision::Runtime),
     ("body", FieldDecision::Component("body")),
     ("light", FieldDecision::Component("light")),
+    ("script", FieldDecision::Free("script")),
     ("parent", FieldDecision::Hierarchy),
     ("children", FieldDecision::Hierarchy),
     ("local_bounds", FieldDecision::Derived),
@@ -441,8 +446,22 @@ mod tests {
                 [$(stringify!($f)),*]
             }};
         }
-        let mut destructured =
-            object_fields!(name, transform, mesh, lod, material, visible, body, light, node_id, parent, children, local_bounds, interp);
+        let mut destructured = object_fields!(
+            name,
+            transform,
+            mesh,
+            lod,
+            material,
+            visible,
+            body,
+            light,
+            script,
+            node_id,
+            parent,
+            children,
+            local_bounds,
+            interp
+        );
         let mut listed: Vec<&str> = OBJECT_FIELDS.iter().map(|(n, _)| *n).collect();
         destructured.sort_unstable();
         listed.sort_unstable();

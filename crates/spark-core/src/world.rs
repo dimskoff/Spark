@@ -20,6 +20,23 @@ pub struct WindowSettings {
     pub title: Option<String>,
 }
 
+/// An object script that failed (ADR 0005, section 4). The game keeps running; the script host reports it here so
+/// that devtools and tools can show it next to the node.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScriptFailure {
+    /// Node id of the object (`None` when it was already destroyed).
+    pub node_id: Option<crate::node_id::NodeId>,
+    /// Name of the object (empty = unnamed).
+    pub object: String,
+    /// Stable error code (`SPK-1000`, ...).
+    pub code: String,
+    /// Full message: script path, callback, object and the error.
+    pub message: String,
+}
+
+/// Failures kept for the next [`World::take_script_failures`]; more are dropped (the host logs every one).
+const MAX_PENDING_FAILURES: usize = 256;
+
 /// Everything the game can touch. Pure data: renderer, window and scripts read/write it.
 #[derive(Debug, Default)]
 pub struct World {
@@ -47,6 +64,7 @@ pub struct World {
     pub(crate) nodes: crate::node_id::NodeIndex,
     /// Live prefab instances (see [`crate::doc::PrefabInstance`]).
     pub(crate) prefabs: crate::doc::PrefabTable,
+    script_failures: Vec<ScriptFailure>,
     quit: bool,
     restart: bool,
 }
@@ -84,6 +102,23 @@ impl World {
         }
     }
 
+    /// Records a failed object script (called by the script host).
+    pub fn report_script_failure(&mut self, failure: ScriptFailure) {
+        if self.script_failures.len() < MAX_PENDING_FAILURES {
+            self.script_failures.push(failure);
+        }
+    }
+
+    /// Object script failures since the last call (devtools sends them to the editor).
+    pub fn take_script_failures(&mut self) -> Vec<ScriptFailure> {
+        std::mem::take(&mut self.script_failures)
+    }
+
+    /// Object script failures not taken yet.
+    pub fn script_failures(&self) -> &[ScriptFailure] {
+        &self.script_failures
+    }
+
     /// Ask the app to close after this frame.
     pub fn quit(&mut self) {
         self.quit = true;
@@ -109,6 +144,7 @@ impl World {
         self.scene = Scene::new();
         self.nodes.clear();
         self.prefabs.clear();
+        self.script_failures.clear();
         self.physics.clear();
         self.physics.gravity = Physics::default().gravity;
         self.physics.enabled = true;

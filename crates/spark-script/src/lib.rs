@@ -26,6 +26,7 @@ mod light;
 mod model;
 mod modules;
 mod names;
+mod object_scripts;
 mod physics;
 mod reflect_bind;
 mod runtime;
@@ -47,6 +48,7 @@ use mlua::{ErrorContext, Function, Lua, MultiValue, Value};
 use spark_core::{Game, World};
 
 pub use names::{classify, clean_error, hint};
+pub use object_scripts::OBJECT_CALLBACKS;
 pub use runtime::TaskStatus;
 pub use save::default_save_path;
 #[doc(hidden)]
@@ -105,6 +107,8 @@ pub struct ScriptGame {
     /// `math.random` seed applied on every (re)load.
     seed: Option<u64>,
     log_dir: Option<PathBuf>,
+    /// Scripts attached to objects (see `object_scripts.rs`); replaced on every (re)load.
+    objects: object_scripts::SharedObjects,
 }
 
 /// The seed as Luau's `math.randomseed` takes it (a 32-bit integer): `low ^ high` of the 64 bits.
@@ -148,7 +152,14 @@ impl ScriptGame {
             shader_view: None,
             seed: None,
             log_dir: None,
+            objects: Rc::new(RefCell::new(object_scripts::ObjectScripts::new(Rc::default(), Duration::from_secs(5), false))),
         }
+    }
+
+    /// Whether any object has a script (or had one that still needs its `on_destroy`): two empty-list checks, the
+    /// whole cost of object scripts for a game that has none.
+    fn objects_active(&self, world: &World) -> bool {
+        !world.scene.scripted().is_empty() || self.objects.borrow().has_instances()
     }
 
     fn root(&self) -> PathBuf {
@@ -269,6 +280,8 @@ impl ScriptGame {
     }
 
     fn drop_lua(&mut self) {
+        // Instances hold Lua tables and functions: release them before the state goes away.
+        self.objects.borrow_mut().clear();
         if let Some(old) = self.lua.take() {
             if let Err(e) = save::flush(&old) {
                 log::error!("{e}");
@@ -317,6 +330,8 @@ impl ScriptGame {
             Ok(mlua::VmState::Continue)
         });
         lua.set_app_data(Shared(self.shared.clone()));
+        self.objects = Rc::new(RefCell::new(object_scripts::ObjectScripts::new(self.deadline.clone(), self.timeout, self.strict)));
+        lua.set_app_data(self.objects.clone());
         lua.set_app_data::<SharedRuntime>(Rc::default());
         lua.set_app_data(save::SavePath(self.save_path.clone()));
         self.lua = Some(lua);
@@ -559,24 +574,49 @@ impl Game for ScriptGame {
 
     fn fixed_update(&mut self, world: &mut World, dt: f32) {
         self.ensure_frame_started(world);
+        let objects = self.objects_active(world);
         self.run(world, |lua| {
+            if objects {
+                object_scripts::sync(lua)?;
+            }
             physics::dispatch_collisions(lua)?;
-            call_global(lua, "fixed_update", dt)
+            call_global(lua, "fixed_update", dt)?;
+            if objects {
+                object_scripts::run_stage(lua, object_scripts::Stage::Fixed, dt)?;
+            }
+            Ok(())
         });
     }
 
     fn update(&mut self, world: &mut World, dt: f32) {
         self.ensure_frame_started(world);
+        let objects = self.objects_active(world);
         self.run(world, |lua| {
+            if objects {
+                object_scripts::sync(lua)?;
+            }
             physics::dispatch_collisions(lua)?;
             call_global(lua, "update", dt)?;
+            if objects {
+                object_scripts::run_stage(lua, object_scripts::Stage::Update, dt)?;
+            }
             runtime::run_timers(lua)?;
             runtime::flush_deferred(lua)
         });
     }
 
     fn late_update(&mut self, world: &mut World, dt: f32) {
-        self.run(world, |lua| call_global(lua, "late_update", dt));
+        let objects = self.objects_active(world);
+        self.run(world, |lua| {
+            if objects {
+                object_scripts::sync(lua)?;
+            }
+            call_global(lua, "late_update", dt)?;
+            if objects {
+                object_scripts::run_stage(lua, object_scripts::Stage::Late, dt)?;
+            }
+            Ok(())
+        });
     }
 
     fn draw(&mut self, world: &mut World) {
@@ -603,6 +643,10 @@ impl Game for ScriptGame {
         });
         if let Some(v) = &self.shader_view {
             error_screen::draw(world, v);
+        }
+        let failed = self.objects.borrow().failed();
+        if failed > 0 {
+            error_screen::draw_object_banner(world, failed);
         }
     }
 

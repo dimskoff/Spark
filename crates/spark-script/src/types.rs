@@ -171,7 +171,7 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
 }
 
 /// Object members that are not registry fields: the id, the `x`/`y`/`z` shortcuts, the component handles and the hierarchy.
-const OBJ_EXTRA_FIELDS: &[&str] = &["id", "x", "y", "z", "material", "parent", "body", "light"];
+const OBJ_EXTRA_FIELDS: &[&str] = &["id", "x", "y", "z", "material", "parent", "body", "light", "script"];
 
 /// Methods of an object (suggestions for "unknown field"; the real lookup is mlua's).
 const OBJ_METHODS: &[&str] = &[
@@ -213,6 +213,8 @@ const OBJ_METHODS: &[&str] = &[
     "find",
     "paint",
     "move",
+    "attach_script",
+    "detach_script",
 ];
 
 /// Every name that can follow `obj.`: the fields of the component registry that live flat on the object (`lua` names
@@ -301,6 +303,13 @@ impl UserData for Obj {
         });
         crate::physics::add_object_fields(f);
         crate::light::add_object_fields(f);
+        // The path of the attached script (nil = none); assigning a path attaches it, nil detaches (ADR 0005, section 4).
+        f.add_field_method_get("script", |lua, this| crate::object_scripts::script_path(lua, this.0));
+        f.add_field_method_set("script", |lua, this, v: Value| match v {
+            Value::Nil | Value::Boolean(false) => crate::object_scripts::detach_script(lua, this.0),
+            Value::String(s) => crate::object_scripts::attach_script(lua, this.0, s.to_string_lossy(), None),
+            other => Err(rt(format!("script: expected a script path like \"src/door.luau\" or nil, got {}", other.type_name()))),
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
@@ -308,7 +317,14 @@ impl UserData for Obj {
         crate::physics::add_object_methods(m);
         crate::model::add_object_methods(m);
         m.add_method("exists", |lua, this, ()| with(lua, |w| Ok(w.scene.contains(this.0))));
-        m.add_method("destroy", |lua, this, ()| with(lua, |w| Ok(w.scene.destroy(this.0))));
+        m.add_method("destroy", |lua, this, ()| {
+            crate::object_scripts::before_destroy(lua, this.0)?;
+            with(lua, |w| Ok(w.scene.destroy(this.0)))
+        });
+        m.add_method("attach_script", |lua, this, (path, props): (String, Option<Table>)| {
+            crate::object_scripts::attach_script(lua, this.0, path, props)
+        });
+        m.add_method("detach_script", |lua, this, ()| crate::object_scripts::detach_script(lua, this.0));
         m.add_method("rotate_x", |lua, this, Num(a): Num| write(lua, this.0, |o| o.rotate_x(a)));
         m.add_method("rotate_y", |lua, this, Num(a): Num| write(lua, this.0, |o| o.rotate_y(a)));
         m.add_method("rotate_z", |lua, this, Num(a): Num| write(lua, this.0, |o| o.rotate_z(a)));

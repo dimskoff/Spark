@@ -66,14 +66,41 @@ pub fn suggest<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) ->
 /// The callback `name` was probably meant to be, if it is a function that looks like a misspelled callback
 /// (`Update`, `fixedUpdate`, `draw2d`, `updaet`). Helpers like `updateScore` are not near enough.
 pub fn misspelled_callback(name: &str) -> Option<&'static str> {
-    if CALLBACKS.contains(&name) {
+    misspelled_in(name, CALLBACKS, true)
+}
+
+/// Same for the callbacks of an object script (`on_colision`, `Update`, `onDestroy`).
+pub fn misspelled_object_callback(name: &str) -> Option<&'static str> {
+    misspelled_in(name, crate::object_scripts::OBJECT_CALLBACKS, false)
+}
+
+/// What is wrong with a function named `name` in an object script module, if it looks like a mistake.
+pub(crate) fn object_callback_problem(name: &str) -> Option<String> {
+    let list = crate::object_scripts::OBJECT_CALLBACKS.join(", ");
+    if name == "render" {
+        return Some(format!(
+            "'render' is not an object script callback: 2D drawing belongs in the global render() of main.luau. Object script callbacks: {list}"
+        ));
+    }
+    if crate::object_scripts::OBJECT_CALLBACKS.contains(&name) {
+        return None;
+    }
+    misspelled_object_callback(name).map(|right| {
+        format!("'{name}' is not a Spark callback (did you mean '{right}'?) - object script callbacks are lowercase snake_case: {list}")
+    })
+}
+
+fn misspelled_in(name: &str, set: &[&'static str], aliases: bool) -> Option<&'static str> {
+    if set.contains(&name) {
         return None;
     }
     let n = name.to_lowercase().replace('_', "");
-    if let Some((_, right)) = CALLBACK_ALIASES.iter().find(|(a, _)| *a == n) {
-        return Some(right);
+    if aliases {
+        if let Some((_, right)) = CALLBACK_ALIASES.iter().find(|(a, _)| *a == n) {
+            return Some(right);
+        }
     }
-    for c in CALLBACKS {
+    for c in set.iter().copied() {
         let cn = c.replace('_', "");
         if n == cn {
             return Some(c);
@@ -215,6 +242,8 @@ pub fn classify(message: &str) -> &'static str {
         "SPK-1006"
     } else if m.contains("cannot modify a built-in library") || m.contains(READONLY) {
         "SPK-1007"
+    } else if m.contains("script prop '") {
+        "SPK-1008"
     } else {
         "SPK-1000"
     }

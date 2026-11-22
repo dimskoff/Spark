@@ -68,13 +68,13 @@ pub use node_id::{InvalidNodeId, NodeId};
 pub use physics::{Body, BodyKind, CharacterMove, Collision, Physics, PhysicsBackend, RayHit, Shape};
 pub use pick::PickHit;
 pub use render::{PassSize, PostPass, RenderSettings, TextureFilter};
-pub use scene::{Fog, Light, LightKind, Object, ObjectId, Scene, Sky, Sun, Transform};
+pub use scene::{Fog, Light, LightKind, Object, ObjectId, Scene, ScriptComponent, Sky, Sun, Transform};
 pub use schedule::{Scheduler, TimerId};
 pub use shader::{Param, ParamType, ShaderData, ShaderId, ShaderKind};
 pub use text::{FontId, Fonts};
 pub use time::Time;
 pub use ui::{Rect, Ui, UiStyle};
-pub use world::{WindowSettings, World};
+pub use world::{ScriptFailure, WindowSettings, World};
 
 /// Engine version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -279,6 +279,9 @@ fn object_fields_table_matches_the_registry() {
         match decision {
             FieldDecision::Component(c) => assert!(names.contains(c), "`{field}` points at the unknown component `{c}`"),
             FieldDecision::Node => assert!(registry().node_info().field(field).is_some(), "`{field}` is not a node field"),
+            FieldDecision::Free(c) => {
+                assert!(spark_core::doc::RESERVED_COMPONENTS.contains(c), "`{field}`: `{c}` is not a reserved component")
+            }
             FieldDecision::Hierarchy | FieldDecision::Derived | FieldDecision::Runtime => {}
         }
     }

@@ -123,7 +123,11 @@ impl Devtools {
     pub fn end_frame(&mut self, world: &mut World, render: FrameStats, error: Option<&str>) {
         if error != self.last_error.as_deref() {
             self.last_error = error.map(str::to_owned);
-            self.link.send(GameMessage::ScriptError { message: self.last_error.clone() });
+            self.link.send(GameMessage::ScriptError { message: self.last_error.clone(), node_id: None });
+        }
+        // Object scripts that failed: the game goes on, the editor learns which node (one message per failure).
+        for f in world.take_script_failures() {
+            self.link.send(GameMessage::ScriptError { message: Some(f.message), node_id: f.node_id.map(|n| n.to_string()) });
         }
         let now = Instant::now();
         let due = |last: Option<Instant>, every: Duration| last.is_none_or(|t| now - t >= every);

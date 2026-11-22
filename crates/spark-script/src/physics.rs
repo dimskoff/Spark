@@ -225,6 +225,9 @@ pub(crate) fn dispatch_collisions(lua: &Lua) -> LuaResult<()> {
                 let args = MultiValue::from_vec(vec![Value::UserData(lua.create_userdata(Obj(other))?), Value::Table(info.clone())]);
                 runtime::emit(lua, &ev, args)?;
             }
+            if c.started {
+                crate::object_scripts::on_collision(lua, me, other, &info)?;
+            }
         }
         if listeners(name) {
             let args = MultiValue::from_vec(vec![

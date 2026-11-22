@@ -22,8 +22,14 @@ pub enum GameMessage {
     Scene(SceneSnapshot),
     /// The game logic was paused / resumed (by the editor or the game).
     Paused { paused: bool },
-    /// The script host stopped on an error (`None` = the error is gone, e.g. after a hot reload).
-    ScriptError { message: Option<String> },
+    /// The script host stopped on an error (`None` = the error is gone, e.g. after a hot reload). With a `node_id`
+    /// it is not the host: the script of that one object failed (the game keeps running); the editor can mark the
+    /// node. Older games never send `node_id`, older editors ignore it (it has a serde default).
+    ScriptError {
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        node_id: Option<String>,
+    },
     /// The answer to [`EditorCommand::Command`] (protocol 4).
     CommandResult(CommandResult),
     /// Sent right before the game exits.
@@ -222,7 +228,8 @@ mod tests {
             GameMessage::Hello { protocol: 4, engine: "0.1.0".into(), pid: 7, gpu: "x".into(), token: "t".into() },
             GameMessage::Stats(Stats { frame: 3, fps: 60.0, ..Default::default() }),
             GameMessage::Paused { paused: true },
-            GameMessage::ScriptError { message: Some("main.luau:3: boom".into()) },
+            GameMessage::ScriptError { message: Some("main.luau:3: boom".into()), node_id: None },
+            GameMessage::ScriptError { message: Some("[SPK-1000] script src/door.luau: boom".into()), node_id: Some("1a2b3c4d".into()) },
             GameMessage::Bye,
         ];
         for m in msgs {
@@ -243,6 +250,12 @@ mod tests {
             visible: Some(false),
         };
         assert_eq!(serde_json::from_str::<EditorCommand>(&serde_json::to_string(&set).unwrap()).unwrap(), set);
+        // a message from before `node_id` still parses (and is written back without it)
+        let old = r#"{"type":"script_error","message":"boom"}"#;
+        assert_eq!(
+            serde_json::from_str::<GameMessage>(old).unwrap(),
+            GameMessage::ScriptError { message: Some("boom".into()), node_id: None }
+        );
         // an old game without a token still parses (the editor then rejects it)
         let old = r#"{"type":"hello","protocol":1,"engine":"0.1.0","pid":1,"gpu":"g"}"#;
         assert!(matches!(serde_json::from_str::<GameMessage>(old).unwrap(), GameMessage::Hello { token, .. } if token.is_empty()));

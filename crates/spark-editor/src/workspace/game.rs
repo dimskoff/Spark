@@ -283,7 +283,12 @@ impl GameSession {
                     }
                     GameMessage::Scene(scene) => self.scene = Some(scene),
                     GameMessage::Paused { paused } => self.paused = paused,
-                    GameMessage::ScriptError { message } => {
+                    // One object's script failed; the game runs on. The text is in the game's console; the marker on
+                    // the node comes with the inspector work.
+                    GameMessage::ScriptError { message, node_id: Some(node) } => {
+                        log::warn!("object script failed (node {node}): {}", message.unwrap_or_default());
+                    }
+                    GameMessage::ScriptError { message, node_id: None } => {
                         if message != self.script_error {
                             self.script_error = message.clone();
                             events.push(SessionEvent::ScriptError(message));

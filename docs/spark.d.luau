@@ -380,6 +380,8 @@ declare extern type Object with
     material: Material?
     parent: Object?
     light: LightRef?
+    -- path of the attached object script (nil = none); assigning a path attaches it, nil detaches it
+    script: string?
     -- physics (see "Physics"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below
     body: BodyType?
 
@@ -477,6 +479,10 @@ declare extern type Object with
     function destroy(self): ()
     function find(self, name: string): Object?
     function paint(self, material: Material | ColorLike): ()
+
+    -- object scripts (see "Object scripts"): `props` override the defaults the script declares
+    function attach_script(self, path: string, props: { [string]: any }?): ()
+    function detach_script(self): ()
 
     -- events and timers owned by the object
     function on(self, name: string, fn: (...any) -> any, opts: ListenerOptions?): Listener
