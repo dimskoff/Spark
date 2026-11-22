@@ -57,9 +57,11 @@ ID задач (B1, S2, L1, J1 …) совпадают с ID в файлах ра
 | C-1, C-2 | `spark-reflect` + derive | ✅ | `crates/spark-reflect`, `crates/spark-reflect-derive`, `def5137` | 18 тестов + 19 compile-fail (trybuild); сборка с нуля 13.8 с; отклонения от ADR записаны в ADR 0004. Нет: glam-типов (решить в C-3), `u64/usize` |
 | C-4 | `Object.transform` (механическая замена) | ✅ | `spark-core/src/scene.rs` (`Transform`, `IDENTITY`), 11 файлов, `4bf38f1` | 288 тестов, все примеры `check` ok; Luau API не менялся |
 | C-3, C-5 | derive на типах ядра + реестр компонентов | ✅ | `a886838`, `19257ae`; `spark-core/src/{reflect,registry}.rs`, `spark-reflect/src/glam_impls.rs` | 335 тестов; exe +512 байт. Поворот в файлах — Эйлер в градусах (Y-X-Z). Хэндлы (texture/shader/mesh/lod) — `transient` до C-11. Побочный эффект `with_metallic → pbr=true` и алиасы blend остаются в Luau-слое (C-8). `Shape::Box{size}/Sphere{radius}`. `LuaScope::{Object, Handle}` для `obj.light.*` и `camera.*` |
-| C-6, C-7 | did-you-mean из реестра, сгенерированные биндинги transform/name/visible | 🔄 | | агент |
-| C-11 | рецепты мешей | 🔄 | | агент в worktree |
-| C-8..C-10, C-12..C-18 | см. `stage-c-plan.md` | ⏳ | | |
+| C-6, C-7 | did-you-mean из реестра, сгенерированные биндинги transform/name/visible | ✅ | `1ccc271`, `a39bf97`; `spark-script/src/reflect_bind.rs`, `tests/obj_members.rs`, `tests/bind_bench.rs` (#[ignore]) | типизированные аксессоры по пути реестра (без `Value` на горячем пути); бенчмарк: разница в пределах шума (позиция 5.8 → 6.4 мс/кадр на 10k, контрольный `x` плавает так же). Вручную пока: `x/y/z`, материал, body, light, mesh, parent. `OBJ_EXTRA_FIELDS`: id, x, y, z, material, parent, body, light |
+| C-11 | рецепты мешей | ✅ | `086ced4`; `spark-core/src/mesh_source.rs`, `tests/mesh_recipes.rs` | cube/box/plane/quad/sphere/cylinder/triangles + asset (путь + узел + primitive); `Mesh.custom` → runtime. `triangles` хранит точки в файле; skinned — в bind-позе |
+| C-8, C-9 | биндинги material, body, light; удалить `PROPS` | 🔄 | | агент |
+| C-12 | `NodeId`, `Command`, `World::apply`, `History` | 🔄 | | агент в worktree |
+| C-10, C-13..C-18 | см. `stage-c-plan.md` | ⏳ | | |
 
 Открытые вопросы владельцу (из ADR): камера — синглтон, переезд глобала `camera` на узел (C-17); `Mesh.custom` не сохраняется (save сообщит, не молча); канонический писатель теряет комментарии в `.scene` (потом `toml_edit`); пропуск значений по умолчанию → смена дефолта = миграция; префабы v1 без удаления узлов и вложенных overrides; порядок скриптов объектов — после глобального `update`, по порядку создания.
 
@@ -78,3 +80,4 @@ ID задач (B1, S2, L1, J1 …) совпадают с ID в файлах ра
 | 2026-11-22 | A15 (чужие ассеты удалены, коммит `3d81d44`), A16 (лицензии 1.8 МБ → 104 КБ, exe 21.4 МБ). **Этап A закрыт**, кроме хвостов A4/A6b, A8b, A9 (проверка cargo-deny на CI). Старт этапа B |
 | 2026-11-22 | **Этап B закрыт** (B-1..B-6; B-7 и B-8 ждут владельца/CI). Общий прогон нашёл баг sandbox (устаревшие глобалы между чанками) — исправлен. Итог: fmt/clippy чисто, **288 тестов**, 0 упало, 3 пропущены; все примеры проходят; `spark.exe` 21.5 МБ |
 | 2026-11-22 | Ветка `overhaul/phase-0-1` запушена (`7864e9b`). CI на неё **не запустился**: `ci.yml` срабатывает только на push в `main` и на pull request — для A9/B-8 нужен PR (`gh` локально не установлен). Старт этапа C: агент пишет ADR |
+| 2026-11-22 | Этап C: ADR (`d1533af`), C-1/C-2 (`def5137`), C-4 (`4bf38f1`), C-3/C-5, C-6/C-7, C-11. Общий прогон: fmt/clippy чисто, **344 теста**, 0 упало, 4 пропущены (3 + бенчмарк); все 10 примеров `check` ok. Агенты C-6/C-7 и C-11 останавливались на лимите API и были продолжены |
