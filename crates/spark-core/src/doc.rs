@@ -39,10 +39,10 @@ use crate::registry::registry;
 use crate::scene::{Fog, Object, ObjectId, Scene, ScriptComponent, Sky, Sun};
 use crate::world::World;
 
-/// Components ADR 0003 names that are not in the reflection registry: `script` (free-form props, interpreted since
-/// C-16: [`ScriptComponent`]) and `camera` (C-17). They are kept as plain maps in a document and written back
-/// unchanged; [`instantiate`] attaches `script` and ignores `camera` (with a warning).
-pub const RESERVED_COMPONENTS: &[&str] = &["camera", "script"];
+/// Components ADR 0003 names that are not in the reflection registry: `script` (free-form props, [`ScriptComponent`]).
+/// It is kept as a plain map in a document and written back unchanged; [`instantiate`] attaches it. (`camera` is a
+/// registry component since C-17; `tags` is the plain key `FileNode::tags`.)
+pub const RESERVED_COMPONENTS: &[&str] = &["script"];
 
 /// Every component name a file may use, in canonical order: the registry's, then [`RESERVED_COMPONENTS`].
 pub fn component_names() -> Vec<&'static str> {
@@ -121,7 +121,7 @@ pub struct FileNode {
     /// Set on the nodes of an expanded prefab instance (and by [`capture`] on the live ones): which instance and which
     /// node of the prefab this is. Never written to a file.
     pub member: Option<PrefabMember>,
-    /// The `tags` list. Not instantiated before C-17.
+    /// The `tags` list (the `tags` component of the object).
     pub tags: Vec<String>,
     /// Present components by registry name (`transform`, `mesh`, `material`, `body`, `light`) or reserved name, as
     /// complete values (every field there), in canonical order ([`component_rank`]). The mesh is a recipe:
@@ -567,6 +567,7 @@ pub fn capture(world: &mut World) -> SceneFile {
         if let Some(s) = obj.script() {
             node.components.push(("script".into(), s.to_value()));
         }
+        node.tags = obj.tags.clone();
         file.nodes.push(node);
     }
     file
@@ -582,8 +583,7 @@ pub struct Instantiated {
     pub roots: Vec<NodeId>,
     /// Number of objects created.
     pub count: usize,
-    /// Parts of the document that were ignored because the engine does not interpret them yet (`camera`, `tags`) or
-    /// that were not expanded (prefab instances: see `spark_scene::expand`). A `script` is attached (the script host
+    /// Parts of the document that were ignored because they were not expanded (prefab instances: see `spark_scene::expand`). A `script` is attached (the script host
     /// starts it on its next frame).
     pub warnings: Vec<String>,
     /// Removes what was created (the environment is not restored).
@@ -721,6 +721,7 @@ fn node_doc(n: &FileNode, warnings: &mut Vec<String>) -> Result<NodeDoc, Instant
     d.material = o.material;
     d.body = o.body;
     d.light = o.light;
+    d.camera = o.camera;
     if let Some(s) = &d.script {
         if s.path.trim().is_empty() {
             return Err(fail(
@@ -730,7 +731,9 @@ fn node_doc(n: &FileNode, warnings: &mut Vec<String>) -> Result<NodeDoc, Instant
         }
     }
     if !n.tags.is_empty() {
-        warnings.push(format!("node '{}': tags are not supported yet and were ignored", n.id));
+        let mut probe = Object::empty();
+        probe.set_tags(&n.tags).map_err(|m| InstantiateError::Spawn(CommandError::Invalid(format!("node '{}', tags: {m}", n.id))))?;
+        d.tags = probe.tags;
     }
     if let (Some(p), None) = (&n.prefab, &n.member) {
         warnings.push(format!("node '{}': the prefab instance '{p}' was not expanded (spark_scene::expand), so the node is empty", n.id));
@@ -851,7 +854,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_parts_warn() {
+    fn tags_and_camera_are_instantiated() {
         let mut f = SceneFile::new(FileKind::Scene);
         let mut n = FileNode::new(nid("a"));
         n.tags = vec!["x".into()];
@@ -859,8 +862,12 @@ mod tests {
         f.nodes.push(n);
         let mut w = World::new();
         let r = instantiate(&f, &mut w).unwrap();
-        assert_eq!(r.warnings.len(), 2);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
         assert_eq!(w.scene.len(), 1);
+        let id = w.scene.find("").unwrap();
+        assert_eq!(w.scene[id].tags(), ["x"]);
+        assert_eq!(w.scene[id].camera().unwrap().fov, 60.0);
+        assert_eq!(capture(&mut w).nodes[0].tags, ["x"]);
     }
 
     #[test]
@@ -886,5 +893,38 @@ mod tests {
         // Undo removes the objects and their script entries.
         w.apply(&r.undo).unwrap();
         assert!(w.scene.scripted().is_empty());
+    }
+
+    #[test]
+    fn camera_node_follows_commands_and_undo() {
+        use crate::camera::CameraNode;
+        let mut w = World::new();
+        let free = w.scene.camera;
+        let a = w.spawn_empty();
+        let id = w.node_id(a).unwrap();
+        w.scene[a].transform.position = Vec3::new(1.0, 2.0, 3.0);
+        // No camera node: the free camera is untouched by commands.
+        w.apply(&Command::SetProperty { node: id.clone(), path: "transform.position".into(), value: Value::Vec3([9.0, 9.0, 9.0]) })
+            .unwrap();
+        assert_eq!(w.scene.camera, free);
+        let add = w.apply(&Command::AddComponent { node: id.clone(), component: "camera".into(), value: None }).unwrap();
+        assert_eq!(w.scene.camera.position, Vec3::new(9.0, 9.0, 9.0));
+        let set = Command::SetProperty { node: id.clone(), path: "camera.fov".into(), value: Value::Float(33.0) };
+        let undo = w.apply(&set).unwrap().inverse;
+        assert_eq!(w.scene.camera.fov, 33.0);
+        w.apply(&undo).unwrap();
+        assert_eq!(w.scene.camera.fov, CameraNode::default().fov);
+        // Writing the render camera moves the node (the Luau `camera` global does this).
+        w.scene.camera.position = Vec3::new(4.0, 5.0, 6.0);
+        assert!(w.scene.sync_camera_to_node());
+        assert_eq!(w.scene[a].transform.position, Vec3::new(4.0, 5.0, 6.0));
+        // The first active node wins; deactivating it hands over, removing the last one ends the sync.
+        w.apply(&Command::SetProperty { node: id.clone(), path: "camera.active".into(), value: Value::Bool(false) }).unwrap();
+        assert!(w.scene.active_camera_node().is_none());
+        w.apply(&add.inverse).unwrap();
+        assert!(w.scene.camera_nodes().is_empty());
+        w.scene.camera.fov = 20.0;
+        assert!(!w.scene.sync_camera_to_node());
+        assert!(w.scene.get_mut(a).unwrap().camera().is_none());
     }
 }

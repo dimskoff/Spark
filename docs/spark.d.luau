@@ -382,6 +382,8 @@ declare extern type Object with
     light: LightRef?
     -- path of the attached object script (nil = none); assigning a path attaches it, nil detaches it
     script: string?
+    -- labels for finding objects (see `find_all_tagged`): reading returns a new list, assigning replaces the tags (nil = none)
+    tags: { string }
     -- physics (see "Physics"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below
     body: BodyType?
 
@@ -476,6 +478,11 @@ declare extern type Object with
     function size(self): vector
     function distance_to(self, other: Object | vector): number
     function exists(self): boolean
+    function has_tag(self, tag: string): boolean
+    -- Adds a tag (nothing happens when it is already there). Tags are non-empty strings of at most 64 bytes.
+    function add_tag(self, tag: string): ()
+    -- Returns whether the object had the tag.
+    function remove_tag(self, tag: string): boolean
     function destroy(self): ()
     function find(self, name: string): Object?
     function paint(self, material: Material | ColorLike): ()
@@ -595,6 +602,7 @@ declare function group(props: SpawnProps?): Object
 declare function light(spec: LightSpec): Object
 declare function find(name: string): Object?
 declare function find_all(name: string): { Object }
+declare function find_all_tagged(tag: string): { Object }
 declare function destroy(obj: Object): ()
 declare function dump_scene(): string
 
@@ -610,6 +618,9 @@ declare scene: {
     save: (path: string) -> { string },
 }
 
+-- The scene's camera. A loaded scene can contain an object with a `camera` component (`[node.camera]`); then this camera
+-- follows the first active one and writing to it (`camera.position = ...`, `camera.fov = ...`) moves/changes that object,
+-- so `scene.save` writes the new values. Without a camera object it is the free camera it always was.
 declare camera: Camera
 declare function sun(direction: vector, color: ColorLike?, intensity: number?): ()
 declare function ambient(color: ColorLike): ()

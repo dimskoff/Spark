@@ -351,7 +351,14 @@ fn apply_override(node: &mut FileNode, k: &OverrideKey<'_>, v: &Value) -> Result
             }
             other => Err(format!("`visible` must be true or false, found {}", other.type_name())),
         },
-        (Target::Node, _) => Err("`node` has the fields `name` and `visible`".into()),
+        (Target::Node, Some("tags")) => match v {
+            Value::List(items) => {
+                node.tags = items.iter().filter_map(|t| if let Value::Str(s) = t { Some(s.clone()) } else { None }).collect();
+                Ok(())
+            }
+            other => Err(format!("`tags` must be a list of strings, found {}", other.type_name())),
+        },
+        (Target::Node, _) => Err("`node` has the fields `name`, `visible` and `tags`".into()),
         (Target::Reserved, None) => {
             node.set_component(k.component, v.clone());
             Ok(())
@@ -527,6 +534,15 @@ fn diff_node(live: &FileNode, prefab: &FileNode, root: bool, at: &str, inst: &mu
             warn(describe("the prefab's root is hidden and the instance is shown; that cannot be saved (hide it in the prefab)".into()));
         } else {
             inst.overrides.push((format!("{at}node.visible"), Value::Bool(live.visible)));
+        }
+    }
+    if live.tags != prefab.tags {
+        if root && !live.tags.is_empty() {
+            inst.tags = live.tags.clone();
+        } else if root {
+            warn(describe("the prefab's root has tags and the instance has none; that cannot be saved (remove them in the prefab)".into()));
+        } else {
+            inst.overrides.push((format!("{at}node.tags"), Value::List(live.tags.iter().map(|t| Value::Str(t.clone())).collect())));
         }
     }
     for (name, cv) in &live.components {

@@ -928,6 +928,11 @@
           "doc": "path of the attached object script (nil = none); assigning a path attaches it, nil detaches it"
         },
         {
+          "name": "tags",
+          "ty": "{ string }",
+          "doc": "labels for finding objects (see `find_all_tagged`): reading returns a new list, assigning replaces the tags (nil = none)"
+        },
+        {
           "name": "body",
           "ty": "BodyType?",
           "doc": "physics (see \"Physics\"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below"
@@ -1213,6 +1218,45 @@
           "params": [],
           "ret": "boolean",
           "doc": ""
+        },
+        {
+          "name": "has_tag",
+          "generics": "",
+          "params": [
+            {
+              "name": "tag",
+              "ty": "string",
+              "optional": false
+            }
+          ],
+          "ret": "boolean",
+          "doc": ""
+        },
+        {
+          "name": "add_tag",
+          "generics": "",
+          "params": [
+            {
+              "name": "tag",
+              "ty": "string",
+              "optional": false
+            }
+          ],
+          "ret": "()",
+          "doc": "Adds a tag (nothing happens when it is already there). Tags are non-empty strings of at most 64 bytes."
+        },
+        {
+          "name": "remove_tag",
+          "generics": "",
+          "params": [
+            {
+              "name": "tag",
+              "ty": "string",
+              "optional": false
+            }
+          ],
+          "ret": "boolean",
+          "doc": "Returns whether the object had the tag."
         },
         {
           "name": "destroy",
@@ -4715,6 +4759,19 @@
       "doc": ""
     },
     {
+      "name": "find_all_tagged",
+      "generics": "",
+      "params": [
+        {
+          "name": "tag",
+          "ty": "string",
+          "optional": false
+        }
+      ],
+      "ret": "{ Object }",
+      "doc": ""
+    },
+    {
       "name": "destroy",
       "generics": "",
       "params": [
@@ -5184,7 +5241,7 @@
     {
       "name": "camera",
       "ty": "Camera",
-      "doc": ""
+      "doc": "The scene's camera. A loaded scene can contain an object with a `camera` component (`[node.camera]`); then this camera\nfollows the first active one and writing to it (`camera.position = ...`, `camera.fov = ...`) moves/changes that object,\nso `scene.save` writes the new values. Without a camera object it is the free camera it always was."
     }
   ],
   "components": {
@@ -5994,6 +6051,87 @@
             "luau_type": "boolean",
             "doc": "Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`).",
             "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          }
+        ]
+      },
+      {
+        "name": "camera",
+        "doc": "The `camera` component of an object (ADR 0005, section 5): a camera that sits at the object's place. Position and\nrotation are the object's (world) transform, so the component only holds the lens. The scene's one render camera\n([`crate::Scene::camera`], the Luau `camera` global) follows the **active** camera node; see\n[`crate::Scene::active_camera_node`].\n\n```\nuse spark_core::camera::{Camera, CameraNode};\n\nlet node = CameraNode { fov: 90.0, ..CameraNode::default() };\nlet mut cam = Camera::default();\nnode.apply_to(&mut cam);\nassert_eq!(cam.fov, 90.0);\nassert_eq!(CameraNode::of(&cam), CameraNode { active: true, ..node });\n```",
+        "required": false,
+        "lua_scope": "none",
+        "fields": [
+          {
+            "name": "fov",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Vertical field of view in degrees (1 to 179).",
+            "default": 60.0,
+            "range": {
+              "min": 1.0,
+              "max": 179.0,
+              "clamp": false
+            },
+            "unit": "deg",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "near",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Near clip plane distance; must stay smaller than `far`.",
+            "default": 0.1,
+            "range": {
+              "min": 0.0,
+              "min_exclusive": true,
+              "clamp": false
+            },
+            "unit": "m",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "far",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Far clip plane distance; must stay greater than `near`.",
+            "default": 500.0,
+            "range": {
+              "min": 0.0,
+              "min_exclusive": true,
+              "clamp": false
+            },
+            "unit": "m",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "ortho",
+            "kind": "option",
+            "luau_type": "number?",
+            "doc": "`Some(height)` = orthographic camera showing `height` meters vertically; `fov` is then ignored.",
+            "default": null,
+            "range": {
+              "min": 0.001,
+              "clamp": true
+            },
+            "unit": "m",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "active",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Whether this camera can be the one the scene renders with. The first active camera node (in the order the\ncamera components were added) is used; turn it off to hand over to the next one.",
+            "default": true,
             "read_only": false,
             "hidden": false,
             "transient": false

@@ -77,6 +77,12 @@ find(name: string) -> Object?
 find_all(name: string) -> { Object }
 ```
 
+### `find_all_tagged`
+
+```luau
+find_all_tagged(tag: string) -> { Object }
+```
+
 ### `destroy`
 
 ```luau
@@ -235,7 +241,7 @@ restart()
 
 ## Global values
 
-- `camera: Camera`
+- `camera: Camera` - The scene's camera. A loaded scene can contain an object with a `camera` component (`[node.camera]`); then this camera follows the first active one and writing to it (`camera.position = ...`, `camera.fov = ...`) moves/changes that object, so `scene.save` writes the new values. Without a camera object it is the free camera it always was.
 
 ## Tables
 
@@ -716,6 +722,7 @@ object.material: Material?
 object.parent: Object?
 object.light: LightRef?
 object.script: string?
+object.tags: { string }
 object.body: BodyType?
 object.name: string
 object.visible: boolean
@@ -757,6 +764,9 @@ object:bounds() -> (vector?, vector?)
 object:size() -> vector
 object:distance_to(other: Object | vector) -> number
 object:exists() -> boolean
+object:has_tag(tag: string) -> boolean
+object:add_tag(tag: string)
+object:remove_tag(tag: string) -> boolean
 object:destroy()
 object:find(name: string) -> Object?
 object:paint(material: Material | ColorLike)
@@ -785,6 +795,7 @@ object:move(delta: vector) -> (vector, boolean)
 
 - `x`: shortcuts for position.x / .y / .z
 - `script`: path of the attached object script (nil = none); assigning a path attaches it, nil detaches it
+- `tags`: labels for finding objects (see `find_all_tagged`): reading returns a new list, assigning replaces the tags (nil = none)
 - `body`: physics (see "Physics"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below
 - `name`: Name shown in the hierarchy and used by `find(name)`.
 - `visible`: Drawn (children inherit it being off). Default true.
@@ -810,6 +821,8 @@ object:move(delta: vector) -> (vector, boolean)
 - `gravity_scale`: Multiplier of the world gravity for this body (0 = floats, negative = rises). Default 1.
 - `velocity`: World-space velocity (m/s). Written back by the simulation; set it to change it. Unit: m/s. Default vec3(0, 0, 0).
 - `angular_velocity`: World-space angular velocity (rad/s). Unit: rad/s. Default vec3(0, 0, 0).
+- `add_tag`: Adds a tag (nothing happens when it is already there). Tags are non-empty strings of at most 64 bytes.
+- `remove_tag`: Returns whether the object had the tag.
 - `attach_script`: object scripts (see "Object scripts"): `props` override the defaults the script declares
 - `on`: events and timers owned by the object
 - `play`: animation (glTF models)

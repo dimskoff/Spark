@@ -448,6 +448,12 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
         })?,
     )?;
     g.set(
+        "find_all_tagged",
+        lua.create_function(|lua, tag: String| {
+            with(lua, |w| Ok(w.scene.iter().filter(|(_, o)| o.has_tag(&tag)).map(|(id, _)| Obj(id)).collect::<Vec<_>>()))
+        })?,
+    )?;
+    g.set(
         "destroy",
         lua.create_function(|lua, o: Option<UserDataRef<Obj>>| {
             if let Some(o) = &o {

@@ -1,7 +1,8 @@
 //! The component registry over [`Object`] (ADR 0004, ADR 0005).
 //!
 //! An object is a node (name, visibility, hierarchy) plus a closed set of components: `transform`, `mesh`,
-//! `material`, `body` and `light` (`camera`, `script`, `tags` come later). [`registry()`] lists them with their field
+//! `material`, `body`, `light` and `camera` (`script` and `tags` are free-form: see [`FieldDecision::Free`]).
+//! [`registry()`] lists them with their field
 //! metadata ([`TypeInfo`]) and four accessors each, so that scripts, the inspector, scene files and commands all read
 //! and write an object the same way, with the same validation:
 //!
@@ -27,6 +28,7 @@
 use spark_reflect::{Reflect, ReflectError, TypeInfo, Value, did_you_mean, split_path};
 
 use crate::assets::MeshId;
+use crate::camera::CameraNode;
 use crate::material::Material;
 use crate::mesh::Aabb;
 use crate::physics::Body;
@@ -39,6 +41,8 @@ pub enum LuaScope {
     Object,
     /// Members of a handle returned by the object: `obj.light.intensity` (flat `obj.color` is the material's).
     Handle(&'static str),
+    /// Not exposed to Luau (the `camera` component: scripts use the `camera` global).
+    None,
 }
 
 /// A component of an object and how to reach it.
@@ -85,7 +89,14 @@ pub struct Registry {
 pub fn registry() -> &'static Registry {
     static REGISTRY: Registry = Registry {
         node: NodeProps::type_info,
-        components: &[component::<Transform>(), component::<MeshRef>(), component::<Material>(), component::<Body>(), component::<Light>()],
+        components: &[
+            component::<Transform>(),
+            component::<MeshRef>(),
+            component::<Material>(),
+            component::<Body>(),
+            component::<Light>(),
+            component::<CameraNode>(),
+        ],
     };
     &REGISTRY
 }
@@ -101,7 +112,7 @@ impl Registry {
 
     /// Names a path can start with: the node fields and the components.
     fn head_names(&self) -> impl Iterator<Item = &'static str> {
-        self.node_info().field_names().chain(self.components.iter().map(|c| c.name))
+        self.node_info().field_names().chain(std::iter::once("tags")).chain(self.components.iter().map(|c| c.name))
     }
 
     fn unknown(&self, head: &str) -> ReflectError {
@@ -116,6 +127,9 @@ impl Registry {
         let (head, rest) = split_path(path);
         if self.node_info().field(head).is_some() {
             return NodeProps::of(o).get(path);
+        }
+        if head == "tags" {
+            return tags_get(o, rest);
         }
         let c = self.component(head).ok_or_else(|| self.unknown(head))?;
         if rest.is_empty() {
@@ -133,6 +147,9 @@ impl Registry {
             node.apply(o);
             return Ok(());
         }
+        if head == "tags" {
+            return tags_set(o, rest, &v);
+        }
         let c = self.component(head).ok_or_else(|| self.unknown(head))?;
         (c.set)(o, rest, v).map_err(|e| e.at(head))
     }
@@ -148,8 +165,48 @@ impl Registry {
                 pairs.push((c.name.to_string(), v));
             }
         }
+        if !o.tags.is_empty() {
+            pairs.push(("tags".to_string(), tags_value(o)));
+        }
         Value::Map(pairs)
     }
+}
+
+/// `tags` is not a registry component (it is a list of strings, a plain key of a node in files, ADR 0003) but it is
+/// addressed like one by paths and commands: `"tags"` is the whole list, written with a list of strings.
+fn tags_value(o: &Object) -> Value {
+    Value::List(o.tags.iter().map(|t| Value::Str(t.clone())).collect())
+}
+
+fn tags_get(o: &Object, rest: &str) -> Result<Value, ReflectError> {
+    if !rest.is_empty() {
+        return Err(ReflectError::UnknownField { ty: "tags", path: format!("tags.{rest}"), suggestions: Vec::new() });
+    }
+    Ok(tags_value(o))
+}
+
+fn tags_set(o: &mut Object, rest: &str, v: &Value) -> Result<(), ReflectError> {
+    let path = || "tags".to_string();
+    if !rest.is_empty() {
+        return Err(ReflectError::UnknownField { ty: "tags", path: format!("tags.{rest}"), suggestions: Vec::new() });
+    }
+    let Value::List(items) = v else {
+        return Err(ReflectError::WrongType { path: path(), expected: "list of strings", got: v.type_name() });
+    };
+    let mut tags = Vec::with_capacity(items.len());
+    for (i, item) in items.iter().enumerate() {
+        match item {
+            Value::Str(s) => tags.push(s.as_str()),
+            other => {
+                return Err(ReflectError::WrongType { path: format!("tags[{i}]"), expected: "string", got: other.type_name() });
+            }
+        }
+    }
+    // An invalid tag (empty, too long) is reported as a value outside the allowed range of lengths.
+    if let Some(bad) = tags.iter().find(|t| crate::scene::check_tag(t).is_err()) {
+        return Err(ReflectError::OutOfRange { path: path(), value: bad.len() as f64, min: 1.0, max: crate::scene::MAX_TAG_LEN as f64 });
+    }
+    o.set_tags(&tags).map_err(|_| ReflectError::WrongType { path: path(), expected: "list of tags", got: "list" })
 }
 
 impl Object {
@@ -176,8 +233,9 @@ pub enum FieldDecision {
     /// Part of the named component.
     Component(&'static str),
     /// A component outside the reflection registry because its data is free-form (`script`: the props are whatever
-    /// the script declares). Documents carry it as a plain map ([`crate::doc::RESERVED_COMPONENTS`]); scripts and
-    /// the scene API read and write it through [`crate::Scene::set_script`].
+    /// the script declares) or a plain list (`tags`, a key of the node in files). `script` is carried by documents as
+    /// a plain map ([`crate::doc::RESERVED_COMPONENTS`]) and attached with [`crate::Scene::set_script`]; `tags` is
+    /// `FileNode::tags` and the path `"tags"` of [`Object::get_prop`] / `set_prop` and of commands.
     Free(&'static str),
     /// The hierarchy (`parent`, `children`): changed with `Scene::set_parent`, later by the `Reparent` command.
     Hierarchy,
@@ -201,6 +259,8 @@ pub const OBJECT_FIELDS: &[(&str, FieldDecision)] = &[
     ("body", FieldDecision::Component("body")),
     ("light", FieldDecision::Component("light")),
     ("script", FieldDecision::Free("script")),
+    ("camera", FieldDecision::Component("camera")),
+    ("tags", FieldDecision::Free("tags")),
     ("parent", FieldDecision::Hierarchy),
     ("children", FieldDecision::Hierarchy),
     ("local_bounds", FieldDecision::Derived),
@@ -406,6 +466,25 @@ impl Component for Light {
     }
 }
 
+impl Component for CameraNode {
+    const NAME: &'static str = "camera";
+    const REQUIRED: bool = false;
+    // Scripts reach the active camera node through the `camera` global; there are no `obj.fov` members.
+    const LUA: LuaScope = LuaScope::None;
+    fn load(o: &Object) -> Option<Self> {
+        o.camera
+    }
+    fn store(self, o: &mut Object) {
+        o.camera = Some(self);
+    }
+    fn clear(o: &mut Object) -> bool {
+        o.camera.take().is_some()
+    }
+    fn create() -> Option<Self> {
+        Some(Self::default())
+    }
+}
+
 impl Component for MeshRef {
     const NAME: &'static str = "mesh";
     const REQUIRED: bool = false;
@@ -456,6 +535,8 @@ mod tests {
             body,
             light,
             script,
+            camera,
+            tags,
             node_id,
             parent,
             children,

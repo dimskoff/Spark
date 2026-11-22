@@ -86,9 +86,8 @@ fn golden_scene_instantiates() {
     let mut w = World::new();
     let r = instantiate(&file, &mut w).unwrap();
     assert_eq!(r.count, 4);
-    // camera, tags, prefab and overrides are not interpreted yet: reported, not silent.
-    assert!(r.warnings.iter().any(|m| m.contains("camera")), "{:?}", r.warnings);
-    assert!(r.warnings.iter().any(|m| m.contains("tags")), "{:?}", r.warnings);
+    // camera and tags are interpreted; an unexpanded prefab is reported, not silent.
+    assert!(!r.warnings.iter().any(|m| m.contains("camera") || m.contains("tags")), "{:?}", r.warnings);
     assert!(r.warnings.iter().any(|m| m.contains("prefab")), "{:?}", r.warnings);
     let c = w.scene.find("Crate").unwrap();
     let body = w.scene[c].body.as_ref().unwrap();
@@ -102,6 +101,10 @@ fn golden_scene_instantiates() {
     assert!(matches!(light.kind, spark_core::LightKind::Spot { angle, .. } if angle == 50f32.to_radians()));
     assert_eq!(w.scene.sun.intensity, 1.2);
     assert_eq!(w.scene[w.scene.find("Camera").unwrap()].transform.position, Vec3::new(0.0, 3.0, 8.0));
+    // The camera node drives the render camera; tags are on the object.
+    assert_eq!(w.scene.camera.fov, 70.0);
+    assert_eq!(w.scene.camera.position, Vec3::new(0.0, 3.0, 8.0));
+    assert_eq!(w.scene[c].tags(), ["pickup", "wood"]);
 }
 
 // ---------------------------------------------------------------------------------------------------------

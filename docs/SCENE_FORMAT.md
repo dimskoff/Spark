@@ -58,7 +58,9 @@ bounciness = 0.2
 | `name` | Name shown in the editor and used by `find(name)`. |
 | `visible` | `false` hides the node and its children. Default `true`. |
 | `prefab` | A prefab instance: `"prefabs/door.prefab"` (see "Prefabs"). `parent = "door1/leaf"` attaches to a node inside the instance `door1`. |
-| `tags` | A list of strings. |
+| `tags` | A list of strings (`Object.tags`, `find_all_tagged`): non-empty, at most 64 bytes, no duplicates. |
+
+`[node.camera]` makes the node a camera: `fov` (degrees, default 60), `near`, `far`, `ortho` (meters visible vertically; missing = perspective) and `active` (default `true`). Its position and rotation are the node's transform. The scene renders with the first active camera node in file order; a scene without one keeps the free camera. A script's `camera.position = ...` moves the node, so the saved file has the new pose.
 
 Siblings keep their order in the file. Ids are never reused as references to something else, so renaming or moving a node
 does not break anything that points at it.
@@ -66,7 +68,7 @@ does not break anything that points at it.
 ## Components
 
 A component is a sub-table of the node: `[node.transform]`, `[node.mesh]`, `[node.material]`, `[node.body]`,
-`[node.light]` (and `[node.camera]`, `[node.script]`, which are read and kept but not used by the engine yet). A missing
+`[node.light]`, `[node.camera]` and `[node.script]`. A missing
 component means the node does not have it; a missing field means the default. `transform` and `material` are always
 there, so writing them is only needed to change something.
 
@@ -141,7 +143,7 @@ name = "Knob"
   too, `"root/body.mass"`). The value has the form of the field (`"#rrggbb"`, `[x, y, z]` in degrees for a rotation, ...). A
   whole component is replaced or added with `"<node>/<component>"` (`"frame/body" = { mass = 2.0 }`; a mesh is always whole:
   `"leaf/mesh" = { primitive = "sphere", radius = 0.5, segments = 12 }`). `node` is a component name for `name` and
-  `visible` of a prefab node (`"frame/node.name" = "Post"`). An override to a node, component or field that does not exist is
+  `visible` and `tags` of a prefab node (`"frame/node.name" = "Post"`, `"leaf/node.tags" = ["wood", "opens"]`). An override to a node, component or field that does not exist is
   an error with the line (unknown component or field) or with the prefab's node list.
 - **Saving**: Spark compares each instance with a fresh one made from its prefab and writes only the differences (overrides
   in the order of the prefab's nodes), so a property set back to the prefab's value disappears from the file. Nodes added to an

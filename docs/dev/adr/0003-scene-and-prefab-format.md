@@ -55,8 +55,7 @@ position = [0, 3, 8]
 rotation = [-20, 0, 0]
 
 [node.camera]
-fov = 60.0
-active = true
+fov = 70.0
 
 [[node]]
 id = "lamp"
@@ -163,7 +162,7 @@ Both examples are canonical: they are the golden files of the round-trip test (`
 - `[environment]` carries `ambient` and `background`; `[environment.sun]`, `.fog` and `.sky` follow. Every field at its default is omitted (a default sun writes nothing); a present `fog` / `sky` is always written, as it is optional.
 - Rotations are rounded to 4 decimals of a degree when captured: an Euler angle recovered from a quaternion has `f32` noise, and without rounding two saves of one scene could differ.
 - Spot angles are radians in the registry and degrees in files; the writer prints the fewest decimals that convert back to the same `f32`.
-- `camera`, `script`, `tags`, prefab instances and `overrides` are read and written (so a file survives a load and save) but not interpreted before C-16 / C-17 / C-15; instantiating such a file reports what it ignored.
+- `camera`, `script`, `tags`, prefab instances and `overrides` are all interpreted by now (C-15, C-16, C-17); `camera` is a typed component (defaults left out: `fov = 60.0` and `active = true` are not written), `tags` a plain key. A prefab override of a node's tags is `"<node>/node.tags" = [...]`.
 - A mesh made by `Mesh.custom`, a texture or other runtime handle cannot be saved: `to_string` fails and names the node (and the component); `to_string_lossy` saves the rest and returns the same list.
 - Format version 0 is the draft of this ADR (data-bearing enum tables named their variant with `kind`); `spark migrate` turns it into version 1.
 

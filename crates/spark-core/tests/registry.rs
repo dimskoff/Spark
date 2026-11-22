@@ -24,7 +24,7 @@ fn full_object() -> Object {
     let mut o = Object::empty();
     o.mesh = Some(MeshId(7));
     o.lod = vec![(20.0, MeshId(8))];
-    for name in ["body", "light"] {
+    for name in ["body", "light", "camera"] {
         (registry().component(name).unwrap().add)(&mut o, None).unwrap();
     }
     o
@@ -56,15 +56,15 @@ fn sample(info: &FieldInfo, ty: &FieldType) -> Option<Value> {
 #[test]
 fn the_registry_lists_the_components() {
     let names: Vec<&str> = registry().components.iter().map(|c| c.name).collect();
-    assert_eq!(names, ["transform", "mesh", "material", "body", "light"]);
+    assert_eq!(names, ["transform", "mesh", "material", "body", "light", "camera"]);
     let required: Vec<&str> = registry().components.iter().filter(|c| c.required).map(|c| c.name).collect();
     assert_eq!(required, ["transform", "material"]);
     let types: Vec<&str> = registry().components.iter().map(|c| c.info().name).collect();
-    assert_eq!(types, ["Transform", "MeshRef", "Material", "Body", "Light"]);
+    assert_eq!(types, ["Transform", "MeshRef", "Material", "Body", "Light", "CameraNode"]);
     assert_eq!(registry().node_info().name, "NodeProps");
     assert_eq!(registry().component("light").unwrap().lua, LuaScope::Handle("light"));
     assert_eq!(registry().component("body").unwrap().lua, LuaScope::Object);
-    assert!(registry().component("camera").is_none());
+    assert_eq!(registry().component("camera").unwrap().lua, LuaScope::None);
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn the_whole_object_is_a_map_of_the_present_parts() {
     let o = full_object();
     let Ok(Value::Map(pairs)) = o.get_prop("") else { panic!() };
     let keys: Vec<&str> = pairs.iter().map(|(k, _)| k.as_str()).collect();
-    assert_eq!(keys, ["name", "visible", "transform", "mesh", "material", "body", "light"]);
+    assert_eq!(keys, ["name", "visible", "transform", "mesh", "material", "body", "light", "camera"]);
     let bare = Object::empty();
     let Ok(Value::Map(pairs)) = bare.get_prop("") else { panic!() };
     let keys: Vec<&str> = pairs.iter().map(|(k, _)| k.as_str()).collect();
@@ -280,7 +280,7 @@ fn object_fields_table_matches_the_registry() {
             FieldDecision::Component(c) => assert!(names.contains(c), "`{field}` points at the unknown component `{c}`"),
             FieldDecision::Node => assert!(registry().node_info().field(field).is_some(), "`{field}` is not a node field"),
             FieldDecision::Free(c) => {
-                assert!(spark_core::doc::RESERVED_COMPONENTS.contains(c), "`{field}`: `{c}` is not a reserved component")
+                assert!(*c == "tags" || spark_core::doc::RESERVED_COMPONENTS.contains(c), "`{field}`: `{c}` is not a reserved component")
             }
             FieldDecision::Hierarchy | FieldDecision::Derived | FieldDecision::Runtime => {}
         }
@@ -313,4 +313,20 @@ fn flat_lua_names_do_not_collide_and_every_field_is_documented() {
     for known in ["name", "visible", "position", "rotation", "scale", "mesh", "lod", "color", "metallic", "mass", "velocity", "shader"] {
         assert!(flat.contains(&known), "`{known}` is missing from the flat names");
     }
+}
+
+#[test]
+fn tags_are_addressed_like_a_component() {
+    let mut o = Object::empty();
+    o.set_prop("tags", Value::List(vec![Value::Str("a".into()), Value::Str("b".into()), Value::Str("a".into())])).unwrap();
+    assert_eq!(o.tags(), ["a", "b"], "duplicates are dropped");
+    assert_eq!(o.get_prop("tags"), Ok(Value::List(vec![Value::Str("a".into()), Value::Str("b".into())])));
+    assert!(o.set_prop("tags", Value::List(vec![Value::Str(String::new())])).is_err());
+    assert!(o.set_prop("tags", Value::Str("a".into())).is_err());
+    assert_eq!(o.tags(), ["a", "b"], "a refused write changes nothing");
+    assert!(o.add_tag("c").unwrap() && !o.add_tag("c").unwrap());
+    assert!(o.remove_tag("a") && !o.remove_tag("a"));
+    assert!(o.has_tag("c") && !o.has_tag("a"));
+    let Ok(Value::Map(pairs)) = o.get_prop("") else { panic!() };
+    assert!(pairs.iter().any(|(k, _)| k == "tags"));
 }

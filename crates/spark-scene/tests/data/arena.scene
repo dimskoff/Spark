@@ -20,8 +20,7 @@ position = [0, 3, 8]
 rotation = [-20, 0, 0]
 
 [node.camera]
-fov = 60.0
-active = true
+fov = 70.0
 
 [[node]]
 id = "lamp"

@@ -349,6 +349,13 @@ fn override_text(k: &str, v: &Value) -> Result<String, String> {
     let fields_of = |t: &'static TypeInfo| t.fields;
     match (override_target(&ok), ok.field) {
         (Target::Unknown, _) => Err(format!("`{}` is not a component", ok.component)),
+        (Target::Node, Some("tags")) => match v {
+            Value::List(items) => {
+                let tags: Vec<String> = items.iter().filter_map(|t| if let Value::Str(s) = t { Some(quote(s)) } else { None }).collect();
+                Ok(format!("[{}]", tags.join(", ")))
+            }
+            _ => Err("`tags` must be a list of strings".into()),
+        },
         (Target::Node, Some(f)) => field_override(fields_of(registry().node_info()), f, v),
         (Target::Node, None) => Err("`node` has the fields `name` and `visible`".into()),
         (Target::Reserved, None) => Ok(generic(v)),

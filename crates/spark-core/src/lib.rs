@@ -49,7 +49,7 @@ pub use animation::{AnimParams, Animator};
 pub use assets::{Assets, CUBE_FACES, CubemapId, ImageData, MAX_IMAGE_SIDE, MeshId, TextureId};
 pub use audio::{Audio, AudioBackend, AudioCommand, BusId, PlayParams, SoundId, SoundSource};
 pub use branding::{BadgeParams, BadgeState, Branding, SPARK_URL, Splash};
-pub use camera::Camera;
+pub use camera::{Camera, CameraNode};
 pub use canvas::{Align, Batch, Canvas, CanvasTexture, Layer, LayerData, SpriteParams, TextParams, Vertex2D};
 pub use color::Color;
 pub use command::{Applied, Command, CommandError, ComponentState, MeshDoc, MeshState, NodeDoc, SceneDoc};

@@ -433,6 +433,7 @@ pub fn components_json() -> ComponentsJson {
                 let scope = match c.lua {
                     LuaScope::Object => "object".to_string(),
                     LuaScope::Handle(h) => format!("handle:{h}"),
+                    LuaScope::None => "none".to_string(),
                 };
                 type_json(c.name, c.info(), c.required, &scope, c.lua == LuaScope::Object)
             })

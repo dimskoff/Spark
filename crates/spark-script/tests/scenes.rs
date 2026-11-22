@@ -83,12 +83,20 @@ impl Drop for Game_ {
 
 /// A game folder with the level, the prefab and `main.luau` = `script`; runs it until it quits or fails.
 fn run(name: &str, script: &str) -> (Game_, World, Option<String>) {
+    run_with(name, &[], script)
+}
+
+/// [`run`] with more files in the game folder.
+fn run_with(name: &str, files: &[(&str, &str)], script: &str) -> (Game_, World, Option<String>) {
     let dir = std::env::temp_dir().join(format!("spark-scenes-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("levels")).unwrap();
     std::fs::create_dir_all(dir.join("prefabs")).unwrap();
     std::fs::write(dir.join("levels/arena.scene"), ARENA).unwrap();
     std::fs::write(dir.join("prefabs/door.prefab"), DOOR).unwrap();
+    for (path, text) in files {
+        std::fs::write(dir.join(path), text).unwrap();
+    }
     std::fs::write(dir.join("main.luau"), script).unwrap();
     let mut game = ScriptGame::new(dir.join("main.luau")).hot_reload(false);
     let mut world = World::new();
@@ -272,4 +280,100 @@ fn a_broken_file_reports_the_line() {
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(error, None);
     assert!(quit);
+}
+
+const CAM_LEVEL: &str = r##"[scene]
+format_version = 1
+
+[[node]]
+id = "cam0"
+name = "Cam"
+tags = ["view"]
+
+[node.transform]
+position = [1, 2, 3]
+
+[node.camera]
+fov = 40.0
+
+[[node]]
+id = "crate"
+name = "Crate"
+tags = ["pickup", "wood"]
+
+[node.mesh]
+primitive = "box"
+size = [1, 1, 1]
+"##;
+
+#[test]
+fn camera_global_drives_the_camera_node_and_the_file() {
+    let (g, _world, error) = run_with(
+        "camnode",
+        &[("levels/cam.scene", CAM_LEVEL)],
+        r##"
+function start()
+    scene.load("levels/cam.scene", { replace = true })
+    assert(camera.fov == 40, "the camera follows the node: " .. camera.fov)
+    assert(camera.position == vec3(1, 2, 3), "position from the node")
+    camera.position = vec3(5, 6, 7)
+    camera.fov = 75
+    local node = find("Cam")
+    assert(node.position == vec3(5, 6, 7), "camera.position moved the node")
+    node.position = vec3(0, 1, 0)
+    -- a node moved by a script is picked up at the next frame stage
+    wait(0.05)
+    assert(camera.position == vec3(0, 1, 0), "the node moved the camera")
+    camera.position = vec3(5, 6, 7)
+    scene.save("levels/out.scene")
+    quit()
+end
+"##,
+    );
+    assert_eq!(error, None);
+    let out = read(&g.dir, "levels/out.scene");
+    assert!(out.contains("position = [5, 6, 7]"), "{out}");
+    assert!(out.contains("fov = 75.0"), "{out}");
+    assert!(out.contains(r#"tags = ["pickup", "wood"]"#), "{out}");
+}
+
+#[test]
+fn tags_find_save_and_prefab_override() {
+    let prefab = format!("{}\n", DOOR.replace("name = \"Leaf\"", "name = \"Leaf\"\ntags = [\"wood\"]"));
+    let (g, _world, error) = run_with(
+        "tags",
+        &[("levels/cam.scene", CAM_LEVEL), ("prefabs/door.prefab", &prefab)],
+        r##"
+function start()
+    scene.load("levels/cam.scene", { replace = true })
+    local crate = find("Crate")
+    assert(crate:has_tag("wood") and not crate:has_tag("steel"))
+    assert(#crate.tags == 2 and crate.tags[1] == "pickup")
+    crate.tags[1] = "x" -- a copy: nothing changes
+    assert(crate:has_tag("pickup"))
+    crate:add_tag("heavy")
+    crate:add_tag("heavy")
+    assert(#crate.tags == 3)
+    assert(crate:remove_tag("wood") == true and crate:remove_tag("wood") == false)
+    assert(#find_all_tagged("pickup") == 1 and #find_all_tagged("nothing") == 0)
+    crate.tags = { "a", "b" }
+    assert(#find_all_tagged("a") == 1 and not crate:has_tag("heavy"))
+    local ok, err = pcall(function() crate:add_tag("") end)
+    assert(not ok and string.find(tostring(err), "empty"), tostring(err))
+    local door = spawn("prefabs/door.prefab", { name = "Door" })
+    local leaf = door:find("Leaf")
+    assert(leaf:has_tag("wood"), "tags come from the prefab")
+    leaf:add_tag("opens")
+    scene.save("levels/out.scene")
+    scene.load("levels/out.scene", { replace = true })
+    assert(find("Crate"):has_tag("b"), "tags round-trip")
+    assert(find("Leaf"):has_tag("opens") and find("Leaf"):has_tag("wood"), "the override round-trips")
+    quit()
+end
+"##,
+    );
+    assert_eq!(error, None);
+    let out = read(&g.dir, "levels/out.scene");
+    assert!(out.contains(r#"tags = ["a", "b"]"#), "{out}");
+    assert!(out.contains(r#""leaf/node.tags" = ["wood", "opens"]"#), "{out}");
 }

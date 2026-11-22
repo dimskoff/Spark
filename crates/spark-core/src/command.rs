@@ -33,6 +33,7 @@ use std::fmt;
 use spark_reflect::{ReflectEnum, ReflectError, Value, did_you_mean, split_path};
 
 use crate::assets::MeshId;
+use crate::camera::CameraNode;
 use crate::material::Material;
 use crate::mesh::Aabb;
 use crate::mesh_source::MeshSource;
@@ -206,6 +207,9 @@ pub struct NodeDoc {
     pub mesh: Option<MeshState>,
     /// The attached script and its props.
     pub script: Option<ScriptComponent>,
+    pub camera: Option<CameraNode>,
+    /// The tags (valid and without duplicates, as [`Object::set_tags`] makes them).
+    pub tags: Vec<String>,
     pub children: Vec<NodeDoc>,
 }
 
@@ -221,6 +225,8 @@ impl Default for NodeDoc {
             light: None,
             mesh: None,
             script: None,
+            camera: None,
+            tags: Vec::new(),
             children: Vec::new(),
         }
     }
@@ -271,6 +277,7 @@ pub enum ComponentState {
     Material(Material),
     Body(Option<Body>),
     Light(Option<Light>),
+    Camera(Option<CameraNode>),
     Mesh(Option<MeshState>),
 }
 
@@ -282,13 +289,14 @@ impl ComponentState {
             ComponentState::Material(_) => "material",
             ComponentState::Body(_) => "body",
             ComponentState::Light(_) => "light",
+            ComponentState::Camera(_) => "camera",
             ComponentState::Mesh(_) => "mesh",
         }
     }
 
     /// An optional component that is not there.
     pub fn is_absent(&self) -> bool {
-        matches!(self, ComponentState::Body(None) | ComponentState::Light(None) | ComponentState::Mesh(None))
+        matches!(self, ComponentState::Body(None) | ComponentState::Light(None) | ComponentState::Camera(None) | ComponentState::Mesh(None))
     }
 }
 
@@ -298,6 +306,15 @@ impl ComponentState {
 impl World {
     /// Applies a command to the world. On error nothing has changed. See the module docs.
     pub fn apply(&mut self, cmd: &Command) -> Result<Applied, CommandError> {
+        let applied = self.apply_inner(cmd);
+        if applied.is_ok() {
+            // A scene with a camera node renders from it (ADR 0005, section 5); no camera node = one empty-list check.
+            self.scene.sync_camera_from_node();
+        }
+        applied
+    }
+
+    fn apply_inner(&mut self, cmd: &Command) -> Result<Applied, CommandError> {
         match cmd {
             Command::Spawn { subtree, parent, index } => self.apply_spawn(subtree, parent.as_ref(), *index),
             Command::Delete { node } => self.apply_delete(node),
@@ -414,6 +431,8 @@ impl World {
         o.body = n.body.clone();
         o.light = n.light;
         o.script = n.script.clone();
+        o.camera = n.camera;
+        o.tags = n.tags.clone();
         o.parent = parent;
         if let Some(ms) = &n.mesh {
             let (mesh, lod) = self.resolve_mesh_state(ms)?;
@@ -468,6 +487,8 @@ impl World {
                 light: ob.light,
                 mesh: self.mesh_state(ob),
                 script: ob.script.clone(),
+                camera: ob.camera,
+                tags: ob.tags.clone(),
                 children: Vec::new(),
             }));
         }
@@ -522,6 +543,7 @@ impl World {
             self.apply_state(oid, ComponentState::Mesh(Some(MeshState { mesh: MeshDoc::from_source(source), lod: Vec::new() })))?;
         } else {
             (info.add)(&mut self.scene[oid], value).map_err(|e| CommandError::Reflect(e.at(component)))?;
+            self.scene.reconcile_camera(oid);
         }
         let inverse = if before.is_absent() {
             Command::RemoveComponent { node: node.clone(), component: component.to_string() }
@@ -542,6 +564,7 @@ impl World {
             return Err(CommandError::NoSuchComponent { node: node.clone(), component: component.to_string() });
         }
         (info.remove)(&mut self.scene[oid]);
+        self.scene.reconcile_camera(oid);
         Ok(applied(Command::Restore { node: node.clone(), state: before }, vec![node.clone()]))
     }
 
@@ -566,6 +589,7 @@ impl World {
             "material" => ComponentState::Material(o.material),
             "body" => ComponentState::Body(o.body.clone()),
             "light" => ComponentState::Light(o.light),
+            "camera" => ComponentState::Camera(o.camera),
             "mesh" => ComponentState::Mesh(self.mesh_state(o)),
             _ => return None,
         })
@@ -577,6 +601,9 @@ impl World {
             ComponentState::Material(m) => self.scene[oid].material = m,
             ComponentState::Body(b) => self.scene[oid].body = b,
             ComponentState::Light(l) => self.scene[oid].light = l,
+            ComponentState::Camera(c) => {
+                self.scene.set_camera_node(oid, c);
+            }
             ComponentState::Mesh(None) => {
                 let o = &mut self.scene[oid];
                 o.mesh = None;

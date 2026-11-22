@@ -447,6 +447,16 @@ impl Reader {
                         return Err(self.err(&e.key_span, ErrorKind::UnknownName, name_error("component", k.component, near, &names)));
                     }
                 },
+                Some("tags") if matches!(override_target(&k), Target::Node) => {
+                    let ctx = "`tags` must be an array of strings";
+                    let Tv::Array(items) = &e.val.v else { return Err(self.err(&e.val.span, ErrorKind::Invalid, ctx)) };
+                    let mut tags = Vec::new();
+                    for t in items {
+                        let s = t.as_str().ok_or_else(|| self.err(&t.span, ErrorKind::Invalid, ctx))?;
+                        tags.push(Value::Str(s.to_string()));
+                    }
+                    Value::List(tags)
+                }
                 Some(field) => {
                     let (ty, fields): (&'static str, &'static [FieldInfo]) = match override_target(&k) {
                         Target::Node => {

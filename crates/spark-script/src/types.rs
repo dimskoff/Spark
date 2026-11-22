@@ -68,6 +68,24 @@ fn to_lod(v: &Value, what: &str) -> LuaResult<Vec<(f32, MeshId)>> {
     Ok(out)
 }
 
+/// `nil` -> no tags, a list of strings -> tags.
+fn to_tags(v: &Value) -> LuaResult<Vec<String>> {
+    let bad = || rt("tags: expected a list of strings like { \"enemy\", \"flying\" } or nil");
+    let t = match v {
+        Value::Nil => return Ok(Vec::new()),
+        Value::Table(t) => t,
+        _ => return Err(bad()),
+    };
+    let mut out = Vec::new();
+    for item in t.sequence_values::<Value>() {
+        match item? {
+            Value::String(s) => out.push(s.to_string_lossy().to_string()),
+            _ => return Err(bad()),
+        }
+    }
+    Ok(out)
+}
+
 fn lod_table(lua: &Lua, lod: &[(f32, MeshId)]) -> LuaResult<Table> {
     let t = lua.create_table()?;
     for (d, m) in lod {
@@ -171,7 +189,7 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
 }
 
 /// Object members that are not registry fields: the id, the `x`/`y`/`z` shortcuts, the component handles and the hierarchy.
-const OBJ_EXTRA_FIELDS: &[&str] = &["id", "x", "y", "z", "material", "parent", "body", "light", "script"];
+const OBJ_EXTRA_FIELDS: &[&str] = &["id", "x", "y", "z", "material", "parent", "body", "light", "script", "tags"];
 
 /// Methods of an object (suggestions for "unknown field"; the real lookup is mlua's).
 const OBJ_METHODS: &[&str] = &[
@@ -215,6 +233,9 @@ const OBJ_METHODS: &[&str] = &[
     "move",
     "attach_script",
     "detach_script",
+    "has_tag",
+    "add_tag",
+    "remove_tag",
 ];
 
 /// Every name that can follow `obj.`: the fields of the component registry that live flat on the object (`lua` names
@@ -303,6 +324,15 @@ impl UserData for Obj {
         });
         crate::physics::add_object_fields(f);
         crate::light::add_object_fields(f);
+        // Tags (ADR 0005): reading gives a new list, assigning replaces them (nil = none).
+        f.add_field_method_get("tags", |lua, this| {
+            let tags = read(lua, this.0, |_, o| o.tags().to_vec())?;
+            lua.create_sequence_from(tags)
+        });
+        f.add_field_method_set("tags", |lua, this, v: Value| {
+            let tags = to_tags(&v)?;
+            with(lua, |w| w.scene.get_mut(this.0).ok_or_else(dead)?.set_tags(&tags).map_err(|m| rt(format!("tags: {m}"))))
+        });
         // The path of the attached script (nil = none); assigning a path attaches it, nil detaches (ADR 0005, section 4).
         f.add_field_method_get("script", |lua, this| crate::object_scripts::script_path(lua, this.0));
         f.add_field_method_set("script", |lua, this, v: Value| match v {
@@ -317,6 +347,11 @@ impl UserData for Obj {
         crate::physics::add_object_methods(m);
         crate::model::add_object_methods(m);
         m.add_method("exists", |lua, this, ()| with(lua, |w| Ok(w.scene.contains(this.0))));
+        m.add_method("has_tag", |lua, this, tag: String| read(lua, this.0, |_, o| o.has_tag(&tag)));
+        m.add_method("add_tag", |lua, this, tag: String| {
+            with(lua, |w| w.scene.get_mut(this.0).ok_or_else(dead)?.add_tag(&tag).map_err(|m| rt(format!("add_tag: {m}"))))
+        });
+        m.add_method("remove_tag", |lua, this, tag: String| with(lua, |w| Ok(w.scene.get_mut(this.0).ok_or_else(dead)?.remove_tag(&tag))));
         m.add_method("destroy", |lua, this, ()| {
             crate::object_scripts::before_destroy(lua, this.0)?;
             with(lua, |w| Ok(w.scene.destroy(this.0)))
@@ -515,6 +550,7 @@ impl UserData for Cam {
             let p = to_vec3(&v, "camera.position")?;
             with(lua, |w| {
                 w.scene.camera.position = p;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -524,18 +560,21 @@ impl UserData for Cam {
         f.add_field_method_set("x", |lua, _, Num(v): Num| {
             with(lua, |w| {
                 w.scene.camera.position.x = v;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
         f.add_field_method_set("y", |lua, _, Num(v): Num| {
             with(lua, |w| {
                 w.scene.camera.position.y = v;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
         f.add_field_method_set("z", |lua, _, Num(v): Num| {
             with(lua, |w| {
                 w.scene.camera.position.z = v;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -544,6 +583,7 @@ impl UserData for Cam {
             let r = from_euler(to_vec3(&v, "camera.rotation")?);
             with(lua, |w| {
                 w.scene.camera.rotation = r;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -552,6 +592,7 @@ impl UserData for Cam {
             let v = in_range(v, 1.0, 179.0, "camera.fov", " degrees (vertical field of view)")?;
             with(lua, |w| {
                 w.scene.camera.fov = v;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -563,6 +604,7 @@ impl UserData for Cam {
                     return Err(rt(format!("camera.near ({v}) must be smaller than camera.far ({})", w.scene.camera.far)));
                 }
                 w.scene.camera.near = v;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -574,6 +616,7 @@ impl UserData for Cam {
                     return Err(rt(format!("camera.far ({v}) must be greater than camera.near ({})", w.scene.camera.near)));
                 }
                 w.scene.camera.far = v;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -586,6 +629,7 @@ impl UserData for Cam {
             };
             with(lua, |w| {
                 w.scene.camera.ortho = o;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -595,6 +639,7 @@ impl UserData for Cam {
             with(lua, |w| {
                 let t = to_point(w, &target, "camera:look_at")?;
                 w.scene.camera.look_at(t);
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });
@@ -602,6 +647,7 @@ impl UserData for Cam {
             let d = to_vec3(&v, "camera:translate")?;
             with(lua, |w| {
                 w.scene.camera.position += d;
+                w.scene.sync_camera_to_node();
                 Ok(())
             })
         });

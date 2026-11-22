@@ -4,7 +4,7 @@ use glam::{EulerRot, Mat4, Quat, Vec3};
 use spark_reflect::{Reflect, ReflectEnum, ReflectError, Value};
 
 use crate::assets::{CubemapId, MeshId};
-use crate::camera::Camera;
+use crate::camera::{Camera, CameraNode};
 use crate::color::Color;
 use crate::material::Material;
 use crate::math::look_rotation;
@@ -128,6 +128,28 @@ impl ScriptComponent {
     }
 }
 
+/// Longest tag, in bytes.
+pub const MAX_TAG_LEN: usize = 64;
+
+/// A tag is a non-empty string of at most [`MAX_TAG_LEN`] bytes without control characters. Case matters
+/// (`"Enemy"` and `"enemy"` are two tags).
+pub fn check_tag(tag: &str) -> Result<(), String> {
+    if tag.is_empty() {
+        return Err("a tag cannot be empty".into());
+    }
+    if tag.len() > MAX_TAG_LEN {
+        return Err(format!(
+            "the tag '{}...' is too long ({} bytes, at most {MAX_TAG_LEN})",
+            tag.chars().take(16).collect::<String>(),
+            tag.len()
+        ));
+    }
+    if tag.chars().any(char::is_control) {
+        return Err(format!("the tag {tag:?} contains a control character"));
+    }
+    Ok(())
+}
+
 /// Something in the world: a transform plus an optional mesh.
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -148,6 +170,12 @@ pub struct Object {
     /// Script attached to the object (`None` = none). Changed through [`Scene::set_script`] (or set before
     /// [`Scene::add`]) so that the scene can list the scripted objects in spawn order.
     pub(crate) script: Option<ScriptComponent>,
+    /// The `camera` component (`None` = not a camera). Changed through [`Scene::set_camera_node`] (or set before
+    /// [`Scene::add`], or by a command) so that the scene knows its camera nodes.
+    pub(crate) camera: Option<CameraNode>,
+    /// The `tags` component: free labels for finding objects (`find_all_tagged`). Never empty strings, no duplicates,
+    /// in the order they were added. Changed with [`Object::set_tags`] / [`Object::add_tag`] / [`Object::remove_tag`].
+    pub(crate) tags: Vec<String>,
     /// Stable id for commands and scene files, assigned lazily (see [`crate::node_id`]). Cleared by [`Scene::add`].
     pub(crate) node_id: Option<NodeId>,
     pub(crate) parent: Option<ObjectId>,
@@ -182,12 +210,59 @@ impl Object {
             body: None,
             light: None,
             script: None,
+            camera: None,
+            tags: Vec::new(),
             node_id: None,
             parent: None,
             children: Vec::new(),
             local_bounds: Aabb::EMPTY,
             interp: None,
         }
+    }
+
+    /// The camera component, if the object is a camera node.
+    pub fn camera(&self) -> Option<&CameraNode> {
+        self.camera.as_ref()
+    }
+
+    /// The tags of the object, in the order they were added.
+    pub fn tags(&self) -> &[String] {
+        &self.tags
+    }
+
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|t| t == tag)
+    }
+
+    /// Replaces the tags. Duplicates are dropped (the first one stays); an invalid tag is an error and nothing changes.
+    pub fn set_tags<S: AsRef<str>>(&mut self, tags: &[S]) -> Result<(), String> {
+        let mut out: Vec<String> = Vec::with_capacity(tags.len());
+        for t in tags {
+            let t = t.as_ref();
+            check_tag(t)?;
+            if !out.iter().any(|o| o == t) {
+                out.push(t.to_string());
+            }
+        }
+        self.tags = out;
+        Ok(())
+    }
+
+    /// Adds a tag. `Ok(false)` when it was already there.
+    pub fn add_tag(&mut self, tag: &str) -> Result<bool, String> {
+        check_tag(tag)?;
+        if self.has_tag(tag) {
+            return Ok(false);
+        }
+        self.tags.push(tag.to_string());
+        Ok(true)
+    }
+
+    /// Removes a tag. `false` when the object did not have it.
+    pub fn remove_tag(&mut self, tag: &str) -> bool {
+        let before = self.tags.len();
+        self.tags.retain(|t| t != tag);
+        self.tags.len() != before
     }
 
     /// Mesh drawn at `distance` meters from the camera: the [`Object::lod`] entry with the
@@ -455,6 +530,9 @@ pub struct Scene {
     script_seq: u64,
     /// Bumped whenever `scripted` changes (the script host compares it to skip work).
     script_epoch: u64,
+    /// Objects with a `camera` component, in the order the components were added (empty in nearly every game: the
+    /// camera sync points check this first and return).
+    camera_nodes: Vec<ObjectId>,
 }
 
 impl Default for Scene {
@@ -478,7 +556,93 @@ impl Scene {
             scripted: Vec::new(),
             script_seq: 0,
             script_epoch: 0,
+            camera_nodes: Vec::new(),
         }
+    }
+
+    /// Objects with a `camera` component, in the order the components were added.
+    pub fn camera_nodes(&self) -> &[ObjectId] {
+        &self.camera_nodes
+    }
+
+    /// The camera node the scene renders with: the first of [`Scene::camera_nodes`] whose component is `active`. `None`
+    /// (the usual case) leaves [`Scene::camera`] as the free-standing camera it always was.
+    pub fn active_camera_node(&self) -> Option<ObjectId> {
+        self.camera_nodes.iter().copied().find(|id| self.get(*id).and_then(|o| o.camera.as_ref()).is_some_and(|c| c.active))
+    }
+
+    /// Adds, replaces (`Some`) or removes (`None`) the camera component of an object. Returns false if the object does
+    /// not exist. Does not move [`Scene::camera`]: call [`Scene::sync_camera_from_node`].
+    pub fn set_camera_node(&mut self, id: ObjectId, camera: Option<CameraNode>) -> bool {
+        let Some(o) = self.get_mut(id) else { return false };
+        o.camera = camera;
+        self.reconcile_camera(id);
+        true
+    }
+
+    /// Makes the list of camera nodes agree with the object (after a component was written through the registry).
+    pub(crate) fn reconcile_camera(&mut self, id: ObjectId) {
+        let has = self.get(id).is_some_and(|o| o.camera.is_some());
+        let listed = self.camera_nodes.contains(&id);
+        match (has, listed) {
+            (true, false) => self.camera_nodes.push(id),
+            (false, true) => self.camera_nodes.retain(|c| *c != id),
+            _ => {}
+        }
+    }
+
+    /// World position and rotation of an object (its scale is ignored).
+    fn world_pose(&self, id: ObjectId) -> (Vec3, Quat) {
+        let Some(o) = self.get(id) else { return (Vec3::ZERO, Quat::IDENTITY) };
+        if o.parent.is_none() {
+            return (o.transform.position, o.transform.rotation);
+        }
+        let (_, rotation, position) = self.world_matrix(id).to_scale_rotation_translation();
+        (position, rotation)
+    }
+
+    /// Camera node -> [`Scene::camera`]: when there is an active camera node, the render camera takes its world pose
+    /// and lens. Returns whether it did. With no camera nodes this is one empty-list check.
+    pub fn sync_camera_from_node(&mut self) -> bool {
+        if self.camera_nodes.is_empty() {
+            return false;
+        }
+        let Some(id) = self.active_camera_node() else { return false };
+        let (position, rotation) = self.world_pose(id);
+        let lens = self[id].camera.expect("the active camera node has a camera component");
+        self.camera.position = position;
+        self.camera.rotation = rotation;
+        lens.apply_to(&mut self.camera);
+        true
+    }
+
+    /// [`Scene::camera`] -> camera node: after the free camera was changed (the Luau `camera` global), the active
+    /// camera node takes its pose (in the parent's space) and lens, so that the scene file and the screen agree.
+    /// Returns whether there was a node. With no camera nodes this is one empty-list check.
+    pub fn sync_camera_to_node(&mut self) -> bool {
+        if self.camera_nodes.is_empty() {
+            return false;
+        }
+        let Some(id) = self.active_camera_node() else { return false };
+        let cam = self.camera;
+        let (position, rotation) = match self[id].parent {
+            None => (cam.position, cam.rotation),
+            Some(p) => {
+                let parent = self.world_matrix(p);
+                let (_, parent_rotation, _) = parent.to_scale_rotation_translation();
+                (parent.inverse().transform_point3(cam.position), (parent_rotation.inverse() * cam.rotation).normalize())
+            }
+        };
+        let o = &mut self[id];
+        o.transform.position = position;
+        o.transform.rotation = rotation;
+        if let Some(lens) = &mut o.camera {
+            lens.fov = cam.fov;
+            lens.near = cam.near;
+            lens.far = cam.far;
+            lens.ortho = cam.ortho;
+        }
+        true
     }
 
     /// Objects with a script as `(sequence number, object)`, ordered by when the script was attached. A script that is
@@ -540,6 +704,9 @@ impl Scene {
         if self[id].script.is_some() {
             self.register_script(id);
         }
+        if self[id].camera.is_some() {
+            self.camera_nodes.push(id);
+        }
         id
     }
 
@@ -558,6 +725,9 @@ impl Scene {
             }
             let Some(o) = slot.object.take() else { continue };
             let scripted = o.script.is_some();
+            if o.camera.is_some() {
+                self.camera_nodes.retain(|c| *c != cur);
+            }
             stack.extend(o.children);
             slot.generation = slot.generation.wrapping_add(1);
             self.free.push(cur.index);
@@ -579,6 +749,7 @@ impl Scene {
         }
         self.free.reverse();
         self.count = 0;
+        self.camera_nodes.clear();
         if !self.scripted.is_empty() {
             self.scripted.clear();
             self.script_epoch += 1;

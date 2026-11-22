@@ -339,6 +339,7 @@ local pivot = group({ name = "pivot" })     -- empty object to parent things to
 - `group(props?)` -> empty Object
 - props: `name, position, rotation, scale (number or vector), visible, parent, color, body` (see Physics)
 - `find(name)` -> first Object with that name or `nil`; `find_all(name)` -> list; `destroy(obj)` (also destroys children)
+- `find_all_tagged(tag)` -> list of the Objects that have the tag (see "Tags")
 
 Object fields (read/write): `name`, `position`, `x`, `y`, `z`, `rotation` (euler vector), `scale`, `visible`,
 `color`, `material`, `mesh`, `parent` (Object or nil). Read-only: `id`.
@@ -360,6 +361,35 @@ Object methods:
 | `obj:exists()`, `obj:destroy()` | using a destroyed object raises an error |
 | `a == b`, `tostring(obj)` | |
 | `obj.script`, `obj:attach_script(path, props?)`, `obj:detach_script()` | the object's script, see "Object scripts" |
+| `obj.tags`, `obj:has_tag(t)`, `obj:add_tag(t)`, `obj:remove_tag(t)` | labels, see "Tags" |
+
+## Tags
+
+Tags are free labels on an object, saved in scenes (`tags = ["enemy", "flying"]` on a `[[node]]`) and prefabs.
+
+```lua
+local boss = find("Boss")
+boss:add_tag("enemy")
+for _, e in ipairs(find_all_tagged("enemy")) do e.color = "red" end
+if boss:has_tag("flying") then ... end
+boss.tags = { "enemy", "elite" }     -- replaces; reading `boss.tags` gives a new list (changing it changes nothing)
+```
+
+- `obj.tags` (list of strings, read/write; `nil` = none), `obj:has_tag(t)`, `obj:add_tag(t)` (already there: nothing happens),
+  `obj:remove_tag(t)` -> whether it was there, `find_all_tagged(t)` -> list in scene order.
+- A tag is a non-empty string of at most 64 bytes without control characters; case matters; duplicates are dropped.
+- In a prefab instance the instance's `tags` replace the prefab root's tags; for another node of the prefab write
+  `"leaf/node.tags" = ["a", "b"]` under `[node.overrides]`. `scene.save` writes the difference by itself.
+
+## The camera and camera objects
+
+`camera` is the scene's one render camera. A scene file can also hold an object with a `camera` component
+(`[node.camera]`: `fov`, `near`, `far`, `ortho`, `active`; the position and rotation are the object's transform). When there
+is one, the `camera` global and the object stay in step: loading the scene moves `camera` to the object, and
+`camera.position = ...`, `camera.fov = ...`, `camera:look_at(...)` change the object, so `scene.save` writes them. Moving the
+object itself (`find("Cam").position = ...`) moves `camera` at the end of `update` and of `late_update`. With several camera
+objects the first **active** one (in the order they were created / loaded) is used; `active = false` hands over to the next.
+A scene with no camera object behaves exactly as before. There is no `obj.fov`: scripts use the `camera` global.
 
 ## Object scripts
 
@@ -741,7 +771,7 @@ end
 
 - `input.down(key)`, `input.pressed(key)` (this frame), `input.released(key)`
 - `input.repeated(key)` - went down **or auto-repeated** this frame (key held, OS repeat rate): menus, text fields, held Backspace
-- `input.text()` -> string typed this frame (keyboard layout and IME aware: `"A"` with shift, `"ё"`, `"日本"`; no control
+- `input.text()` -> string typed this frame (keyboard layout and IME aware: `"A"` with shift, `"С‘"`, `"ж—Ґжњ¬"`; no control
   characters - check `"enter"` / `"backspace"` with `input.pressed` / `input.repeated`). `""` when nothing was typed.
   ```lua
   name ..= input.text()
