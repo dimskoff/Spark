@@ -1,0 +1,5 @@
+error: `clamp` needs a `range = a..=b`
+ --> tests/ui/clamp_without_range.rs:6:5
+  |
+6 |     #[reflect(clamp)]
+  |     ^

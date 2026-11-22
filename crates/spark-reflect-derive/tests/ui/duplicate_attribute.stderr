@@ -1,0 +1,5 @@
+error: duplicate reflect attribute `step`
+ --> tests/ui/duplicate_attribute.rs:6:27
+  |
+6 |     #[reflect(step = 0.1, step = 0.2)]
+  |                           ^^^^

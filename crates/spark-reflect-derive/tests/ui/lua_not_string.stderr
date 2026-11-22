@@ -1,0 +1,5 @@
+error: `lua` expects a string literal
+ --> tests/ui/lua_not_string.rs:6:21
+  |
+6 |     #[reflect(lua = 5)]
+  |                     ^

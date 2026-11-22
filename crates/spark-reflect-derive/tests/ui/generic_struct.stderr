@@ -1,0 +1,5 @@
+error: reflected types cannot be generic
+ --> tests/ui/generic_struct.rs:5:9
+  |
+5 | struct A<T> {
+  |         ^

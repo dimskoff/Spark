@@ -1,0 +1,5 @@
+error: `lua` and `no_lua` are mutually exclusive
+ --> tests/ui/lua_and_no_lua.rs:6:21
+  |
+6 |     #[reflect(lua = "x", no_lua)]
+  |                     ^^^

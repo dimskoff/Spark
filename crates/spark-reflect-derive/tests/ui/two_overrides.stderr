@@ -1,0 +1,5 @@
+error: only one of `color`, `asset`, `node_ref` is allowed
+ --> tests/ui/two_overrides.rs:6:22
+  |
+6 |     #[reflect(color, node_ref)]
+  |                      ^^^^^^^^

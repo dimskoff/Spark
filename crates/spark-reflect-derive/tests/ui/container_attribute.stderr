@@ -1,0 +1,5 @@
+error: `#[reflect(...)]` is not supported on a struct
+ --> tests/ui/container_attribute.rs:5:1
+  |
+5 | #[reflect(hidden)]
+  | ^

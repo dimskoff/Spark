@@ -1,0 +1,5 @@
+error: unknown variant attribute; valid: name
+ --> tests/ui/unknown_variant_attribute.rs:6:15
+  |
+6 |     #[reflect(nme = "x")]
+  |               ^^^

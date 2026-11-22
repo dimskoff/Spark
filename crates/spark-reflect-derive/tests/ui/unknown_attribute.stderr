@@ -1,0 +1,5 @@
+error: unknown reflect attribute `rnge`; did you mean `range`? valid: range, clamp, step, unit, default, transient, readonly, hidden, lua, no_lua, color, asset, node_ref
+ --> tests/ui/unknown_attribute.rs:6:15
+  |
+6 |     #[reflect(rnge = 0.0..=1.0)]
+  |               ^^^^
