@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::color::Color;
 use crate::mesh::{Aabb, MeshData, Vertex};
+use crate::mesh_source::MeshSource;
 use crate::model::{ModelData, ModelId};
 use crate::shader::{ShaderData, ShaderId};
 
@@ -133,6 +134,8 @@ pub struct Assets {
     /// Bumped when a mesh is edited in place (renderer re-uploads it).
     mesh_versions: Vec<u64>,
     mesh_edits: u64,
+    /// One recipe per mesh (see [`MeshSource`]).
+    mesh_sources: Vec<MeshSource>,
     models: Vec<ModelData>,
     model_paths: HashMap<PathBuf, ModelId>,
     textures: Vec<ImageData>,
@@ -153,11 +156,30 @@ impl Assets {
         Self::default()
     }
 
+    /// Adds a mesh with no recipe ([`MeshSource::RuntimeOnly`]); use [`Assets::add_mesh_with_source`] when it has one.
     pub fn add_mesh(&mut self, mesh: MeshData) -> MeshId {
+        self.add_mesh_with_source(mesh, MeshSource::RuntimeOnly)
+    }
+
+    /// Adds a mesh and remembers how it was made (the caller guarantees the recipe rebuilds the same vertices).
+    pub fn add_mesh_with_source(&mut self, mesh: MeshData, source: MeshSource) -> MeshId {
         let bounds = mesh.bounds();
         self.meshes.push((mesh, bounds));
         self.mesh_versions.push(0);
+        self.mesh_sources.push(source);
         MeshId(self.meshes.len() as u32 - 1)
+    }
+
+    /// How a mesh was made. Unknown ids read as [`MeshSource::RuntimeOnly`].
+    pub fn mesh_source(&self, id: MeshId) -> &MeshSource {
+        self.mesh_sources.get(id.0 as usize).unwrap_or(&MeshSource::RuntimeOnly)
+    }
+
+    /// Replaces the recipe of a mesh (ignored for unknown ids).
+    pub fn set_mesh_source(&mut self, id: MeshId, source: MeshSource) {
+        if let Some(s) = self.mesh_sources.get_mut(id.0 as usize) {
+            *s = source;
+        }
     }
 
     pub fn mesh(&self, id: MeshId) -> Option<&MeshData> {
@@ -196,6 +218,17 @@ impl Assets {
             return Ok(id);
         }
         let model = ModelData::load(&full, self)?;
+        let rel = full.strip_prefix(&self.root).unwrap_or(&full).to_string_lossy().replace('\\', "/");
+        for node in &model.nodes {
+            let Some(prims) = node.mesh.and_then(|m| model.meshes.get(m)) else { continue };
+            for (pi, p) in prims.iter().enumerate() {
+                // The first node using a mesh names it; meshes shared by several nodes keep that recipe.
+                if self.mesh_source(p.mesh) == &MeshSource::RuntimeOnly {
+                    let source = MeshSource::Asset { asset: rel.clone(), node: node.name.clone(), primitive: pi as u32 };
+                    self.set_mesh_source(p.mesh, source);
+                }
+            }
+        }
         self.models.push(model);
         let id = ModelId(self.models.len() as u32 - 1);
         self.model_paths.insert(full, id);
@@ -320,6 +353,7 @@ impl Assets {
     pub fn clear(&mut self) {
         self.meshes.clear();
         self.mesh_versions.clear();
+        self.mesh_sources.clear();
         self.models.clear();
         self.model_paths.clear();
         self.textures.clear();

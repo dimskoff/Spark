@@ -5,7 +5,8 @@ use std::collections::HashMap;
 
 use mlua::{Lua, Table, UserDataRef, Value, Variadic, Vector};
 use spark_core::{
-    Color, Fog, Gamepad, ImageData, Key, Material, MeshData, MeshId, MouseButton, PadAxis, PadButton, SurfaceOpts, Vec3, Vertex, World,
+    Color, Fog, Gamepad, ImageData, Key, Material, MeshData, MeshId, MeshSource, MouseButton, PadAxis, PadButton, SurfaceOpts, Vec3,
+    Vertex, World,
 };
 
 use crate::convert::*;
@@ -17,11 +18,11 @@ struct MeshCache(RefCell<HashMap<String, MeshId>>);
 /// `Mesh.custom(positions, indices, uvs?, normals?)`.
 type CustomMeshArgs = (Vec<Value>, Vec<u32>, Option<Vec<f32>>, Option<Vec<Value>>);
 
-fn cached_mesh(lua: &Lua, key: String, make: impl FnOnce() -> MeshData) -> LuaResult<LuaMesh> {
+fn cached_mesh(lua: &Lua, key: String, source: MeshSource) -> LuaResult<LuaMesh> {
     if let Some(id) = lua.app_data_ref::<MeshCache>().and_then(|c| c.0.borrow().get(&key).copied()) {
         return Ok(LuaMesh(id));
     }
-    let id = with(lua, |w| Ok(w.add_mesh(make())))?;
+    let id = with(lua, |w| w.assets.add_mesh_from(&source).map_err(rt))?;
     if let Some(c) = lua.app_data_ref::<MeshCache>() {
         c.0.borrow_mut().insert(key, id);
     }
@@ -174,7 +175,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
         "cube",
         lua.create_function(|lua, ONum(size): ONum| {
             let s = positive(size.unwrap_or(1.0), "Mesh.cube: size")?;
-            cached_mesh(lua, format!("cube {s}"), || MeshData::cube(s))
+            cached_mesh(lua, format!("cube {s}"), MeshSource::Cube { size: s })
         })?,
     )?;
     mesh.set(
@@ -185,8 +186,16 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
                 positive(v, &format!("Mesh.box: {n}"))?;
             }
             match surface_opts(o, "Mesh.box")? {
-                Some(o) => cached_mesh(lua, format!("box {w} {h} {d} {o:?}"), || MeshData::cuboid_with(w, h, d, o)),
-                None => cached_mesh(lua, format!("box {w} {h} {d}"), || MeshData::cuboid(w, h, d)),
+                Some(o) => cached_mesh(
+                    lua,
+                    format!("box {w} {h} {d} {o:?}"),
+                    MeshSource::Box { size: Vec3::new(w, h, d), tile: o.tile, cell: o.cell, surface: true },
+                ),
+                None => cached_mesh(
+                    lua,
+                    format!("box {w} {h} {d}"),
+                    MeshSource::Box { size: Vec3::new(w, h, d), tile: None, cell: None, surface: false },
+                ),
             }
         })?,
     )?;
@@ -198,8 +207,16 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
             positive(w, "Mesh.plane: width")?;
             positive(d, "Mesh.plane: depth")?;
             match surface_opts(o, "Mesh.plane")? {
-                Some(o) => cached_mesh(lua, format!("plane {w} {d} {o:?}"), || MeshData::plane_with(w, d, o)),
-                None => cached_mesh(lua, format!("plane {w} {d}"), || MeshData::plane(w, d)),
+                Some(o) => cached_mesh(
+                    lua,
+                    format!("plane {w} {d} {o:?}"),
+                    MeshSource::Plane { width: w, depth: d, tile: o.tile, cell: o.cell, surface: true },
+                ),
+                None => cached_mesh(
+                    lua,
+                    format!("plane {w} {d}"),
+                    MeshSource::Plane { width: w, depth: d, tile: None, cell: None, surface: false },
+                ),
             }
         })?,
     )?;
@@ -211,8 +228,16 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
             positive(w, "Mesh.quad: width")?;
             positive(h, "Mesh.quad: height")?;
             match surface_opts(o, "Mesh.quad")? {
-                Some(o) => cached_mesh(lua, format!("quad {w} {h} {o:?}"), || MeshData::quad_with(w, h, o)),
-                None => cached_mesh(lua, format!("quad {w} {h}"), || MeshData::quad(w, h)),
+                Some(o) => cached_mesh(
+                    lua,
+                    format!("quad {w} {h} {o:?}"),
+                    MeshSource::Quad { width: w, height: h, tile: o.tile, cell: o.cell, surface: true },
+                ),
+                None => cached_mesh(
+                    lua,
+                    format!("quad {w} {h}"),
+                    MeshSource::Quad { width: w, height: h, tile: None, cell: None, surface: false },
+                ),
             }
         })?,
     )?;
@@ -220,7 +245,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
         "sphere",
         lua.create_function(|lua, (ONum(r), seg): (ONum, Option<u32>)| {
             let (r, seg) = (positive(r.unwrap_or(0.5), "Mesh.sphere: radius")?, seg.unwrap_or(24).clamp(3, 256));
-            cached_mesh(lua, format!("sphere {r} {seg}"), || MeshData::sphere(r, seg))
+            cached_mesh(lua, format!("sphere {r} {seg}"), MeshSource::Sphere { radius: r, segments: seg })
         })?,
     )?;
     mesh.set(
@@ -231,7 +256,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
                 positive(h.unwrap_or(1.0), "Mesh.cylinder: height")?,
                 seg.unwrap_or(24).clamp(3, 256),
             );
-            cached_mesh(lua, format!("cylinder {r} {h} {seg}"), || MeshData::cylinder(r, h, seg))
+            cached_mesh(lua, format!("cylinder {r} {h} {seg}"), MeshSource::Cylinder { radius: r, height: h, segments: seg })
         })?,
     )?;
     mesh.set(
@@ -241,7 +266,7 @@ fn install_assets(lua: &Lua, g: &Table) -> LuaResult<()> {
                 return Err(rt(format!("Mesh.triangles: expected 3, 6, 9... points, got {}", points.len())));
             }
             let pts = points.iter().map(|p| to_vec3(p, "Mesh.triangles")).collect::<LuaResult<Vec<_>>>()?;
-            with(lua, |w| Ok(LuaMesh(w.add_mesh(MeshData::from_triangles(&pts)))))
+            with(lua, |w| w.assets.add_mesh_from(&MeshSource::Triangles { points: pts }).map(LuaMesh).map_err(rt))
         })?,
     )?;
     mesh.set(

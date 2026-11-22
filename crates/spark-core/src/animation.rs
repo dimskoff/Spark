@@ -174,7 +174,8 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
                             Some(m) => m,
                             None => {
                                 let data = world.assets.mesh(p.mesh).cloned().unwrap_or_default();
-                                world.assets.add_mesh(data)
+                                let source = world.assets.mesh_source(p.mesh).clone();
+                                world.assets.add_mesh_with_source(data, source)
                             }
                         }
                     }
