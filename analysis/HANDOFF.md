@@ -5,7 +5,7 @@
 ## Где мы
 - **Этап A** (ноль тихих ошибок, лицензии) — закрыт.
 - **Этап B** (безопасность) — закрыт; B-7 (подпись minisign) ждёт ключ владельца, B-8 — прогон CI.
-- **Этап C** (реестр типов, сцены, префабы, команды, скрипты на объектах) — C-1…C-17 сделаны; C-18 (hot reload модуля + `spark mcp`) — см. статус в [PROGRESS.md](PROGRESS.md).
+- **Этап C** (реестр типов, сцены, префабы, команды, скрипты на объектах) — **закрыт полностью** (C-1…C-18, последний коммит `4c3b9a7`). Итог: 482 теста, 0 падений, 11 примеров проходят `check`, golden совпадает.
 - Полный журнал задач, коммитов, чисел тестов и решений — [PROGRESS.md](PROGRESS.md). План этапа C — [stage-c-plan.md](stage-c-plan.md). Решения — `docs/dev/adr/0003`…`0005` (+ разделы «C-xx decisions» в конце).
 
 ## Как проверить, что всё зелёное
@@ -25,7 +25,7 @@ cargo build -p spark-cli; Get-ChildItem examples -Recurse -Filter main.luau | % 
 2. **Хвосты этапа C** (каждый — маленький PR):
    - `script` в реестре (команды `SetProperty script.props.x`), запись props обратно, `on_reload` для скриптов объектов, сбои объектов в `spark check --json`, отметка узла в редакторе (C-16).
    - camera/tags в JSON-форме узла devtools, `@environment` для команд (C-17).
-   - `History::clear` при reset/hot reload, если C-18 не подключил.
+   - Сохранять ассеты при рестарте из-за `main.luau`; скриншот живой игры через devtools (C-18, ADR 0006).
    - `spark golden --help` принимает `--help` за путь (C-tail-1).
    - luau-lsp: один раз проверить, что `docs/spark.d.luau` открывается без ошибок (C-10).
 3. **Этап D — редактор сцен MVP** ([11-roadmap.md](11-roadmap.md)): иерархия, инспектор из реестра (`spark_core::registry`), гизмо, undo через `spark_core::History`, сохранение через `spark_scene::save_scene`, live-правки через devtools протокол 4 (`EditorCommand::Command`). Фундамент для всего этого уже есть.
