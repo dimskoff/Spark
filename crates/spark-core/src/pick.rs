@@ -144,12 +144,12 @@ mod tests {
         let mut w = World::new();
         let cube = w.assets.add_mesh(MeshData::cube(1.0));
         let near = w.spawn(cube, Default::default());
-        w.scene.get_mut(near).unwrap().position = Vec3::new(0.0, 0.0, -5.0);
+        w.scene.get_mut(near).unwrap().transform.position = Vec3::new(0.0, 0.0, -5.0);
         let far = w.spawn(cube, Default::default());
         {
             let o = w.scene.get_mut(far).unwrap();
-            o.position = Vec3::new(0.0, 0.0, -10.0);
-            o.scale = Vec3::splat(3.0);
+            o.transform.position = Vec3::new(0.0, 0.0, -10.0);
+            o.transform.scale = Vec3::splat(3.0);
         }
 
         let h = w.pick(Vec3::ZERO, Vec3::NEG_Z, 100.0, None).unwrap();

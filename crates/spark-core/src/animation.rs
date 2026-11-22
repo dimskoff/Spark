@@ -128,9 +128,10 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
                 let mut o = Object::empty();
                 o.name = n.name.clone();
                 // kit parts sit side by side in the file: drop the X / Z offsets of the whole chain
-                o.position = if a == 0 || model.nodes[a].parent.is_none() { n.translation } else { Vec3::new(0.0, n.translation.y, 0.0) };
-                o.rotation = n.rotation;
-                o.scale = n.scale;
+                o.transform.position =
+                    if a == 0 || model.nodes[a].parent.is_none() { n.translation } else { Vec3::new(0.0, n.translation.y, 0.0) };
+                o.transform.rotation = n.rotation;
+                o.transform.scale = n.scale;
                 let id = world.scene.add(o);
                 let _ = world.scene.set_parent(id, Some(parent));
                 nodes[a] = id;
@@ -148,9 +149,9 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
         let n = &model.nodes[ni];
         let mut o = Object::empty();
         o.name = n.name.clone();
-        o.position = if only_node == Some(ni) { Vec3::new(0.0, n.translation.y, 0.0) } else { n.translation };
-        o.rotation = n.rotation;
-        o.scale = n.scale;
+        o.transform.position = if only_node == Some(ni) { Vec3::new(0.0, n.translation.y, 0.0) } else { n.translation };
+        o.transform.rotation = n.rotation;
+        o.transform.scale = n.scale;
         let id = world.scene.add(o);
         let _ = world.scene.set_parent(id, Some(parent));
         nodes[ni] = id;
@@ -387,9 +388,9 @@ fn skin_and_pose(world: &mut World, root: ObjectId, first_clip_pose: bool) {
     let model_id = inst.model;
     for (node, (t, r, s)) in pose {
         if let Some(o) = nodes.get(node).and_then(|&id| world.scene.get_mut(id)) {
-            o.position = t;
-            o.rotation = r;
-            o.scale = s;
+            o.transform.position = t;
+            o.transform.rotation = r;
+            o.transform.scale = s;
         }
     }
 

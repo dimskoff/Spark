@@ -33,7 +33,7 @@ impl Game for Hello {
         for (i, color) in colors.into_iter().enumerate() {
             let id = world.spawn(cube, Material::color(color));
             world.scene[id].name = format!("cube{i}");
-            world.scene[id].position = vec3(i as f32 * 1.8 - 3.6, 0.0, 0.0);
+            world.scene[id].transform.position = vec3(i as f32 * 1.8 - 3.6, 0.0, 0.0);
             world.scene.place_on(id, ground).unwrap();
             self.cubes.push(id);
         }

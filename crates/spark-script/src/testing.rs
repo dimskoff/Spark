@@ -210,9 +210,9 @@ pub fn world_snapshot(w: &World) -> String {
         let e = o.euler();
         let mut v = format!(
             "pos {} rot {} scale {}",
-            vec3(o.position),
+            vec3(o.transform.position),
             vec3(Vec3::new(e.x.to_degrees(), e.y.to_degrees(), e.z.to_degrees())),
-            vec3(o.scale)
+            vec3(o.transform.scale)
         );
         if let Some(p) = o.parent().and_then(|p| w.scene.get(p)) {
             let _ = write!(v, " parent {:?}", p.name);

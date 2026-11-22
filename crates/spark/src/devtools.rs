@@ -171,13 +171,13 @@ fn apply_set_object(
         o.name = n;
     }
     if let Some(p) = position.filter(finite) {
-        o.position = Vec3::from_array(p);
+        o.transform.position = Vec3::from_array(p);
     }
     if let Some(r) = rotation_deg.filter(finite) {
-        o.rotation = Quat::from_euler(EulerRot::YXZ, r[1].to_radians(), r[0].to_radians(), r[2].to_radians());
+        o.transform.rotation = Quat::from_euler(EulerRot::YXZ, r[1].to_radians(), r[0].to_radians(), r[2].to_radians());
     }
     if let Some(s) = scale.filter(finite) {
-        o.scale = Vec3::from_array(s);
+        o.transform.scale = Vec3::from_array(s);
     }
     if let Some(v) = visible {
         o.visible = v;

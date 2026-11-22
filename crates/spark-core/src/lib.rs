@@ -56,7 +56,7 @@ pub use model::{ModelData, ModelId};
 pub use physics::{Body, BodyKind, CharacterMove, Collision, Physics, PhysicsBackend, RayHit, Shape};
 pub use pick::PickHit;
 pub use render::{PassSize, PostPass, RenderSettings, TextureFilter};
-pub use scene::{Fog, Light, LightKind, Object, ObjectId, Scene, Sky, Sun};
+pub use scene::{Fog, Light, LightKind, Object, ObjectId, Scene, Sky, Sun, Transform};
 pub use schedule::{Scheduler, TimerId};
 pub use shader::{Param, ParamType, ShaderData, ShaderId, ShaderKind};
 pub use text::{FontId, Fonts};

@@ -146,9 +146,9 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
                 let o = w.scene.get_mut(id).ok_or_else(dead)?;
                 match k.as_str() {
                     "name" => o.name = to_str(&v, &what)?,
-                    "position" => o.position = to_vec3(&v, &what)?,
-                    "rotation" => o.rotation = from_euler(to_vec3(&v, &what)?),
-                    "scale" => o.scale = to_scale(&v, &what)?,
+                    "position" => o.transform.position = to_vec3(&v, &what)?,
+                    "rotation" => o.transform.rotation = from_euler(to_vec3(&v, &what)?),
+                    "scale" => o.transform.scale = to_scale(&v, &what)?,
                     "visible" => o.visible = to_bool(&v, &what)?,
                     "color" => o.material.color = to_color(&v, &what)?,
                     "shader" => o.material.shader = crate::shader::to_shader(&v, &what)?,
@@ -253,26 +253,26 @@ impl UserData for Obj {
             let name = to_str(&v, "name")?;
             write(lua, this.0, |o| o.name = name)
         });
-        f.add_field_method_get("position", |lua, this| read(lua, this.0, |_, o| vv(o.position)));
+        f.add_field_method_get("position", |lua, this| read(lua, this.0, |_, o| vv(o.transform.position)));
         f.add_field_method_set("position", |lua, this, v: Value| {
             let p = to_vec3(&v, "position")?;
-            write(lua, this.0, |o| o.position = p)
+            write(lua, this.0, |o| o.transform.position = p)
         });
-        f.add_field_method_get("x", |lua, this| read(lua, this.0, |_, o| o.position.x));
-        f.add_field_method_get("y", |lua, this| read(lua, this.0, |_, o| o.position.y));
-        f.add_field_method_get("z", |lua, this| read(lua, this.0, |_, o| o.position.z));
-        f.add_field_method_set("x", |lua, this, Num(v): Num| write(lua, this.0, |o| o.position.x = v));
-        f.add_field_method_set("y", |lua, this, Num(v): Num| write(lua, this.0, |o| o.position.y = v));
-        f.add_field_method_set("z", |lua, this, Num(v): Num| write(lua, this.0, |o| o.position.z = v));
-        f.add_field_method_get("rotation", |lua, this| read(lua, this.0, |_, o| vv(euler(o.rotation))));
+        f.add_field_method_get("x", |lua, this| read(lua, this.0, |_, o| o.transform.position.x));
+        f.add_field_method_get("y", |lua, this| read(lua, this.0, |_, o| o.transform.position.y));
+        f.add_field_method_get("z", |lua, this| read(lua, this.0, |_, o| o.transform.position.z));
+        f.add_field_method_set("x", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.x = v));
+        f.add_field_method_set("y", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.y = v));
+        f.add_field_method_set("z", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.z = v));
+        f.add_field_method_get("rotation", |lua, this| read(lua, this.0, |_, o| vv(euler(o.transform.rotation))));
         f.add_field_method_set("rotation", |lua, this, v: Value| {
             let r = from_euler(to_vec3(&v, "rotation")?);
-            write(lua, this.0, |o| o.rotation = r)
+            write(lua, this.0, |o| o.transform.rotation = r)
         });
-        f.add_field_method_get("scale", |lua, this| read(lua, this.0, |_, o| vv(o.scale)));
+        f.add_field_method_get("scale", |lua, this| read(lua, this.0, |_, o| vv(o.transform.scale)));
         f.add_field_method_set("scale", |lua, this, v: Value| {
             let s = to_scale(&v, "scale")?;
-            write(lua, this.0, |o| o.scale = s)
+            write(lua, this.0, |o| o.transform.scale = s)
         });
         f.add_field_method_get("visible", |lua, this| read(lua, this.0, |_, o| o.visible));
         f.add_field_method_set("visible", |lua, this, v: bool| write(lua, this.0, |o| o.visible = v));
@@ -405,8 +405,8 @@ impl UserData for Obj {
         m.add_method("children", |lua, this, ()| with(lua, |w| Ok(w.scene.children(this.0).into_iter().map(Obj).collect::<Vec<_>>())));
         m.add_method("world_position", |lua, this, ()| read(lua, this.0, |w, _| vv(w.scene.world_position(this.0))));
         m.add_method("forward", |lua, this, ()| read(lua, this.0, |_, o| vv(o.forward())));
-        m.add_method("right", |lua, this, ()| read(lua, this.0, |_, o| vv(o.rotation * Vec3::X)));
-        m.add_method("up", |lua, this, ()| read(lua, this.0, |_, o| vv(o.rotation * Vec3::Y)));
+        m.add_method("right", |lua, this, ()| read(lua, this.0, |_, o| vv(o.transform.rotation * Vec3::X)));
+        m.add_method("up", |lua, this, ()| read(lua, this.0, |_, o| vv(o.transform.rotation * Vec3::Y)));
         m.add_method("bounds", |lua, this, ()| {
             read(lua, this.0, |w, _| {
                 let b = w.scene.world_bounds(this.0);

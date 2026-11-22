@@ -276,8 +276,8 @@ impl RapierBackend {
                     }
                 };
                 if let Some(o) = world.scene.get_mut(id) {
-                    o.position = lpos;
-                    o.rotation = lrot;
+                    o.transform.position = lpos;
+                    o.transform.rotation = lrot;
                 }
             }
             let (_, rot, pos) = world.scene.world_matrix(id).to_scale_rotation_translation();

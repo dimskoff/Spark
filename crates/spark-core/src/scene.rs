@@ -33,14 +33,30 @@ impl ObjectId {
     }
 }
 
+/// Local position, rotation and scale of an [Object] (relative to its parent, or the world).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Transform {
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
+}
+
+impl Transform {
+    pub const IDENTITY: Self = Self { position: Vec3::ZERO, rotation: Quat::IDENTITY, scale: Vec3::ONE };
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
 /// Something in the world: a transform plus an optional mesh.
 #[derive(Clone, Debug)]
 pub struct Object {
     pub name: String,
     /// Position relative to the parent (or the world if no parent).
-    pub position: Vec3,
-    pub rotation: Quat,
-    pub scale: Vec3,
+    pub transform: Transform,
     pub mesh: Option<MeshId>,
     /// Level of detail: `(distance, mesh)` pairs. From `distance` meters away from the camera on
     /// the renderer draws that mesh instead of `mesh` (the entry with the largest distance that is
@@ -76,9 +92,7 @@ impl Object {
     pub fn empty() -> Self {
         Self {
             name: String::new(),
-            position: Vec3::ZERO,
-            rotation: Quat::IDENTITY,
-            scale: Vec3::ONE,
+            transform: Transform::default(),
             mesh: None,
             lod: Vec::new(),
             material: Material::default(),
@@ -107,10 +121,10 @@ impl Object {
     /// simulated bodies (`alpha` 0..1), the plain local matrix otherwise.
     pub fn render_local_matrix(&self, alpha: f32) -> Mat4 {
         if let Some(i) = &self.interp {
-            if i.position == self.position && i.rotation == self.rotation {
+            if i.position == self.transform.position && i.rotation == self.transform.rotation {
                 let p = i.prev_position.lerp(i.position, alpha);
                 let r = i.prev_rotation.slerp(i.rotation, alpha);
-                return Mat4::from_scale_rotation_translation(self.scale, r, p);
+                return Mat4::from_scale_rotation_translation(self.transform.scale, r, p);
             }
         }
         self.local_matrix()
@@ -126,48 +140,48 @@ impl Object {
     }
 
     pub fn local_matrix(&self) -> Mat4 {
-        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
+        Mat4::from_scale_rotation_translation(self.transform.scale, self.transform.rotation, self.transform.position)
     }
 
     /// Rotates around the object's own X axis.
     pub fn rotate_x(&mut self, angle: f32) {
-        self.rotation = (self.rotation * Quat::from_rotation_x(angle)).normalize();
+        self.transform.rotation = (self.transform.rotation * Quat::from_rotation_x(angle)).normalize();
     }
 
     /// Rotates around the object's own Y axis.
     pub fn rotate_y(&mut self, angle: f32) {
-        self.rotation = (self.rotation * Quat::from_rotation_y(angle)).normalize();
+        self.transform.rotation = (self.transform.rotation * Quat::from_rotation_y(angle)).normalize();
     }
 
     /// Rotates around the object's own Z axis.
     pub fn rotate_z(&mut self, angle: f32) {
-        self.rotation = (self.rotation * Quat::from_rotation_z(angle)).normalize();
+        self.transform.rotation = (self.transform.rotation * Quat::from_rotation_z(angle)).normalize();
     }
 
     pub fn translate(&mut self, delta: Vec3) {
-        self.position += delta;
+        self.transform.position += delta;
     }
 
     /// Euler angles in radians (x = pitch, y = yaw, z = roll), applied in Y-X-Z order.
     pub fn euler(&self) -> Vec3 {
-        let (y, x, z) = self.rotation.to_euler(EulerRot::YXZ);
+        let (y, x, z) = self.transform.rotation.to_euler(EulerRot::YXZ);
         Vec3::new(x, y, z)
     }
 
     pub fn set_euler(&mut self, angles: Vec3) {
-        self.rotation = Quat::from_euler(EulerRot::YXZ, angles.y, angles.x, angles.z);
+        self.transform.rotation = Quat::from_euler(EulerRot::YXZ, angles.y, angles.x, angles.z);
     }
 
     /// Turns the object so its -Z axis points at `target` (in parent space).
     pub fn look_at(&mut self, target: Vec3) {
-        if target != self.position {
-            self.rotation = look_rotation(target - self.position);
+        if target != self.transform.position {
+            self.transform.rotation = look_rotation(target - self.transform.position);
         }
     }
 
     /// Local -Z axis.
     pub fn forward(&self) -> Vec3 {
-        self.rotation * Vec3::NEG_Z
+        self.transform.rotation * Vec3::NEG_Z
     }
 }
 
@@ -408,10 +422,10 @@ impl Scene {
             let Some(o) = slot.object.as_mut() else { continue };
             let moving = o.body.as_ref().is_some_and(|b| b.kind != crate::physics::BodyKind::Static);
             o.interp = moving.then_some(Interp {
-                prev_position: o.position,
-                prev_rotation: o.rotation,
-                position: o.position,
-                rotation: o.rotation,
+                prev_position: o.transform.position,
+                prev_rotation: o.transform.rotation,
+                position: o.transform.position,
+                rotation: o.transform.rotation,
             });
         }
     }
@@ -421,8 +435,8 @@ impl Scene {
         for slot in &mut self.slots {
             let Some(o) = slot.object.as_mut() else { continue };
             if let Some(i) = &mut o.interp {
-                i.position = o.position;
-                i.rotation = o.rotation;
+                i.position = o.transform.position;
+                i.rotation = o.transform.rotation;
             }
         }
     }
@@ -540,7 +554,7 @@ impl Scene {
             None => delta,
         };
         if let Some(o) = self.get_mut(id) {
-            o.position += local;
+            o.transform.position += local;
         }
     }
 
@@ -599,10 +613,10 @@ impl Scene {
                 esc(&o.name),
                 o.parent.map_or("null".into(), |p| p.index().to_string()),
                 o.mesh.map_or("null".into(), |m| m.0.to_string()),
-                v(o.position),
+                v(o.transform.position),
                 v(mats[i].w_axis.truncate()),
                 v(Vec3::new(e.x.to_degrees(), e.y.to_degrees(), e.z.to_degrees())),
-                v(o.scale),
+                v(o.transform.scale),
                 vis[i],
                 if b.is_empty() { "null".into() } else { format!("[{},{}]", v(b.min), v(b.max)) },
                 o.body.as_ref().map_or("null".into(), |b| format!("{{\"kind\":\"{}\",\"velocity\":{}}}", b.kind.name(), v(b.velocity))),
@@ -642,9 +656,9 @@ impl Scene {
             "  ".repeat(depth),
             name,
             o.mesh.map(|m| m.0.to_string()).unwrap_or_else(|| "-".into()),
-            fmt_v(o.position),
+            fmt_v(o.transform.position),
             fmt_v(Vec3::new(e.x.to_degrees(), e.y.to_degrees(), e.z.to_degrees())),
-            fmt_v(o.scale),
+            fmt_v(o.transform.scale),
             bounds,
             if o.visible { "" } else { " HIDDEN" }
         );
@@ -716,7 +730,7 @@ mod tests {
         let mut last = root;
         for _ in 0..10_000 {
             let mut o = Object::empty();
-            o.position = Vec3::X;
+            o.transform.position = Vec3::X;
             o.parent = Some(last);
             last = s.add(o);
         }
@@ -743,11 +757,11 @@ mod tests {
         o.body = Some(Body::dynamic());
         let id = s.add(o);
         s.begin_interp_step();
-        s[id].position = Vec3::new(1.0, 0.0, 0.0); // what physics would do
+        s[id].transform.position = Vec3::new(1.0, 0.0, 0.0); // what physics would do
         s.end_interp_step();
         let half = s[id].render_local_matrix(0.5).w_axis.x;
         assert!((half - 0.5).abs() < 1e-5);
-        s[id].position = Vec3::new(10.0, 0.0, 0.0); // teleport by game code: no smear
+        s[id].transform.position = Vec3::new(10.0, 0.0, 0.0); // teleport by game code: no smear
         assert_eq!(s[id].render_local_matrix(0.5).w_axis.x, 10.0);
     }
 
@@ -782,7 +796,7 @@ mod tests {
         s.begin_interp_step();
         s.end_interp_step();
         // Teleport: change position after end_interp_step
-        s[id].position = Vec3::new(100.0, 0.0, 0.0);
+        s[id].transform.position = Vec3::new(100.0, 0.0, 0.0);
         // render_local_matrix should NOT interpolate (teleport detected)
         let m = s[id].render_local_matrix(0.5);
         let p = m.w_axis.truncate();
@@ -794,11 +808,11 @@ mod tests {
         let mut s = Scene::new();
         let mut obj = Object::empty();
         obj.body = Some(Body { kind: BodyKind::Dynamic, ..Default::default() });
-        obj.position = Vec3::new(0.0, 0.0, 0.0);
+        obj.transform.position = Vec3::new(0.0, 0.0, 0.0);
         let id = s.add(obj);
         s.begin_interp_step();
         // Simulate physics moving the object
-        s[id].position = Vec3::new(10.0, 0.0, 0.0);
+        s[id].transform.position = Vec3::new(10.0, 0.0, 0.0);
         s.end_interp_step();
         // At alpha=0.5, should be at (5, 0, 0)
         let m = s.get(id).unwrap().render_local_matrix(0.5);
