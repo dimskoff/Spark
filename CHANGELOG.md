@@ -27,6 +27,8 @@ read the entries below for your old version and the new one, fix the code, then 
   work as before; your own globals are always read with their current value in every file (main, modules, tests).
   Side effect: `math.*`-heavy scripts run about 3x faster (Luau safe-env fast paths for built-ins).
 - `--devtools` accepts only loopback addresses and is ignored by packed (shipped) games.
+- An unknown key in a `spawn{...}` table suggests the closest one (`colour` -> "did you mean 'color'?"); the list of allowed
+  keys in that message is in a new order.
 - **Unknown object fields are errors for reads too** (`cube.postion` -> "did you mean 'position'?"); before, reading one
   returned `nil`.
 
