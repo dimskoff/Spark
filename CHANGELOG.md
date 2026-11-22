@@ -46,6 +46,8 @@ read the entries below for your old version and the new one, fix the code, then 
   its archive; `spark licenses` and `game --licenses` print it.
 - `deny.toml` + a CI `cargo-deny` job (licenses, bans, sources). `ASSETS.md` lists the origin and license of every media file.
 - The stray `crates/spark-editor.zip` archive was removed; `*.zip` is ignored.
+- Removed foreign assets that came from another project (`figure.glb` test model, `hit.wav` / `spawn.wav` demo sounds). The
+  model tests generate a small skinned rig at run time in a temp folder; the demo example no longer plays sounds.
 - `--seed N` seeds `math.random` for reproducible runs; headless runs, `spark check` and `spark test` default to seed 0
   (reseeded on restart and hot reload); windowed runs without `--seed` stay random. `spark check` / `spark test` accept `--seed N`.
 - Packed games write `error.log` and `spark-crash.log` to `<user data>/SparkGames/<game>/logs/` (they could not be written

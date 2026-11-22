@@ -1,5 +1,6 @@
 -- Contract test: save (memory only in tests), glTF models + animation, tween, character controller, window.
-local FIGURE = "assets/figure.glb" -- skinned humanoid with idle / walk animations
+-- Runs from a temp folder next to a generated model (tests/common/mod.rs): skinned humanoid with idle / walk / reach clips.
+local FIGURE = "assets/rig.glb"
 
 function start()
     -- gamepads (none in tests) and mixer buses
@@ -31,7 +32,7 @@ function start()
 
     -- models
     local m = Model.load(FIGURE)
-    assert(#m.animations == 5, "clip count " .. #m.animations)
+    assert(#m.animations == 3, "clip count " .. #m.animations)
     assert(m:duration("walk") > 1)
     assert(m.size.y > 2.3, "model size")
     local f = spawn(m, "black", { position = vec3(1, 0, 0) })

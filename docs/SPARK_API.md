@@ -523,7 +523,7 @@ rapier 3D, stepped in `fixed_update` (1/60). Y up, meters, default gravity `(0, 
 ```lua
 local ground = spawn(Mesh.plane(40), "gray", { body = "static" })
 local box = spawn(Mesh.cube(), "orange", { position = vec3(0, 4, 0), body = "dynamic" })
-box:on("collision", function(other, info) if info.speed > 3 then sound.play("sounds/hit.wav") end end)
+box:on("collision", function(other, info) if info.speed > 3 then sound.play("sounds/thud.wav") end end)
 ```
 
 - `body = "dynamic" | "static" | "kinematic" | true` (dynamic), or a table:

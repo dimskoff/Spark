@@ -3,6 +3,8 @@
 //! The test builds a Luau script from the registry, runs it in a real game VM and fails with the full list of
 //! differences: functions that are documented but missing, and globals / table members that exist but are not documented.
 
+mod common;
+
 use std::fmt::Write;
 
 use spark_api::{Api, Member};
@@ -63,7 +65,7 @@ fn instance(class: &str) -> Option<&'static str> {
         "Mesh" => "Mesh.cube()",
         "Texture" => "Texture.solid(\"red\")",
         "Material" => "Material.pbr(\"red\", 0.1, 0.5)",
-        "Model" => "Model.load(\"assets/figure.glb\")",
+        "Model" => "Model.load(\"assets/rig.glb\")",
         "Timer" => "after(100, function() end)",
         "Task" => "task(function() wait(100) end)",
         "Listener" => "on(\"drift_check\", function() end)",
@@ -181,8 +183,7 @@ fn registry_matches_the_running_engine() {
     let api = spark_api::api();
     let dir = std::env::temp_dir().join(format!("spark-api-drift-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("assets")).unwrap();
-    std::fs::copy(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/scripts/assets/figure.glb"), dir.join("assets/figure.glb"))
-        .unwrap();
+    common::write_test_rig(&dir.join("assets/rig.glb"));
     let main = dir.join("main.luau");
     std::fs::write(&main, script(&api, false)).unwrap();
 

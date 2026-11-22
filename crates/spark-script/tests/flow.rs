@@ -1,5 +1,7 @@
 //! Runs Luau contract scripts headless (no GPU): each must call quit() without errors.
 
+mod common;
+
 use spark_core::{Game, World, run_frame};
 use spark_script::ScriptGame;
 
@@ -62,7 +64,14 @@ fn sky_contract() {
 
 #[test]
 fn models_contract() {
-    run_script("models.luau", 2000);
+    // Runs from a temp folder next to a generated skinned model (nothing binary is committed).
+    let dir = std::env::temp_dir().join(format!("spark-models-contract-{}", std::process::id()));
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/scripts/models.luau");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(src, dir.join("models.luau")).unwrap();
+    common::write_test_rig(&dir.join("assets/rig.glb"));
+    run_script_at(&dir.join("models.luau"), 2000);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
