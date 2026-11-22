@@ -56,8 +56,10 @@ ID задач (B1, S2, L1, J1 …) совпадают с ID в файлах ра
 | C-ADR | 3 ADR: формат сцены, реестр типов, компонентная модель + команды | ✅ | `docs/dev/adr/0003..0005`, `stage-c-plan.md` | TOML, свой `spark-reflect` + derive, узел + закрытый набор компонентов (не ECS), `Command` + `History` в `spark-core` |
 | C-1, C-2 | `spark-reflect` + derive | ✅ | `crates/spark-reflect`, `crates/spark-reflect-derive`, `def5137` | 18 тестов + 19 compile-fail (trybuild); сборка с нуля 13.8 с; отклонения от ADR записаны в ADR 0004. Нет: glam-типов (решить в C-3), `u64/usize` |
 | C-4 | `Object.transform` (механическая замена) | ✅ | `spark-core/src/scene.rs` (`Transform`, `IDENTITY`), 11 файлов, `4bf38f1` | 288 тестов, все примеры `check` ok; Luau API не менялся |
-| C-3, C-5 | derive на типах ядра + реестр компонентов | 🔄 | | агент |
-| C-6..C-18 | см. `stage-c-plan.md` | ⏳ | | |
+| C-3, C-5 | derive на типах ядра + реестр компонентов | ✅ | `a886838`, `19257ae`; `spark-core/src/{reflect,registry}.rs`, `spark-reflect/src/glam_impls.rs` | 335 тестов; exe +512 байт. Поворот в файлах — Эйлер в градусах (Y-X-Z). Хэндлы (texture/shader/mesh/lod) — `transient` до C-11. Побочный эффект `with_metallic → pbr=true` и алиасы blend остаются в Luau-слое (C-8). `Shape::Box{size}/Sphere{radius}`. `LuaScope::{Object, Handle}` для `obj.light.*` и `camera.*` |
+| C-6, C-7 | did-you-mean из реестра, сгенерированные биндинги transform/name/visible | 🔄 | | агент |
+| C-11 | рецепты мешей | 🔄 | | агент в worktree |
+| C-8..C-10, C-12..C-18 | см. `stage-c-plan.md` | ⏳ | | |
 
 Открытые вопросы владельцу (из ADR): камера — синглтон, переезд глобала `camera` на узел (C-17); `Mesh.custom` не сохраняется (save сообщит, не молча); канонический писатель теряет комментарии в `.scene` (потом `toml_edit`); пропуск значений по умолчанию → смена дефолта = миграция; префабы v1 без удаления узлов и вложенных overrides; порядок скриптов объектов — после глобального `update`, по порядку создания.
 
