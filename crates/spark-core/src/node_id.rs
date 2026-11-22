@@ -112,7 +112,7 @@ impl World {
     }
 
     /// A random-looking 8 hex digit id that no live node and no id for which `taken` is true uses.
-    pub(crate) fn fresh_node_id(&mut self, taken: &dyn Fn(&NodeId) -> bool) -> NodeId {
+    pub fn fresh_node_id(&mut self, taken: &dyn Fn(&NodeId) -> bool) -> NodeId {
         loop {
             let id = NodeId(Arc::from(format!("{:08x}", (self.nodes.next_u64() >> 32) as u32)));
             if self.find_node(&id).is_none() && !taken(&id) {

@@ -311,6 +311,15 @@ Shader.new(code: string, name: string?) -> Shader
 Font.load(path: string) -> Font
 ```
 
+### `scene`
+
+```luau
+scene.load(path: string, opts: SceneLoadOptions?) -> { Object }
+scene.save(path: string) -> { string }
+```
+
+- `load`: Creates the objects of a `.scene` and returns its root objects. `replace = true` deletes the current objects first and applies the file's sun / ambient / background / fog / sky; the default adds to the scene. Writes every object and the environment to a `.scene` (not in a packed game). Returns warnings about changes to prefab instances that a file cannot hold (empty when there are none); anything else that cannot be saved is an error.
+
 ### `graphics`
 
 ```luau
@@ -955,6 +964,14 @@ type MeshOptions = { tile: number?, cell: number? }
 ```luau
 type PlayOptions = { loop: boolean?, speed: number?, fade: number?, restart: boolean? }
 ```
+
+### `SceneLoadOptions`
+
+```luau
+type SceneLoadOptions = { replace: boolean? }
+```
+
+Levels and prefabs (`.scene` / `.prefab` files, see docs/SCENE_FORMAT.md). `spawn("prefabs/door.prefab", props)` makes an instance of a prefab: the second argument is the props table.
 
 ### `SkySpec`
 

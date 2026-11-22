@@ -12,6 +12,7 @@ Reference pictures for `spark golden <dir> --golden examples/_golden/<name>.png`
 | `05-ui` | slider, checkbox, buttons |
 | `06-save` | data that survives restarts |
 | `07-timers-tweens` | `every`, tasks, tweens |
+| `08-scenes` | `.scene` level, `.prefab` instances, `scene.load` / `scene.save` |
 | `showcase/pbr-gallery`, `showcase/night-lights` | graphics showcases |
 | `demo` | bigger playground: physics, custom shaders, sound |
 | `hello` | the same idea in pure Rust |

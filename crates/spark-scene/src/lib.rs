@@ -30,15 +30,19 @@
 
 mod error;
 pub mod migrate;
+mod prefab;
 mod read;
 mod text;
 mod tree;
+mod world;
 mod write;
 
 pub use error::{ErrorKind, SaveError, SaveIssue, SceneError};
 pub use migrate::{FORMAT_VERSION, STEPS, Step, migrate_table};
+pub use prefab::{Collapsed, FsLoader, PrefabError, PrefabSource, collapse, expand};
 pub use read::{Loaded, parse, read_version};
 pub use spark_core::doc::{Environment, FileKind, FileNode, SceneFile};
+pub use world::{SavedScene, SceneLoad, WorldError, load_scene, save_scene, spawn_prefab};
 pub use write::{to_string, to_string_lossy};
 
 /// A file brought to the current format.

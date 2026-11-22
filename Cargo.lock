@@ -4215,6 +4215,7 @@ dependencies = [
  "spark-discord",
  "spark-physics",
  "spark-reflect",
+ "spark-scene",
 ]
 
 [[package]]

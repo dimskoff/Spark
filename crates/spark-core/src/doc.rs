@@ -110,16 +110,80 @@ pub struct FileNode {
     pub parent: Option<NodeId>,
     pub name: String,
     pub visible: bool,
-    /// Prefab instance (`prefab = "prefabs/door.prefab"`). Not instantiated before C-15.
+    /// Prefab instance (`prefab = "prefabs/door.prefab"`). In a file as written this node is the instance and its
+    /// components and `overrides` are what differs from the prefab; after expanding (`spark_scene::expand`) it is the
+    /// root of the instance with everything applied, and its [`FileNode::member`] is set.
     pub prefab: Option<String>,
+    /// A child added in a scene that attaches inside a prefab instance: `parent` is the instance and this is the id of
+    /// the node of the prefab (`parent = "door1/leaf"` in the file). `None` = attaches to `parent` itself.
+    pub parent_in: Option<NodeId>,
+    /// Set on the nodes of an expanded prefab instance (and by [`capture`] on the live ones): which instance and which
+    /// node of the prefab this is. Never written to a file.
+    pub member: Option<PrefabMember>,
     /// The `tags` list. Not instantiated before C-17.
     pub tags: Vec<String>,
     /// Present components by registry name (`transform`, `mesh`, `material`, `body`, `light`) or reserved name, as
     /// complete values (every field there), in canonical order ([`component_rank`]). The mesh is a recipe:
     /// a [`MeshSource`] value that may carry a `lod` list (see [`mesh_to_value`]).
     pub components: Vec<(String, Value)>,
-    /// Prefab overrides, `"<node>/<component>.<field>"` -> value. Kept as written until C-15.
+    /// Prefab overrides: `"<node in the prefab>/<component>.<field>"` -> value in the same form as the component's
+    /// fields (a color is a `Color`, a rotation is in degrees, ...), or `"<node>/<component>"` -> the whole component.
+    /// `<component>` may be `node` for the `name` and `visible` of a prefab node. Applied by `spark_scene::expand`.
     pub overrides: Vec<(String, Value)>,
+}
+
+/// Which node of which prefab instance an object is (see [`FileNode::member`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrefabMember {
+    /// Id (in the document or the world) of the instance's root node.
+    pub instance: NodeId,
+    /// Id of the node inside the prefab file.
+    pub node: NodeId,
+}
+
+/// A live prefab instance: remembered by the [`World`] so that a save can compare it with its prefab.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrefabInstance {
+    /// The prefab file, as written in the scene (`"prefabs/door.prefab"`).
+    pub path: String,
+    /// `(node id in the prefab, node id in the world)` for every node of the instance, the root first.
+    pub members: Vec<(NodeId, NodeId)>,
+}
+
+/// The prefab instances of a [`World`], by the world id of their root. Entries are validated against the scene on every
+/// read (an instance whose root was destroyed is gone), like the id table.
+#[derive(Clone, Debug, Default)]
+pub struct PrefabTable {
+    map: HashMap<NodeId, PrefabInstance>,
+}
+
+impl PrefabTable {
+    pub(crate) fn clear(&mut self) {
+        self.map.clear();
+    }
+}
+
+impl World {
+    /// Remembers an instance made from `path` (see [`instantiate`]); `members[0]` is the root.
+    pub fn register_prefab_instance(&mut self, root: NodeId, instance: PrefabInstance) {
+        if self.prefabs.map.len() > 32 {
+            let dead: Vec<NodeId> = self.prefabs.map.keys().filter(|k| self.find_node(k).is_none()).cloned().collect();
+            for k in dead {
+                self.prefabs.map.remove(&k);
+            }
+        }
+        self.prefabs.map.insert(root, instance);
+    }
+
+    /// The live prefab instances: `(root id, instance)`, in no particular order.
+    pub fn prefab_instances(&self) -> Vec<(&NodeId, &PrefabInstance)> {
+        self.prefabs.map.iter().filter(|(k, _)| self.find_node(k).is_some()).collect()
+    }
+
+    /// The instance whose root has this node id.
+    pub fn prefab_instance(&self, root: &NodeId) -> Option<&PrefabInstance> {
+        self.find_node(root).and_then(|_| self.prefabs.map.get(root))
+    }
 }
 
 impl FileNode {
@@ -132,7 +196,18 @@ impl FileNode {
             .filter(|c| c.required)
             .filter_map(|c| (c.get)(&o).map(|v| (c.name.to_string(), round_angles(c.info(), strip_transient(c.info(), v, false)))))
             .collect();
-        Self { id, parent: None, name: String::new(), visible: true, prefab: None, tags: Vec::new(), components, overrides: Vec::new() }
+        Self {
+            id,
+            parent: None,
+            name: String::new(),
+            visible: true,
+            prefab: None,
+            parent_in: None,
+            member: None,
+            tags: Vec::new(),
+            components,
+            overrides: Vec::new(),
+        }
     }
 
     pub fn component(&self, name: &str) -> Option<&Value> {
@@ -450,6 +525,17 @@ pub fn normalize_component(name: &str, v: &Value) -> Result<Value, ComponentErro
 pub fn capture(world: &mut World) -> SceneFile {
     let mut file = SceneFile::new(FileKind::Scene);
     file.environment = Environment::of(&world.scene);
+    // Live prefab instances: world node id -> (instance root, node in the prefab), and the path of each root.
+    let mut member_of: HashMap<NodeId, PrefabMember> = HashMap::new();
+    let mut prefab_path: HashMap<NodeId, String> = HashMap::new();
+    for (root, inst) in world.prefab_instances() {
+        prefab_path.insert(root.clone(), inst.path.clone());
+        for (pnode, wid) in &inst.members {
+            if world.find_node(wid).is_some() {
+                member_of.insert(wid.clone(), PrefabMember { instance: root.clone(), node: pnode.clone() });
+            }
+        }
+    }
     let roots: Vec<ObjectId> = world.scene.iter().filter(|(_, o)| o.parent().is_none()).map(|(id, _)| id).collect();
     let mut stack: Vec<ObjectId> = roots.into_iter().rev().collect();
     while let Some(oid) = stack.pop() {
@@ -461,6 +547,8 @@ pub fn capture(world: &mut World) -> SceneFile {
         node.parent = parent;
         node.name = obj.name.clone();
         node.visible = obj.visible;
+        node.member = member_of.get(&node.id).cloned();
+        node.prefab = prefab_path.get(&node.id).cloned();
         node.components.clear();
         for c in registry().components {
             if c.name == "mesh" {
@@ -488,7 +576,7 @@ pub struct Instantiated {
     /// Number of objects created.
     pub count: usize,
     /// Parts of the document that were ignored because the engine does not interpret them yet (`camera`, `script`,
-    /// `tags`, prefab instances and overrides).
+    /// `tags`) or that were not expanded (prefab instances: see `spark_scene::expand`).
     pub warnings: Vec<String>,
     /// Removes what was created (the environment is not restored).
     pub undo: Command,
@@ -523,6 +611,13 @@ impl std::error::Error for InstantiateError {}
 /// replace). All or nothing. A scene file also sets the environment. Node ids are kept, so an id that is already used
 /// in the world is an error.
 pub fn instantiate(doc: &SceneFile, world: &mut World) -> Result<Instantiated, InstantiateError> {
+    instantiate_replacing(doc, world, &[])
+}
+
+/// [`instantiate`] that first deletes the subtrees rooted at `replace` (the nodes of the scene being replaced), in the
+/// same all-or-nothing step: when the document cannot be instantiated the old objects are still there. The ids of the
+/// deleted nodes are free for the document to use.
+pub fn instantiate_replacing(doc: &SceneFile, world: &mut World, replace: &[NodeId]) -> Result<Instantiated, InstantiateError> {
     if let Some(issue) = doc.check_structure().into_iter().next() {
         return Err(InstantiateError::Structure(issue.error));
     }
@@ -560,11 +655,24 @@ pub fn instantiate(doc: &SceneFile, world: &mut World) -> Result<Instantiated, I
     }
     root_docs.reverse();
     let root_ids: Vec<NodeId> = root_docs.iter().filter_map(|d| d.id.clone()).collect();
-    let spawns: Vec<Command> =
-        root_docs.into_iter().map(|d| Command::Spawn { subtree: SceneDoc::new(d), parent: None, index: None }).collect();
-    let applied = world.apply(&Command::Batch(spawns)).map_err(InstantiateError::Spawn)?;
+    let mut steps: Vec<Command> = replace.iter().map(|n| Command::Delete { node: n.clone() }).collect();
+    steps.extend(root_docs.into_iter().map(|d| Command::Spawn { subtree: SceneDoc::new(d), parent: None, index: None }));
+    let applied = world.apply(&Command::Batch(steps)).map_err(InstantiateError::Spawn)?;
     if doc.kind == FileKind::Scene {
         doc.environment.apply_to(&mut world.scene);
+    }
+    // Expanded prefab instances are remembered, so that a save can write them as instances again.
+    for n in &doc.nodes {
+        let Some(path) = &n.prefab else { continue };
+        if !n.member.as_ref().is_some_and(|m| m.instance == n.id) {
+            continue;
+        }
+        let members = doc
+            .nodes
+            .iter()
+            .filter_map(|m| m.member.as_ref().filter(|mm| mm.instance == n.id).map(|mm| (mm.node.clone(), m.id.clone())))
+            .collect();
+        world.register_prefab_instance(n.id.clone(), PrefabInstance { path: path.clone(), members });
     }
     Ok(Instantiated { roots: root_ids, count: doc.nodes.len(), warnings, undo: applied.inverse })
 }
@@ -604,11 +712,15 @@ fn node_doc(n: &FileNode, warnings: &mut Vec<String>) -> Result<NodeDoc, Instant
     if !n.tags.is_empty() {
         warnings.push(format!("node '{}': tags are not supported yet and were ignored", n.id));
     }
-    if let Some(p) = &n.prefab {
-        warnings.push(format!("node '{}': prefab instances are not supported yet ('{p}' was not instantiated)", n.id));
+    if let (Some(p), None) = (&n.prefab, &n.member) {
+        warnings.push(format!("node '{}': the prefab instance '{p}' was not expanded (spark_scene::expand), so the node is empty", n.id));
+        if !n.overrides.is_empty() {
+            warnings.push(format!("node '{}': prefab overrides were ignored (the instance was not expanded)", n.id));
+        }
     }
-    if !n.overrides.is_empty() {
-        warnings.push(format!("node '{}': prefab overrides are not supported yet and were ignored", n.id));
+    if n.parent_in.is_some() && n.member.is_none() {
+        warnings
+            .push(format!("node '{}': `parent_in` needs an expanded prefab instance; the node was attached to the instance root", n.id));
     }
     Ok(d)
 }

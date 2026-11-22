@@ -167,6 +167,14 @@ Both examples are canonical: they are the golden files of the round-trip test (`
 - A mesh made by `Mesh.custom`, a texture or other runtime handle cannot be saved: `to_string` fails and names the node (and the component); `to_string_lossy` saves the rest and returns the same list.
 - Format version 0 is the draft of this ADR (data-bearing enum tables named their variant with `kind`); `spark migrate` turns it into version 1.
 
+### C-15 decisions (prefabs, `crates/spark-scene/src/prefab.rs`, `world.rs`)
+
+- Instance node components replace the prefab root's **whole component** (fields left out are defaults, not the prefab's). An instance node's required components (`transform`, `material`) are therefore written even at defaults, and a component absent from an instance node comes from the prefab. Other nodes are changed by overrides, one field each; `"<node>/<component>"` replaces or adds a whole component (always for `mesh`), `node` is the pseudo-component of `name` and `visible`. Override values are decoded at read time by the registry's field type, so they have the same forms as components and the writer prints them canonically; an override is written even when equal to the field's default.
+- `parent = "door1/leaf"` is `FileNode::parent` + `FileNode::parent_in`.
+- The ids of a prefab's nodes in a running scene are derived (`FNV(instance/node)` as 8 hex digits, probed until free), the root keeps the instance's id; the world remembers each instance (`World::prefab_instances`: path and the ids of its nodes), and `capture` marks those nodes (`FileNode::member`). Saving is `capture` -> `collapse` (diff against the prefab, nodes added to an instance are normal nodes with a `parent` / `parent_in`) -> `to_string`.
+- Not representable in v1 and reported as warnings by `collapse` (the prefab's version stays): removing a prefab node, reparenting one, removing a component, showing an instance whose prefab root is hidden, a mesh made by code or a texture handle on a prefab node. Nested prefabs, prefabs without exactly one root and scenes used as prefabs are errors.
+- `load_scene(replace)` deletes the old roots in the same all-or-nothing batch as the new spawns and applies the environment; without `replace` the environment stays and clashing ids are renamed. `.prefab` files cannot be loaded as scenes, and `scene.save` writes only `.scene` files and only outside packed games.
+
 ## Consequences
 
 - Agents edit scenes with ordinary file edits, humans in any editor, reviewers read normal git diffs. Both `spark check` and the MCP `scene_read` can report errors with file, line, node id and did-you-mean (from the registry), the same quality as script errors (Stage A).

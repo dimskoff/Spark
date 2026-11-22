@@ -405,6 +405,12 @@ fn install_scene(lua: &Lua, g: &Table) -> LuaResult<()> {
     g.set(
         "spawn",
         lua.create_function(|lua, (mesh, mat, props): (Value, Value, Option<Table>)| {
+            if let Value::String(s) = &mesh {
+                let s = s.to_string_lossy();
+                if crate::scene_api::is_prefab_path(&s) {
+                    return crate::scene_api::spawn_prefab_call(lua, &s, mat, props);
+                }
+            }
             if let Some(model) = with(lua, |w| crate::model::to_model(w, &mesh, "spawn"))? {
                 return crate::model::spawn_model(lua, model, mat, props);
             }
@@ -650,6 +656,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
     crate::light::install(lua, &g)?;
     crate::model::install(lua, &g)?;
     crate::save::install(lua, &g)?;
+    crate::scene_api::install(lua, &g)?;
     crate::discord::install(lua, &g)?;
     crate::shader::install(lua, &g)?;
     crate::tween::install(lua)?;

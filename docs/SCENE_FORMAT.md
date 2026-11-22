@@ -57,7 +57,7 @@ bounciness = 0.2
 | `parent` | The `id` of the parent node. Missing = a root. A parent that does not exist, a duplicate id and a parent cycle are load errors with a line number. |
 | `name` | Name shown in the editor and used by `find(name)`. |
 | `visible` | `false` hides the node and its children. Default `true`. |
-| `prefab` | A prefab instance: `"prefabs/door.prefab"`. |
+| `prefab` | A prefab instance: `"prefabs/door.prefab"` (see "Prefabs"). `parent = "door1/leaf"` attaches to a node inside the instance `door1`. |
 | `tags` | A list of strings. |
 
 Siblings keep their order in the file. Ids are never reused as references to something else, so renaming or moving a node
@@ -106,10 +106,51 @@ has no recipe and cannot be saved (see "Saving").
 
 ## Prefabs
 
-A `.prefab` has a `[prefab]` header and one root node (the first `[[node]]`, without `parent`). An instance in a scene is a
-node with `prefab = "prefabs/door.prefab"`; its own components override the prefab root's, and `[node.overrides]`
-overrides descendants with keys like `"leaf/material.color"`. Prefab instances and `overrides` are read and written
-unchanged by the current version, and are not instantiated by the engine yet.
+A `.prefab` has a `[prefab]` header and one root node (the first `[[node]]`, without `parent`); the other nodes name their
+parent as in a scene. An instance in a scene is a node with `prefab = "prefabs/door.prefab"` (a path relative to the game
+folder):
+
+```toml
+[[node]]
+id = "door1"
+name = "Door A"                       # replaces the prefab root's name
+prefab = "prefabs/door.prefab"
+
+[node.transform]                      # replaces the prefab root's transform (a whole component)
+position = [4, 0, -2]
+
+[node.overrides]                      # changes the other nodes of the prefab
+"leaf/transform.rotation" = [0, 90, 0]
+"leaf/material.color" = "#8a3b2f"
+
+[[node]]
+id = "lamp"
+parent = "door1"                      # a node added in the scene: a child of the instance's root...
+name = "Lamp"
+
+[[node]]
+id = "knob"
+parent = "door1/leaf"                 # ...or of a node inside the prefab ("<instance id>/<node id in the prefab>")
+name = "Knob"
+```
+
+- **Instance node**: `name`, `visible = false`, `tags` and any component table on it replace the prefab root's. A component
+  is replaced whole: fields you leave out are the defaults, not the prefab's. A component you do not write comes from the
+  prefab, so changing the prefab changes every instance that does not override it.
+- **`[node.overrides]`** keys are `"<node id in the prefab>/<component>.<field>"` (`"leaf/material.color"`; the root has an id
+  too, `"root/body.mass"`). The value has the form of the field (`"#rrggbb"`, `[x, y, z]` in degrees for a rotation, ...). A
+  whole component is replaced or added with `"<node>/<component>"` (`"frame/body" = { mass = 2.0 }`; a mesh is always whole:
+  `"leaf/mesh" = { primitive = "sphere", radius = 0.5, segments = 12 }`). `node` is a component name for `name` and
+  `visible` of a prefab node (`"frame/node.name" = "Post"`). An override to a node, component or field that does not exist is
+  an error with the line (unknown component or field) or with the prefab's node list.
+- **Saving**: Spark compares each instance with a fresh one made from its prefab and writes only the differences (overrides
+  in the order of the prefab's nodes), so a property set back to the prefab's value disappears from the file. Nodes added to an
+  instance are saved as normal nodes with `parent = "<instance id>"` or `"<instance id>/<node id>"`. The ids of the prefab's
+  nodes in a running scene are derived from the instance, they are not written.
+- **v1 limits**: property overrides and added children only. A prefab cannot contain an instance of another prefab (it is an
+  error naming the node). Removing a prefab node, moving it to another parent, removing one of its components or showing an
+  instance whose prefab root is hidden cannot be written: when a game saves such a change the save reports it as a warning and the file keeps
+  the prefab's version. A prefab must have exactly one root.
 
 ## What the writer does
 
@@ -158,3 +199,8 @@ Version history:
 
 The document model (`SceneFile`, `FileNode`, `capture`, `instantiate`) is in `spark-core` (`spark_core::doc`) and has no
 parser; the `spark-scene` crate reads and writes the text (`spark_scene::parse`, `spark_scene::to_string`).
+
+Prefabs: `spark_scene::expand` turns the instances of a parsed scene into the nodes of their prefabs (every expanded node has a
+`member`), `spark_scene::collapse` does the reverse for a captured world. For a whole world use `spark_scene::load_scene`,
+`spark_scene::save_scene` and `spark_scene::spawn_prefab`, with a `PrefabSource` (`FsLoader` reads a game folder).
+`World::prefab_instances()` lists the live instances, which is how a save finds them.

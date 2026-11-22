@@ -359,6 +359,31 @@ Object methods:
 | `obj:exists()`, `obj:destroy()` | using a destroyed object raises an error |
 | `a == b`, `tostring(obj)` | |
 
+## Scenes and prefabs
+
+A level is a `.scene` file and a reusable group of objects is a `.prefab` file (plain TOML, written by hand, by an agent or
+by the editor; format in `docs/SCENE_FORMAT.md`).
+
+```lua
+local roots = scene.load("levels/arena.scene", { replace = true })   -- the level's root objects
+local door = spawn("prefabs/door.prefab", { position = vec3(4, 0, -2) })
+find("Leaf").color = "red"                                           -- a change to a prefab's object...
+scene.save("levels/arena.scene")                                     -- ...is saved as an override
+```
+
+- `scene.load(path, opts?)` -> list of root Objects. `opts.replace = true` deletes every current object first (if the file
+  cannot be loaded, nothing changes) and applies the file's environment (sun, ambient, background, fog, sky). Without it the
+  objects are added, the environment stays and a node id already in use is renamed. A prefab instance in the file counts as
+  one root.
+- `spawn("x.prefab", props?)` -> the instance's root Object; `props` are the usual spawn props (`position`, `name`, `parent`, ...).
+- `scene.save(path)` -> list of warnings. Writes every object and the environment; a prefab instance is written as
+  `prefab = "..."` plus only what differs from a fresh instance (`[node.overrides]`), so a property set back to the prefab's
+  value disappears from the file. Not available in a packed game (`spark build`); an object that cannot be saved (a mesh from
+  `Mesh.custom`, a texture handle) is an error that names it. The warnings list prefab changes a v1 file cannot hold: a removed
+  or reparented prefab object, a removed component.
+- Paths are relative to the game folder and cannot leave it. A missing or invalid file raises an error with the path (and the
+  line, for a file that does not parse). A prefab cannot contain another prefab yet.
+
 ## 3D models and animation (glTF)
 
 ```lua

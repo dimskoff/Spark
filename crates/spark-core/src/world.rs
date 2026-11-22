@@ -45,6 +45,8 @@ pub struct World {
     pub ui: crate::ui::Ui,
     /// `NodeId -> ObjectId` table (see [`crate::node_id`]).
     pub(crate) nodes: crate::node_id::NodeIndex,
+    /// Live prefab instances (see [`crate::doc::PrefabInstance`]).
+    pub(crate) prefabs: crate::doc::PrefabTable,
     quit: bool,
     restart: bool,
 }
@@ -106,6 +108,7 @@ impl World {
     pub fn reset(&mut self) {
         self.scene = Scene::new();
         self.nodes.clear();
+        self.prefabs.clear();
         self.physics.clear();
         self.physics.gravity = Physics::default().gravity;
         self.physics.enabled = true;

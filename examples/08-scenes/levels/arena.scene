@@ -1,0 +1,48 @@
+# Arena: the level of the scenes example
+[scene]
+format_version = 1
+
+[environment]
+ambient = "#59616f"
+background = "#141a1f"
+
+[environment.sun]
+direction = [-0.5, -1, -0.25]
+intensity = 1.2
+
+[[node]]
+id = "floor"
+name = "Floor"
+
+[node.mesh]
+primitive = "plane"
+width = 20.0
+depth = 20.0
+
+[node.material]
+color = "#3b4a3f"
+
+[[node]]
+id = "crate"
+name = "Crate"
+
+[node.transform]
+position = [3, 0.5, 0]
+
+[node.mesh]
+primitive = "box"
+size = [1, 1, 1]
+
+[node.material]
+color = "#d8a45a"
+
+[[node]]
+id = "door1"
+name = "Door A"
+prefab = "prefabs/door.prefab"
+
+[node.transform]
+position = [-5, 0, 1]
+
+[node.overrides]
+"leaf/material.color" = "#8a3b2f"

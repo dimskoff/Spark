@@ -30,6 +30,7 @@ mod physics;
 mod reflect_bind;
 mod runtime;
 mod save;
+mod scene_api;
 mod shader;
 pub mod testing;
 mod tween;

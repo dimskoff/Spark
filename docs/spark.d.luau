@@ -592,6 +592,18 @@ declare function find_all(name: string): { Object }
 declare function destroy(obj: Object): ()
 declare function dump_scene(): string
 
+-- Levels and prefabs (`.scene` / `.prefab` files, see docs/SCENE_FORMAT.md). `spawn("prefabs/door.prefab", props)` makes
+-- an instance of a prefab: the second argument is the props table.
+type SceneLoadOptions = { replace: boolean? }
+declare scene: {
+    -- Creates the objects of a `.scene` and returns its root objects. `replace = true` deletes the current objects first
+    -- and applies the file's sun / ambient / background / fog / sky; the default adds to the scene.
+    load: (path: string, opts: SceneLoadOptions?) -> { Object },
+    -- Writes every object and the environment to a `.scene` (not in a packed game). Returns warnings about changes to
+    -- prefab instances that a file cannot hold (empty when there are none); anything else that cannot be saved is an error.
+    save: (path: string) -> { string },
+}
+
 declare camera: Camera
 declare function sun(direction: vector, color: ColorLike?, intensity: number?): ()
 declare function ambient(color: ColorLike): ()

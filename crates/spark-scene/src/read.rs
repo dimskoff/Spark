@@ -15,6 +15,7 @@ use spark_reflect::{
 
 use crate::error::{ErrorKind, SceneError};
 use crate::migrate::{FORMAT_VERSION, STEPS, migrate_table};
+use crate::prefab::{Target, override_target, split_override_key};
 use crate::text::parse_hex_color;
 use crate::tree::{Entry, N, Source, Span, Tv, from_table, from_text, to_toml_table};
 
@@ -417,6 +418,89 @@ impl Reader {
         })
     }
 
+    /// `[node.overrides]`: keys `"<node in the prefab>/<component>.<field>"` (or `"<node>/<component>"` for a whole
+    /// component), values decoded like the field they name (a color string becomes a color, a rotation is in degrees).
+    fn overrides(&self, n: &N) -> R<Vec<(String, Value)>> {
+        let Some(entries) = n.as_table() else {
+            return Err(self.err(&n.span, ErrorKind::Invalid, "`overrides` must be a table: write [node.overrides]"));
+        };
+        let mut out: Vec<(String, Value)> = Vec::new();
+        for e in entries {
+            let key_err = |m: String| self.err(&e.key_span, ErrorKind::Invalid, m);
+            let k = split_override_key(&e.key).map_err(key_err)?;
+            if out.iter().any(|(seen, _)| *seen == e.key) {
+                return Err(self.err(&e.key_span, ErrorKind::Invalid, format!("the override `{}` is written twice", e.key)));
+            }
+            let value = match k.field {
+                None => match override_target(&k) {
+                    Target::Node => {
+                        return Err(self.err(
+                            &e.key_span,
+                            ErrorKind::Invalid,
+                            format!("`{}`: `node` has the fields `name` and `visible`: write \"{}/node.name\"", e.key, k.node),
+                        ));
+                    }
+                    Target::Registry | Target::Reserved => self.component(k.component, &e.val)?,
+                    Target::Unknown => {
+                        let names = component_names();
+                        let near = did_you_mean(k.component, names.iter().copied());
+                        return Err(self.err(&e.key_span, ErrorKind::UnknownName, name_error("component", k.component, near, &names)));
+                    }
+                },
+                Some(field) => {
+                    let (ty, fields): (&'static str, &'static [FieldInfo]) = match override_target(&k) {
+                        Target::Node => {
+                            let t = registry().node_info();
+                            (t.name, t.fields)
+                        }
+                        Target::Registry if k.component == "mesh" => {
+                            return Err(self.err(
+                                &e.key_span,
+                                ErrorKind::Invalid,
+                                format!(
+                                    "`{}`: a mesh is overridden whole: write \"{}/mesh\" = {{ primitive = \"...\", ... }}",
+                                    e.key, k.node
+                                ),
+                            ));
+                        }
+                        Target::Registry => {
+                            let t = registry().component(k.component).expect("checked by override_target").info();
+                            (t.name, t.fields)
+                        }
+                        Target::Reserved => {
+                            return Err(self.err(
+                                &e.key_span,
+                                ErrorKind::Invalid,
+                                format!(
+                                    "`{}`: `{}` is overridden whole: write \"{}/{}\" = {{ ... }}",
+                                    e.key, k.component, k.node, k.component
+                                ),
+                            ));
+                        }
+                        Target::Unknown => {
+                            let names = component_names();
+                            let near = did_you_mean(k.component, names.iter().copied());
+                            return Err(self.err(&e.key_span, ErrorKind::UnknownName, name_error("component", k.component, near, &names)));
+                        }
+                    };
+                    let Some(f) = fields.iter().find(|f| f.name == field) else {
+                        return Err(self.err(&e.key_span, ErrorKind::UnknownName, unknown_field(ty, fields, field).to_string()));
+                    };
+                    if f.flags.contains(FieldFlags::TRANSIENT) {
+                        return Err(self.err(
+                            &e.key_span,
+                            ErrorKind::Invalid,
+                            format!("`{field}` is runtime state and cannot be set in a file"),
+                        ));
+                    }
+                    self.value(&f.ty, f, &e.val)?
+                }
+            };
+            out.push((e.key.clone(), value));
+        }
+        Ok(out)
+    }
+
     fn string<'a>(&self, e: &'a Entry) -> R<&'a str> {
         e.val
             .as_str()
@@ -437,6 +521,10 @@ impl Reader {
         let id = self.node_id(id_entry)?;
         let ctx = format!("node '{id}'");
         let mut node = FileNode::new(id);
+        if entries.iter().any(|e| e.key == "prefab") {
+            // An instance lists only the components it replaces: the others come from the prefab's root.
+            node.components.clear();
+        }
         let mut parent_span = None;
         let mut names: Vec<&'static str> = NODE_KEYS.to_vec();
         names.extend(component_names());
@@ -445,7 +533,17 @@ impl Reader {
             match e.key.as_str() {
                 "id" => {}
                 "parent" => {
-                    node.parent = Some(self.node_id(e).map_err(|x| x.with_context(&ctx))?);
+                    // `"door1/leaf"`: attach inside the prefab instance `door1`, to its node `leaf`.
+                    let text = self.string(e).map_err(|x| x.with_context(&ctx))?;
+                    let (outer, inner) = match text.split_once('/') {
+                        Some((a, b)) => (a, Some(b)),
+                        None => (text, None),
+                    };
+                    let id = |s: &str| {
+                        NodeId::new(s).map_err(|err| self.err(&e.val.span, ErrorKind::Invalid, err.to_string()).with_context(&ctx))
+                    };
+                    node.parent = Some(id(outer)?);
+                    node.parent_in = inner.map(id).transpose()?;
                     parent_span = e.val.span.clone();
                 }
                 "name" => node.name = self.string(e).map_err(|x| x.with_context(&ctx))?.to_string(),
@@ -466,12 +564,7 @@ impl Reader {
                     }
                 }
                 "overrides" => {
-                    let Value::Map(pairs) = self.generic(&e.val).map_err(|x| x.with_context(at("[node.overrides]".into())))? else {
-                        return Err(self
-                            .err(&e.val.span, ErrorKind::Invalid, "`overrides` must be a table: write [node.overrides]")
-                            .with_context(&ctx));
-                    };
-                    node.overrides = pairs;
+                    node.overrides = self.overrides(&e.val).map_err(|x| x.with_context(at("[node.overrides]".into())))?;
                 }
                 name if component_names().contains(&name) => {
                     let v = self.component(name, &e.val).map_err(|x| x.with_context(at(format!("[node.{name}]"))))?;

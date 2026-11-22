@@ -26,6 +26,7 @@ use spark_reflect::{EnumInfo, FieldFlags, FieldInfo, FieldType, Reflect, Reflect
 
 use crate::error::{SaveError, SaveIssue};
 use crate::migrate::FORMAT_VERSION;
+use crate::prefab::{Target, override_target, split_override_key};
 use crate::text::{array, color_text, f32_scalar, f64_scalar, key, quote, radians_to_degrees};
 
 /// The canonical text of `file`. Fails, listing every problem, when the document has parts that cannot be saved:
@@ -125,7 +126,10 @@ impl Writer {
     fn node(&mut self, n: &FileNode) {
         let mut lines = vec![format!("id = {}", quote(n.id.as_str()))];
         if let Some(p) = &n.parent {
-            lines.push(format!("parent = {}", quote(p.as_str())));
+            match &n.parent_in {
+                Some(inner) => lines.push(format!("parent = {}", quote(&format!("{p}/{inner}")))),
+                None => lines.push(format!("parent = {}", quote(p.as_str()))),
+            }
         }
         if !n.name.is_empty() {
             lines.push(format!("name = {}", quote(&n.name)));
@@ -147,8 +151,13 @@ impl Writer {
             self.component(n, name, v);
         }
         if !n.overrides.is_empty() {
-            let lines: Vec<String> =
-                n.overrides.iter().filter(|(_, v)| *v != Value::None).map(|(k, v)| format!("{} = {}", key(k), generic(v))).collect();
+            let mut lines = Vec::new();
+            for (k, v) in n.overrides.iter().filter(|(_, v)| *v != Value::None) {
+                match override_text(k, v) {
+                    Ok(text) => lines.push(format!("{} = {text}", key(k))),
+                    Err(message) => self.issue(Some(n), "overrides", format!("`{k}`: {message}; it was left out")),
+                }
+            }
             self.table("[node.overrides]", &lines);
         }
     }
@@ -193,7 +202,8 @@ impl Writer {
             Err(e) => return self.issue(Some(n), name, e.to_string()),
         };
         let lines = struct_lines(info.info().fields, &pairs(v));
-        if lines.is_empty() && info.required {
+        // A prefab instance lists the components it replaces, so one at its defaults is still written.
+        if lines.is_empty() && info.required && n.prefab.is_none() {
             return;
         }
         self.table(&format!("[node.{name}]"), &lines);
@@ -330,6 +340,59 @@ fn enum_text(e: &'static EnumInfo, variant: &str, fields: &[(String, Value)]) ->
 fn inline_struct(t: &'static TypeInfo, p: &[(String, Value)]) -> String {
     let parts = struct_lines(t.fields, p);
     if parts.is_empty() { "{}".into() } else { format!("{{ {} }}", parts.join(", ")) }
+}
+
+/// The text of one prefab override: the field's value in its file form, or the whole component as an inline table.
+/// An override is written even when it equals the field's default (the prefab's value may differ).
+fn override_text(k: &str, v: &Value) -> Result<String, String> {
+    let ok = split_override_key(k)?;
+    let fields_of = |t: &'static TypeInfo| t.fields;
+    match (override_target(&ok), ok.field) {
+        (Target::Unknown, _) => Err(format!("`{}` is not a component", ok.component)),
+        (Target::Node, Some(f)) => field_override(fields_of(registry().node_info()), f, v),
+        (Target::Node, None) => Err("`node` has the fields `name` and `visible`".into()),
+        (Target::Reserved, None) => Ok(generic(v)),
+        (Target::Reserved, Some(_)) => Err(format!("`{}` is overridden whole", ok.component)),
+        (Target::Registry, None) if ok.component == "mesh" => {
+            let (source, lod) = mesh_from_value(v).map_err(|e| e.to_string())?;
+            if source == MeshSource::RuntimeOnly {
+                return Err("the mesh was made by code and has no recipe".into());
+            }
+            let mut parts = recipe_lines(&source);
+            let levels: Vec<String> = lod
+                .iter()
+                .filter(|(_, s)| *s != MeshSource::RuntimeOnly)
+                .map(|(d, s)| {
+                    let mut p = vec![format!("distance = {}", f32_scalar(*d))];
+                    p.extend(recipe_lines(s));
+                    format!("{{ {} }}", p.join(", "))
+                })
+                .collect();
+            if !levels.is_empty() {
+                parts.push(format!("lod = [{}]", levels.join(", ")));
+            }
+            Ok(format!("{{ {} }}", parts.join(", ")))
+        }
+        (Target::Registry, Some(_)) if ok.component == "mesh" => Err("a mesh is overridden whole".into()),
+        (Target::Registry, Some(f)) => {
+            let info = registry().component(ok.component).expect("checked by override_target");
+            field_override(info.info().fields, f, v)
+        }
+        (Target::Registry, None) => {
+            let info = registry().component(ok.component).expect("checked by override_target");
+            let v = normalize_component(ok.component, v).map_err(|e| e.to_string())?;
+            let parts = struct_lines(info.info().fields, &pairs(v));
+            Ok(if parts.is_empty() { "{}".into() } else { format!("{{ {} }}", parts.join(", ")) })
+        }
+    }
+}
+
+fn field_override(fields: &'static [FieldInfo], name: &str, v: &Value) -> Result<String, String> {
+    let f = fields.iter().find(|f| f.name == name).ok_or_else(|| format!("no field `{name}`"))?;
+    if f.flags.contains(FieldFlags::TRANSIENT) {
+        return Err(format!("`{name}` is runtime state"));
+    }
+    encode(&f.ty, f.unit, v).ok_or_else(|| format!("no value for `{name}`"))
 }
 
 /// The keys of a mesh recipe: `primitive = "box"` + parameters, or `asset`, `node`, `part`.

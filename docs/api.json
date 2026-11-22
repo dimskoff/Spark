@@ -106,6 +106,11 @@
       "doc": ""
     },
     {
+      "name": "SceneLoadOptions",
+      "def": "{ replace: boolean? }",
+      "doc": "Levels and prefabs (`.scene` / `.prefab` files, see docs/SCENE_FORMAT.md). `spawn(\"prefabs/door.prefab\", props)` makes\nan instance of a prefab: the second argument is the props table."
+    },
+    {
       "name": "SkySpec",
       "def": "{ top: ColorLike?, bottom: ColorLike?, cubemap: (string | false)?, blend: number?, lighting: number? }",
       "doc": ""
@@ -2278,6 +2283,47 @@
               }
             ],
             "ret": "Font",
+            "doc": ""
+          }
+        }
+      ],
+      "doc": ""
+    },
+    {
+      "name": "scene",
+      "members": [
+        {
+          "Function": {
+            "name": "load",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              },
+              {
+                "name": "opts",
+                "ty": "SceneLoadOptions?",
+                "optional": true
+              }
+            ],
+            "ret": "{ Object }",
+            "doc": "Creates the objects of a `.scene` and returns its root objects. `replace = true` deletes the current objects first\nand applies the file's sun / ambient / background / fog / sky; the default adds to the scene.\nWrites every object and the environment to a `.scene` (not in a packed game). Returns warnings about changes to\nprefab instances that a file cannot hold (empty when there are none); anything else that cannot be saved is an error."
+          }
+        },
+        {
+          "Function": {
+            "name": "save",
+            "generics": "",
+            "params": [
+              {
+                "name": "path",
+                "ty": "string",
+                "optional": false
+              }
+            ],
+            "ret": "{ string }",
             "doc": ""
           }
         }
