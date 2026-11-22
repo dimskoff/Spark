@@ -395,8 +395,8 @@ fn make_collider(world: &World, id: ObjectId, o: &Object, body: &Body, scale: Ve
     let s = scale.abs();
     let radial = s.x.max(s.z);
     let builder = match body.shape {
-        Shape::Box(size) => cuboid(size * s * 0.5),
-        Shape::Sphere(r) => ColliderBuilder::ball(r * s.max_element()),
+        Shape::Box { size } => cuboid(size * s * 0.5),
+        Shape::Sphere { radius } => ColliderBuilder::ball(radius * s.max_element()),
         Shape::Capsule { radius, height } => {
             let r = radius * radial;
             ColliderBuilder::capsule_y((height * s.y * 0.5 - r).max(0.0), r)

@@ -4096,6 +4096,7 @@ dependencies = [
  "log",
  "miniz_oxide 0.8.9",
  "naga",
+ "spark-reflect",
 ]
 
 [[package]]
@@ -4160,6 +4161,7 @@ dependencies = [
 name = "spark-reflect"
 version = "0.1.0"
 dependencies = [
+ "glam 0.34.1",
  "spark-reflect-derive",
 ]
 
@@ -4196,6 +4198,7 @@ dependencies = [
  "spark-core",
  "spark-discord",
  "spark-physics",
+ "spark-reflect",
 ]
 
 [[package]]

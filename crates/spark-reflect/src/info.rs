@@ -15,6 +15,8 @@ pub enum AssetKind {
     Script,
     Prefab,
     Model,
+    Shader,
+    Cubemap,
 }
 
 impl AssetKind {
@@ -27,6 +29,8 @@ impl AssetKind {
             "script" => AssetKind::Script,
             "prefab" => AssetKind::Prefab,
             "model" => AssetKind::Model,
+            "shader" => AssetKind::Shader,
+            "cubemap" => AssetKind::Cubemap,
             _ => return None,
         })
     }

@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 
 use glam::{EulerRot, Mat4, Quat, Vec3};
+use spark_reflect::{Reflect, ReflectEnum};
 
 use crate::assets::{CubemapId, MeshId};
 use crate::camera::Camera;
@@ -34,10 +35,17 @@ impl ObjectId {
 }
 
 /// Local position, rotation and scale of an [Object] (relative to its parent, or the world).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Transform {
+    /// Position in meters.
+    #[reflect(unit = "m", lua = "position")]
     pub position: Vec3,
+    /// Rotation, reflected as Euler angles in degrees (pitch, yaw, roll; Y-X-Z order). The scripting API
+    /// uses radians for the same angles.
+    #[reflect(unit = "deg", lua = "rotation")]
     pub rotation: Quat,
+    /// Scale per axis (1 = original size).
+    #[reflect(lua = "scale")]
     pub scale: Vec3,
 }
 
@@ -186,23 +194,57 @@ impl Object {
 }
 
 /// Kind of a [`Light`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, ReflectEnum)]
 pub enum LightKind {
     /// Shines in all directions.
+    #[reflect(name = "point")]
     Point,
-    /// Cone along the object's -Z. `angle` = full cone angle in radians, `softness` 0..1 = blurry edge.
-    Spot { angle: f32, softness: f32 },
+    /// Cone along the object's -Z.
+    #[reflect(name = "spot")]
+    Spot {
+        /// Full cone angle in radians (the scripting API uses degrees, 1 to 179).
+        #[reflect(
+            range = 1.0f32.to_radians()..=179.0f32.to_radians(),
+            clamp,
+            unit = "rad",
+            lua = "angle",
+            default = 45f32.to_radians()
+        )]
+        angle: f32,
+        /// 0..1 = blurry edge.
+        #[reflect(range = 0.0..=1.0, clamp, step = 0.01, lua = "softness", default = 0.3)]
+        softness: f32,
+    },
 }
 
 /// Point or spot light attached to an object. Reaches exactly `range` meters (smooth falloff).
-#[derive(Clone, Copy, Debug, PartialEq)]
+///
+/// The `lua` names of its fields are members of the Luau `obj.light` handle (`obj.light.intensity`), not of the
+/// object itself (`obj.color` is the material color).
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Light {
+    /// Point or spot (Luau: `light.type`, `"point"` / `"spot"`).
+    #[reflect(lua = "type")]
     pub kind: LightKind,
+    /// Light color.
+    #[reflect(lua = "color")]
     pub color: Color,
+    /// Brightness multiplier (0 = off). Negative values are clamped to 0.
+    #[reflect(range = 0.0..=f32::MAX, clamp, step = 0.05, lua = "intensity")]
     pub intensity: f32,
+    /// Distance in meters where the light has faded out completely. Values below 0.01 are clamped.
+    #[reflect(range = 0.01..=f32::MAX, clamp, unit = "m", lua = "range")]
     pub range: f32,
     /// Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`).
+    #[reflect(lua = "shadows")]
     pub shadows: bool,
+}
+
+impl Default for Light {
+    /// What `light(true)` / `add_light` give in scripts: a white point light, intensity 1, range 10 m.
+    fn default() -> Self {
+        Self::point(Color::WHITE, 1.0, 10.0)
+    }
 }
 
 impl Light {
@@ -220,37 +262,61 @@ impl Light {
 }
 
 /// Directional light (the sun).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Sun {
     /// Direction the light travels (points away from the sun).
     pub direction: Vec3,
+    /// Light color.
     pub color: Color,
+    /// Brightness multiplier.
     pub intensity: f32,
 }
 
+impl Default for Sun {
+    /// The sun of a new [`Scene`].
+    fn default() -> Self {
+        Self { direction: Vec3::new(-0.4, -1.0, -0.3), color: Color::WHITE, intensity: 1.0 }
+    }
+}
+
 /// Linear distance fog.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Fog {
+    /// Fog color (distant objects fade into it).
     pub color: Color,
+    /// Distance in meters where the fog starts.
+    #[reflect(unit = "m")]
     pub near: f32,
+    /// Distance in meters where objects are fully fogged.
+    #[reflect(unit = "m")]
     pub far: f32,
+}
+
+impl Default for Fog {
+    /// Gray fog from 10 m to 60 m (the scripting API's `fog(color)` distances).
+    fn default() -> Self {
+        Self { color: Color::GRAY, near: 10.0, far: 60.0 }
+    }
 }
 
 /// Sky drawn behind every object (instead of the flat `background` color). It can also light
 /// the scene (image-based lighting): see [`Sky::lighting`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Sky {
     /// Color straight up; the sky fades to `bottom` straight down (the horizon is halfway).
     pub top: Color,
     /// Color straight down.
     pub bottom: Color,
-    /// Optional cubemap (photo or painted sky), drawn over the gradient.
+    /// Optional cubemap (photo or painted sky), drawn over the gradient (a runtime handle).
+    #[reflect(readonly, transient)]
     pub cubemap: Option<CubemapId>,
     /// How much of the cubemap covers the gradient, 0..1.
+    #[reflect(range = 0.0..=1.0, clamp, step = 0.01)]
     pub blend: f32,
     /// Image-based lighting strength. 0 = off (objects use the flat `ambient` color);
     /// above 0 the sky replaces the ambient light (blue from above, ground color from below)
     /// and PBR surfaces reflect it.
+    #[reflect(range = 0.0..=f32::MAX, clamp, step = 0.05)]
     pub lighting: f32,
 }
 
@@ -312,7 +378,7 @@ impl Scene {
             free: Vec::new(),
             count: 0,
             camera: Camera::default(),
-            sun: Sun { direction: Vec3::new(-0.4, -1.0, -0.3), color: Color::WHITE, intensity: 1.0 },
+            sun: Sun::default(),
             ambient: Color::rgb(0.35, 0.38, 0.45),
             background: Color::rgb(0.08, 0.09, 0.12),
             fog: None,

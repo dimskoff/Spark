@@ -42,8 +42,16 @@ const UNITS: &[(&str, &str)] = &[
     ("%", "Percent"),
 ];
 
-const ASSETS: &[(&str, &str)] =
-    &[("mesh", "Mesh"), ("texture", "Texture"), ("sound", "Sound"), ("script", "Script"), ("prefab", "Prefab"), ("model", "Model")];
+const ASSETS: &[(&str, &str)] = &[
+    ("mesh", "Mesh"),
+    ("texture", "Texture"),
+    ("sound", "Sound"),
+    ("script", "Script"),
+    ("prefab", "Prefab"),
+    ("model", "Model"),
+    ("shader", "Shader"),
+    ("cubemap", "Cubemap"),
+];
 
 /// Derives `spark_reflect::Reflect` (and `ReflectField`) for a struct with named fields.
 #[proc_macro_derive(Reflect, attributes(reflect))]

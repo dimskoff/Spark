@@ -8,10 +8,13 @@
 //! - [`Reflect`] / [`ReflectEnum`]: whole-value and path access with validation (type, range, finite).
 //! - [`ReflectError`]: errors with a did-you-mean list.
 //! - `#[derive(Reflect)]` / `#[derive(ReflectEnum)]` (feature `derive`, on by default) generate all of it.
+//! - Feature `glam`: `ReflectField` for `glam::{Vec2, Vec3, Vec4, Quat}` (a `Quat` is Euler angles in degrees).
 #![forbid(unsafe_code)]
 
 mod error;
 mod field;
+#[cfg(feature = "glam")]
+mod glam_impls;
 mod info;
 mod value;
 

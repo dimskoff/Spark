@@ -55,11 +55,11 @@ fn body_from_table(t: &Table, what: &str) -> LuaResult<Body> {
     let h = height.unwrap_or(1.0);
     body.shape = match shape.as_deref() {
         None | Some("auto") => match size {
-            Some(s) => Shape::Box(s),
+            Some(size) => Shape::Box { size },
             None => Shape::Auto,
         },
-        Some("box") => Shape::Box(size.unwrap_or(Vec3::ONE)),
-        Some("sphere") | Some("ball") => Shape::Sphere(r),
+        Some("box") => Shape::Box { size: size.unwrap_or(Vec3::ONE) },
+        Some("sphere") | Some("ball") => Shape::Sphere { radius: r },
         Some("capsule") => Shape::Capsule { radius: r, height: height.unwrap_or(2.0) },
         Some("cylinder") => Shape::Cylinder { radius: r, height: h },
         Some(other) => {

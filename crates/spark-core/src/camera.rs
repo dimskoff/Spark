@@ -1,18 +1,30 @@
 use glam::{Mat4, Quat, Vec2, Vec3};
+use spark_reflect::Reflect;
 
 use crate::math::look_rotation;
+use crate::reflect::GREATER_THAN_ZERO;
 
 /// Perspective (or orthographic) camera. Looks along its local -Z axis.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Camera {
+    /// World position.
+    #[reflect(unit = "m", lua = "position")]
     pub position: Vec3,
+    /// World rotation, reflected as Euler angles in degrees (pitch, yaw, roll; Y-X-Z order).
+    #[reflect(unit = "deg", lua = "rotation")]
     pub rotation: Quat,
-    /// Vertical field of view in degrees.
+    /// Vertical field of view in degrees (1 to 179).
+    #[reflect(range = 1.0..=179.0, unit = "deg", lua = "fov")]
     pub fov: f32,
+    /// Near clip plane distance; must stay smaller than `far` (checked by the scripting API, not by this range).
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", lua = "near")]
     pub near: f32,
+    /// Far clip plane distance; must stay greater than `near` (checked by the scripting API, not by this range).
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", lua = "far")]
     pub far: f32,
     /// `Some(height)` = orthographic camera showing `height` meters vertically (2.5D, strategy,
     /// editors); `fov` is then ignored.
+    #[reflect(range = 0.001..=f32::MAX, clamp, unit = "m", lua = "ortho")]
     pub ortho: Option<f32>,
 }
 

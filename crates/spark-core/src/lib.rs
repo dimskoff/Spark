@@ -26,6 +26,7 @@ pub mod model;
 pub mod paths;
 pub mod physics;
 pub mod pick;
+mod reflect;
 pub mod render;
 pub mod scene;
 pub mod schedule;

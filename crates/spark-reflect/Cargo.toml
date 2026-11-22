@@ -13,6 +13,9 @@ repository.workspace = true
 default = ["derive"]
 # Re-exports `#[derive(Reflect)]` and `#[derive(ReflectEnum)]`.
 derive = ["dep:spark-reflect-derive"]
+# `ReflectField` for glam `Vec2` / `Vec3` / `Vec4` (like `[f32; N]`) and `Quat` (Euler angles in degrees).
+glam = ["dep:glam"]
 
 [dependencies]
 spark-reflect-derive = { workspace = true, optional = true }
+glam = { workspace = true, optional = true }
