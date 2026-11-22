@@ -4044,10 +4044,12 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "log",
+ "serde_json",
  "spark-audio",
  "spark-core",
  "spark-devtools",
  "spark-physics",
+ "spark-reflect",
  "spark-render",
  "spark-script",
  "spark-window",
@@ -4108,6 +4110,8 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "spark-core",
+ "spark-reflect",
 ]
 
 [[package]]

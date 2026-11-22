@@ -160,3 +160,9 @@ Small independent steps, one PR each; after every step all existing tests and ex
 | C-16 | `script` component, `props`, per-object isolation |
 | C-17 | `tags`; camera/environment mapping |
 | C-18 | Hot reload of one module; MCP `scene_read`, `scene_apply`, `attach` (roadmap items; own short ADR if the protocol needs one) |
+
+## C-13 decision: `Restore` and exact inverses stay in the game process
+
+`Command::Restore` (and the `Spawn` that undoes a `Delete`) carries exact typed state: a quaternion bit for bit, texture and mesh handles, runtime-only meshes that have no recipe. The registry `Value` form cannot hold that (rotations go through Euler angles, handles are not values), so encoding it would make undo lossy. Decision: such inverses have **no JSON form**. The game keeps them (the last 256, in `crates/spark/src/devtools.rs`) and `CommandResult.inverse` is `{"op":"restore","token":N}`; sending that command back applies the stored one, also inside a `batch`. Everything else (set, reparent, add/remove component, delete of a spawn, and any command the editor writes itself) is plain JSON and survives a game restart; tokens do not (`unknown_token` error). An editor that needs undo across restarts uses the scene file (C-14), not devtools.
+
+Wire details: `EditorCommand::Command { request, json }` is answered by `GameMessage::CommandResult { request, ok, inverse?, changed[], resolved?, error?{code,message,path?,suggestions[]} }`. Values use a natural JSON form (`spark_devtools::command_json`): arrays of 2 to 4 numbers are vectors/colors, `{"$variant":...}` is an enum, JSON integers are `Int`; because a float field rejects an integer, the game retries a `wrong_type` failure once with whole numbers widened to floats. `SetObject` is kept (protocol 2 and 3 editors) as a batch of `SetProperty` built in the game; the editor still sends it.

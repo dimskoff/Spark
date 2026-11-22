@@ -683,9 +683,10 @@ impl Scene {
             let e = o.euler();
             let _ = write!(
                 out,
-                "{}{{\"id\":{},\"name\":\"{}\",\"parent\":{},\"mesh\":{},\"position\":{},\"world_position\":{},\"rotation_deg\":{},\"scale\":{},\"visible\":{},\"bounds\":{},\"body\":{},\"light\":{}}}",
+                "{}{{\"id\":{},\"node_id\":{},\"name\":\"{}\",\"parent\":{},\"mesh\":{},\"position\":{},\"world_position\":{},\"rotation_deg\":{},\"scale\":{},\"visible\":{},\"bounds\":{},\"body\":{},\"light\":{}}}",
                 if n > 0 { "," } else { "" },
                 id.index(),
+                o.node_id.as_ref().map_or("null".into(), |n| format!("\"{n}\"")),
                 esc(&o.name),
                 o.parent.map_or("null".into(), |p| p.index().to_string()),
                 o.mesh.map_or("null".into(), |m| m.0.to_string()),

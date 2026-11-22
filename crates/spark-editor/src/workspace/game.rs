@@ -289,7 +289,8 @@ impl GameSession {
                             events.push(SessionEvent::ScriptError(message));
                         }
                     }
-                    GameMessage::Bye => {}
+                    // Answers to EditorCommand::Command (protocol 4): the editor still edits through SetObject.
+                    GameMessage::CommandResult(_) | GameMessage::Bye => {}
                 }
             }
             if !alive {

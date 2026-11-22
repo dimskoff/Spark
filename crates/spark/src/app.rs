@@ -818,7 +818,7 @@ impl<G: Game> Runner<G> {
         self.frames += 1;
         self.fps_frames += 1;
         if let Some(d) = &mut self.devtools {
-            d.end_frame(&self.world, renderer.last_stats(), self.game.error());
+            d.end_frame(&mut self.world, renderer.last_stats(), self.game.error());
         }
 
         let elapsed = (now - self.fps_timer).as_secs_f32();

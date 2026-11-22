@@ -60,6 +60,7 @@ read the entries below for your old version and the new one, fix the code, then 
 - The infinite-loop message points to `task(function() ... end)` instead of the non-existent `task.spawn`.
 
 ### Tooling
+- Devtools protocol 4: `EditorCommand::Command` applies a JSON `Command` (spawn, delete, set, reparent, add/remove component, batch) to the running game through `World::apply` and answers with the inverse command, the changed node ids or a structured error (`code`, `message`, `path`, did-you-mean `suggestions`). Scene snapshots carry `node_id`. `SetObject` still works (now a batch of `SetProperty`); games and editors of protocol 2 and 3 still connect. See ADR 0005, C-13.
 - CI runs `cargo fmt --check` and `clippy -D warnings` with no allowed lints; `rustfmt.toml` added.
 - Every `spark check --json` error has a stable `code` (`SPK-1000`..`SPK-1006`, `SPK-1100` syntax, `SPK-1101` types) and an
   optional `hint`; the table is under "Error codes" in `docs/SPARK_API.md`.
