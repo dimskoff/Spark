@@ -116,7 +116,7 @@ pub(crate) fn to_data(args: &[Value], what: &str) -> LuaResult<[f32; 4]> {
     Ok(out)
 }
 
-fn data_table(lua: &mlua::Lua, d: [f32; 4]) -> LuaResult<Table> {
+pub(crate) fn data_table(lua: &mlua::Lua, d: [f32; 4]) -> LuaResult<Table> {
     let t = lua.create_table()?;
     for (k, x) in ["x", "y", "z", "w"].iter().zip(d) {
         t.set(*k, x)?;
@@ -144,22 +144,13 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
             }
             _ => {
                 let o = w.scene.get_mut(id).ok_or_else(dead)?;
+                // name, position, rotation, scale, visible and the material fields: the registry accessors.
+                if let Some(acc) = crate::reflect_bind::prop_accessor(&k) {
+                    acc.apply_prop(o, &v, &k, &what)?;
+                    continue;
+                }
                 match k.as_str() {
-                    "name" => o.name = to_str(&v, &what)?,
-                    "position" => o.transform.position = to_vec3(&v, &what)?,
-                    "rotation" => o.transform.rotation = from_euler(to_vec3(&v, &what)?),
-                    "scale" => o.transform.scale = to_scale(&v, &what)?,
-                    "visible" => o.visible = to_bool(&v, &what)?,
-                    "color" => o.material.color = to_color(&v, &what)?,
                     "shader" => o.material.shader = crate::shader::to_shader(&v, &what)?,
-                    "data" => o.material.data = to_data(&[v], &what)?,
-                    "blend" => o.material.blend = to_blend(&v, &what)?,
-                    "double_sided" => o.material.double_sided = to_bool(&v, &what)?,
-                    "cast_shadow" => o.material.cast_shadow = to_bool(&v, &what)?,
-                    "pbr" => o.material.pbr = to_bool(&v, &what)?,
-                    "metallic" => o.material = o.material.with_metallic(to_num(&v, &what)?),
-                    "roughness" => o.material = o.material.with_roughness(to_num(&v, &what)?),
-                    "emissive" => o.material.emissive = to_color(&v, &what)?,
                     "lod" => o.lod = to_lod(&v, &what)?,
                     "body" => o.body = Some(crate::physics::to_body(&v, &what)?),
                     "light" => o.light = Some(crate::light::to_light(&v, &what)?),
@@ -233,7 +224,7 @@ pub fn object_member_names() -> Vec<&'static str> {
 impl UserData for Obj {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("id", |_, this| Ok(this.0.index()));
-        // name, visible, position, rotation, scale: generated from the component registry.
+        // name, visible, position, rotation, scale, color, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive,\n        // data: generated from the component registry.
         crate::reflect_bind::add_fields(f);
         f.add_field_method_get("x", |lua, this| read(lua, this.0, |_, o| o.transform.position.x));
         f.add_field_method_get("y", |lua, this| read(lua, this.0, |_, o| o.transform.position.y));
@@ -241,32 +232,7 @@ impl UserData for Obj {
         f.add_field_method_set("x", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.x = v));
         f.add_field_method_set("y", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.y = v));
         f.add_field_method_set("z", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.z = v));
-        f.add_field_method_get("color", |lua, this| read(lua, this.0, |_, o| LuaColor(o.material.color)));
-        f.add_field_method_set("color", |lua, this, v: Value| {
-            let c = to_color(&v, "color")?;
-            write(lua, this.0, |o| o.material.color = c)
-        });
         f.add_field_method_get("material", |lua, this| read(lua, this.0, |_, o| LuaMaterial(o.material)));
-        f.add_field_method_get("blend", |lua, this| read(lua, this.0, |_, o| o.material.blend.name()));
-        f.add_field_method_set("blend", |lua, this, v: Value| {
-            let b = to_blend(&v, "blend")?;
-            write(lua, this.0, |o| o.material.blend = b)
-        });
-        f.add_field_method_get("double_sided", |lua, this| read(lua, this.0, |_, o| o.material.double_sided));
-        f.add_field_method_set("double_sided", |lua, this, v: bool| write(lua, this.0, |o| o.material.double_sided = v));
-        f.add_field_method_get("cast_shadow", |lua, this| read(lua, this.0, |_, o| o.material.cast_shadow));
-        f.add_field_method_set("cast_shadow", |lua, this, v: bool| write(lua, this.0, |o| o.material.cast_shadow = v));
-        f.add_field_method_get("pbr", |lua, this| read(lua, this.0, |_, o| o.material.pbr));
-        f.add_field_method_set("pbr", |lua, this, v: bool| write(lua, this.0, |o| o.material.pbr = v));
-        f.add_field_method_get("metallic", |lua, this| read(lua, this.0, |_, o| o.material.metallic));
-        f.add_field_method_set("metallic", |lua, this, Num(v): Num| write(lua, this.0, |o| o.material = o.material.with_metallic(v)));
-        f.add_field_method_get("roughness", |lua, this| read(lua, this.0, |_, o| o.material.roughness));
-        f.add_field_method_set("roughness", |lua, this, Num(v): Num| write(lua, this.0, |o| o.material = o.material.with_roughness(v)));
-        f.add_field_method_get("emissive", |lua, this| read(lua, this.0, |_, o| LuaColor(o.material.emissive)));
-        f.add_field_method_set("emissive", |lua, this, v: Value| {
-            let c = to_color(&v, "emissive")?;
-            write(lua, this.0, |o| o.material.emissive = c)
-        });
         f.add_field_method_get("normal_map", |lua, this| read(lua, this.0, |_, o| o.material.normal_map.map(LuaTexture)));
         f.add_field_method_set("normal_map", |lua, this, v: Value| {
             let id = this.0;
@@ -297,14 +263,6 @@ impl UserData for Obj {
         f.add_field_method_set("shader", |lua, this, v: Value| {
             let s = crate::shader::to_shader(&v, "shader")?;
             write(lua, this.0, |o| o.material.shader = s)
-        });
-        f.add_field_method_get("data", |lua, this| {
-            let d = read(lua, this.0, |_, o| o.material.data)?;
-            data_table(lua, d)
-        });
-        f.add_field_method_set("data", |lua, this, v: Value| {
-            let d = to_data(&[v], "data")?;
-            write(lua, this.0, |o| o.material.data = d)
         });
         f.add_field_method_set("material", |lua, this, v: Value| {
             let m = to_material(&v, "material")?;
