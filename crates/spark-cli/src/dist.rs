@@ -15,6 +15,9 @@ use engine::vfs::{PackWriter, strip_pack};
 
 use crate::manifest::Manifest;
 
+/// Third-party license notices written next to the executable (the licenses require shipping them with the binary).
+const NOTICE_FILE: &str = "THIRD_PARTY_LICENSES.txt";
+
 /// Never copied into a build.
 const SKIP_DIRS: &[&str] = &["tools", "dist", "screenshots", "target", ".git", ".vscode", ".idea"];
 const SKIP_EXT: &[&str] = &["log", "tmp", "bak", "blend", "blend1", "psd", "kra", "xcf"];
@@ -104,6 +107,7 @@ fn build(args: &[String]) -> Result<(), String> {
         }
         std::fs::create_dir_all(&target).map_err(|e| format!("cannot create '{}': {e}", target.display()))?;
         write_exe(&target.join(&exe_name), &exe)?;
+        write_file(&target.join(NOTICE_FILE), crate::THIRD_PARTY_LICENSES.as_bytes())?;
         let mut bytes = 0u64;
         for rel in &files {
             let dest = target.join(rel);
@@ -129,6 +133,7 @@ fn build(args: &[String]) -> Result<(), String> {
             std::fs::remove_dir_all(&path).map_err(|e| format!("cannot replace '{}': {e} (is the game still running?)", path.display()))?;
         }
         write_exe(&path, &full)?;
+        write_file(&out_root.join(NOTICE_FILE), crate::THIRD_PARTY_LICENSES.as_bytes())?;
         println!(
             "spark build: {} -> {} ({count} files, {:.1} MB packed into {:.1} MB, engine {:.1} MB)",
             dir.display(),
@@ -164,7 +169,12 @@ fn build(args: &[String]) -> Result<(), String> {
         } else {
             cmd.arg("-a").arg("-c").arg("-f");
         }
-        let status = cmd.arg(&archive).arg(&shipped).current_dir(&out_root).status();
+        cmd.arg(&archive).arg(&shipped);
+        if !loose {
+            // The loose layout already has the notice inside its folder.
+            cmd.arg(NOTICE_FILE);
+        }
+        let status = cmd.current_dir(&out_root).status();
         match status {
             Ok(s) if s.success() && archive_path.is_file() => {
                 let size = std::fs::metadata(&archive_path).map(|m| m.len()).unwrap_or(0);
@@ -341,6 +351,13 @@ mod tests {
         assert!(skipped(Path::new("notes/a.txt"), false, &m));
         assert!(skipped(Path::new("error.log"), false, &m));
         assert!(!skipped(Path::new("sounds/a.ogg"), false, &m));
+    }
+
+    #[test]
+    fn notice_is_embedded() {
+        assert!(crate::THIRD_PARTY_LICENSES.contains("Third-party licenses"));
+        assert!(crate::THIRD_PARTY_LICENSES.contains("wgpu"));
+        assert!(NOTICE_FILE.ends_with(".txt"));
     }
 
     #[test]

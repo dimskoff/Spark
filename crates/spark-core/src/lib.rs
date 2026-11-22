@@ -22,6 +22,7 @@ pub mod material;
 pub mod math;
 pub mod mesh;
 pub mod model;
+pub mod paths;
 pub mod physics;
 pub mod pick;
 pub mod render;

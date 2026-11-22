@@ -19,6 +19,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Licenses of all dependencies must be on the allow list in deny.toml; bans and sources are checked too.
+  deny:
+    name: cargo deny (licenses, bans, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans sources
+
   build:
     name: ${{ matrix.name }}
     strategy:
@@ -56,6 +66,11 @@ jobs:
       - name: Test
         run: cargo test --release --workspace
 
+      # Also part of the workspace run above; named separately so a stale THIRD_PARTY_LICENSES.md is easy to spot.
+      # Fix: `cargo run -p licenses` and commit the result.
+      - name: Third-party licenses are up to date
+        run: cargo test --release -p licenses
+
       - name: Examples (spark check every example, run the scenario test)
         shell: bash
         run: |
@@ -85,4 +100,5 @@ jobs:
           path: |
             target/release/${{ matrix.exe }}
             LICENSE
+            THIRD_PARTY_LICENSES.md
             README.md

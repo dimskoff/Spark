@@ -24,6 +24,7 @@ mod flow;
 mod light;
 mod model;
 mod modules;
+mod names;
 mod physics;
 mod runtime;
 mod save;
@@ -42,6 +43,7 @@ use std::time::{Duration, Instant, SystemTime};
 use mlua::{ErrorContext, Function, Lua, MultiValue, Value};
 use spark_core::{Game, World};
 
+pub use names::{classify, clean_error, hint};
 pub use runtime::TaskStatus;
 pub use save::default_save_path;
 
@@ -95,6 +97,19 @@ pub struct ScriptGame {
     /// What the error screen shows (built once per error).
     error_view: Option<error_screen::ErrorView>,
     shader_view: Option<error_screen::ErrorView>,
+    /// `math.random` seed applied on every (re)load.
+    seed: Option<u64>,
+    log_dir: Option<PathBuf>,
+}
+
+/// The seed as Luau's `math.randomseed` takes it (a 32-bit integer): `low ^ high` of the 64 bits.
+fn luau_seed(seed: u64) -> i32 {
+    ((seed as u32) ^ ((seed >> 32) as u32)) as i32
+}
+
+/// What the error screen says about the log file: its path, or `error.log` when nothing could be written.
+fn log_hint(written: Option<&Path>) -> String {
+    written.map(|p| p.display().to_string()).unwrap_or_else(|| "error.log (could not be written)".into())
 }
 
 struct TestRun {
@@ -126,6 +141,8 @@ impl ScriptGame {
             test: None,
             error_view: None,
             shader_view: None,
+            seed: None,
+            log_dir: None,
         }
     }
 
@@ -185,6 +202,21 @@ impl ScriptGame {
         self
     }
 
+    /// Seeds Luau's `math.random` every time the script (re)starts, so a run is reproducible (`--seed N`).
+    /// `None` = leave it random. The seed is folded to 32 bits (`low ^ high`, Luau's generator takes a 32-bit
+    /// integer), so seeds below 2^32 are used as they are.
+    pub fn seed(mut self, seed: Option<u64>) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Per-user logs folder (see `spark_core::paths::log_dir`): where `error.log` goes for packed games, and the
+    /// fallback when the game folder is not writable. Default: none (dev runs write next to the script only).
+    pub fn log_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.log_dir = dir;
+        self
+    }
+
     /// Last script error, if the script is paused because of one.
     pub fn error(&self) -> Option<&str> {
         self.error.as_deref()
@@ -195,18 +227,20 @@ impl ScriptGame {
     }
 
     fn fail(&mut self, msg: String) {
+        let msg = names::clean_error(&msg);
         log::error!("script error: {msg}");
         if self.strict {
             std::process::exit(1);
         }
         log::warn!("script paused - fix the error and save {} to reload", self.path.display());
-        // Players' builds have no console: keep a copy next to the script (best effort).
-        if let Some(dir) = self.path.parent() {
-            let _ = std::fs::write(dir.join("error.log"), format!("{msg}\n"));
-        }
+        // Players' builds have no console: keep a copy (best effort). Dev runs: next to the script; packed games: in
+        // the per-user logs folder (the packed folder is virtual).
+        let dirs = spark_core::paths::log_candidates(self.path.parent(), spark_core::vfs::is_packed(), self.log_dir.as_deref());
+        let log = spark_core::paths::write_log(&dirs, "error.log", &format!("{msg}\n"));
         let file = self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let hint = format!(
-            "Fix the error and save the file ({file} or a module): the game reloads automatically.   F5 - restart   |   full text: error.log"
+            "Fix the error and save the file ({file} or a module): the game reloads automatically.   F5 - restart   |   full text: {}",
+            log_hint(log.as_deref())
         );
         self.error_view = Some(error_screen::ErrorView::new("Script error", &msg, &self.root(), &hint));
         self.error = Some(msg);
@@ -271,7 +305,7 @@ impl ScriptGame {
                 // later check fails too until the callback returns (`run` then clears it).
                 return Err(mlua::Error::runtime(format!(
                     "script ran for more than {:.1} s without returning (infinite loop?). \
-                     Long work: split it over frames with wait() / task.spawn",
+                     Long work: split it over frames with wait() inside task(function() ... end)",
                     limit.as_secs_f32()
                 )));
             }
@@ -282,20 +316,29 @@ impl ScriptGame {
         lua.set_app_data(save::SavePath(self.save_path.clone()));
         self.lua = Some(lua);
         let test_shared = self.test.as_ref().map(|t| t.shared.clone());
+        let seed = self.seed;
         self.run(world, |lua| {
             api::install(lua)?;
+            if let Some(seed) = seed {
+                lua.globals().get::<mlua::Table>("math")?.get::<Function>("randomseed")?.call::<()>(luau_seed(seed))?;
+            }
             modules::install(lua, &lua.globals(), modules)?;
             if let Some(shared) = test_shared {
                 testing::install(lua, shared)?;
             }
+            // Reading a global nobody defined is a typo: fail with a suggestion instead of "attempt to index nil".
+            names::strict_globals(lua)?;
+            let known: std::collections::HashSet<String> =
+                lua.globals().pairs::<String, Value>().filter_map(|p| p.ok().map(|(k, _)| k)).collect();
             lua.load(source.as_str()).set_name(format!("@{name}")).exec()?;
-            if matches!(lua.globals().get::<Value>("draw")?, Value::Function(_)) {
+            if matches!(lua.globals().raw_get::<Value>("draw")?, Value::Function(_)) {
                 return Err(mlua::Error::runtime(
                     "'draw' is Spark's 2D drawing library (draw.rect, draw.text, ...). \
                      Name your drawing callback 'function render()' instead of 'function draw()'",
                 ));
             }
-            if let Some(start) = lua.globals().get::<Option<Function>>("start")? {
+            names::check_callback_names(lua, &known)?;
+            if let Some(start) = lua.globals().raw_get::<Option<Function>>("start")? {
                 runtime::spawn_task(lua, start, MultiValue::new()).map_err(|e| e.context("in start()"))?;
             }
             Ok(())
@@ -427,7 +470,7 @@ const BIG_MAIN: usize = 800;
 static BIG_HINT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn call_global(lua: &Lua, name: &str, dt: f32) -> mlua::Result<()> {
-    if let Some(f) = lua.globals().get::<Option<Function>>(name)? {
+    if let Some(f) = lua.globals().raw_get::<Option<Function>>(name)? {
         f.call::<()>(dt)?;
     }
     Ok(())
@@ -476,7 +519,7 @@ impl Game for ScriptGame {
             return;
         }
         self.run(world, |lua| {
-            if let Some(f) = lua.globals().get::<Option<Function>>("render")? {
+            if let Some(f) = lua.globals().raw_get::<Option<Function>>("render")? {
                 f.call::<()>(()).map_err(|e| e.context("in render()"))?;
             }
             save::flush_frame(lua);

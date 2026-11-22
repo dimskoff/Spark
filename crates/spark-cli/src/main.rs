@@ -35,6 +35,9 @@ use engine::{App, HELP, ImageData};
 
 use manifest::Manifest;
 
+/// Third-party license notices (one copy, embedded by the `spark` crate). Printed by `spark licenses` and written next to every `spark build` output.
+pub use engine::THIRD_PARTY_LICENSES;
+
 const USAGE: &str = "Usage:
   spark path/to/game [flags]              run a game (folder with main.luau, or the .luau file)
   spark editor [path/to/game]             open Spark Editor (the game, or the welcome screen)
@@ -53,6 +56,7 @@ const USAGE: &str = "Usage:
   spark golden path/to/game               compare a render with tests/golden.png [--update] [--tolerance T] [--json]
   spark diff a.png b.png                  compare two images [--tolerance T] [--out diff.png] [--json]
   spark mcp                               Model Context Protocol server on stdio (for AI agents)
+  spark licenses                          print the third-party license notices (also shipped as THIRD_PARTY_LICENSES.txt with every build)
   spark update [version]                  download the latest (or given) Spark release from GitHub
   spark --version
   spark build path/to/game [--out DIR]    make a player build: one executable with everything inside (+ .zip / .tar.gz)
@@ -89,6 +93,10 @@ fn main() {
         Some("update") => std::process::exit(update::run(&raw[1..])),
         Some("api") => std::process::exit(api_cmd::run(rest)),
         Some("doctor") => std::process::exit(doctor::run(rest)),
+        Some("licenses") => {
+            print!("{THIRD_PARTY_LICENSES}");
+            return;
+        }
         Some("mcp") => std::process::exit(mcp::run(rest)),
         Some("screenshot") => std::process::exit(visual::screenshot(rest)),
         Some("inspect") => std::process::exit(visual::inspect(rest)),
@@ -163,6 +171,17 @@ fn run(app: App, path: PathBuf, dir: PathBuf, packed: bool) {
             Err(e) => eprintln!("spark: game.toml icon: {e}"),
         }
     }
-    let save = if headless { None } else { default_save_path(manifest.save_name.as_deref().unwrap_or(&title)) };
-    app.run(ScriptGame::new(path).strict(headless).hot_reload(!headless && !packed).save_path(save));
+    let game_name = manifest.save_name.as_deref().unwrap_or(&title).to_string();
+    let save = if headless { None } else { default_save_path(&game_name) };
+    // Crash reports (`spark-crash.log`) and packed games' `error.log` go to <user data>/SparkGames/<game>/logs.
+    engine::paths::set_game_name(&game_name);
+    let seed = app.args().effective_seed();
+    app.run(
+        ScriptGame::new(path)
+            .strict(headless)
+            .hot_reload(!headless && !packed)
+            .save_path(save)
+            .seed(seed)
+            .log_dir(engine::paths::log_dir(&game_name)),
+    );
 }

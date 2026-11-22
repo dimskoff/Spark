@@ -21,7 +21,7 @@
 mod app;
 mod devtools;
 
-pub use app::{App, HELP, RunArgs};
+pub use app::{App, HELP, RunArgs, THIRD_PARTY_LICENSES};
 pub use spark_core::*;
 pub use spark_render::{FrameStats, GpuInfo, Renderer};
 

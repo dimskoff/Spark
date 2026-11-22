@@ -117,6 +117,9 @@ impl UserData for LuaTask {
 
 pub(crate) fn listen(lua: &Lua, event: &str, f: Function, opts: &Value, once: bool, scope: Option<ObjectId>) -> LuaResult<LuaListener> {
     let what = if once { "once" } else { "on" };
+    if let Some(msg) = crate::names::event_error(what, event) {
+        return Err(rt(msg));
+    }
     let o = parse_opts(opts, what, &["priority", "owner", "once"])?;
     let owner = o.owner.or(scope);
     if owner.is_some() && !alive(lua, owner)? {

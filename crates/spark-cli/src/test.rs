@@ -17,7 +17,8 @@ use engine::{Game, World, run_frame};
 
 use crate::check::{Problem, parse_error};
 
-const USAGE: &str = "usage: spark test path/to/game [NAME...] [--update] [--json] [--max-time SECONDS]";
+const USAGE: &str =
+    "usage: spark test path/to/game [NAME...] [--update] [--json] [--max-time SECONDS] [--seed N]   (--seed: math.random seed, default 0)";
 const DT: f32 = 1.0 / 60.0;
 const SNAP_DIR: &str = "snapshots";
 
@@ -41,11 +42,13 @@ pub struct Options {
     pub filters: Vec<String>,
     pub update: bool,
     pub max_time: f32,
+    /// `math.random` seed (default 0: tests are reproducible).
+    pub seed: Option<u64>,
 }
 
 pub fn run(args: &[String]) -> i32 {
     let mut game: Option<PathBuf> = None;
-    let mut opts = Options { filters: Vec::new(), update: false, max_time: 300.0 };
+    let mut opts = Options { filters: Vec::new(), update: false, max_time: 300.0, seed: None };
     let mut json = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -56,6 +59,13 @@ pub fn run(args: &[String]) -> i32 {
                 Some(n) => opts.max_time = n,
                 None => {
                     eprintln!("spark test: --max-time needs seconds of game time, e.g. --max-time 600\n{USAGE}");
+                    return 2;
+                }
+            },
+            "--seed" => match it.next().and_then(|n| n.parse().ok()) {
+                Some(n) => opts.seed = Some(n),
+                None => {
+                    eprintln!("spark test: --seed needs a whole number, e.g. --seed 42\n{USAGE}");
                     return 2;
                 }
             },
@@ -154,7 +164,7 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
     let started = Instant::now();
     let error_log = dir.join("error.log");
     let had_error_log = error_log.exists();
-    let mut game = ScriptGame::new(dir.join("main.luau")).hot_reload(false).test(file, name.clone());
+    let mut game = ScriptGame::new(dir.join("main.luau")).hot_reload(false).seed(Some(opts.seed.unwrap_or(0))).test(file, name.clone());
     let mut world = World::new();
     world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
     game.start(&mut world);
@@ -205,16 +215,18 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
         r.error = Some(Problem {
             file: name,
             line: None,
+            code: "SPK-1000",
             message: format!("the test did not finish within {} s of game time (stuck? raise --max-time)", opts.max_time),
         });
         return r;
     }
     if quit_early && game.test_status() != Some(TaskStatus::Done) {
-        r.error = Some(Problem { file: name, line: None, message: "the game called quit() before the test finished".into() });
+        r.error =
+            Some(Problem { file: name, line: None, code: "SPK-1000", message: "the game called quit() before the test finished".into() });
         return r;
     }
     if game.test_status() == Some(TaskStatus::Cancelled) {
-        r.error = Some(Problem { file: name, line: None, message: "the test task was cancelled".into() });
+        r.error = Some(Problem { file: name, line: None, code: "SPK-1000", message: "the test task was cancelled".into() });
         return r;
     }
     // Snapshots.
@@ -228,7 +240,8 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
                 }
                 if opts.update {
                     if let Err(e) = std::fs::write(&path, &text) {
-                        r.error = Some(Problem { file: rel(dir, &path), line: None, message: format!("cannot write: {e}") });
+                        r.error =
+                            Some(Problem { file: rel(dir, &path), line: None, code: "SPK-1000", message: format!("cannot write: {e}") });
                         return r;
                     }
                     r.written.push(snap);
@@ -239,7 +252,7 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
             Err(_) => {
                 let written = path.parent().map(std::fs::create_dir_all).transpose().and_then(|_| std::fs::write(&path, &text));
                 if let Err(e) = written {
-                    r.error = Some(Problem { file: rel(dir, &path), line: None, message: format!("cannot write: {e}") });
+                    r.error = Some(Problem { file: rel(dir, &path), line: None, code: "SPK-1000", message: format!("cannot write: {e}") });
                     return r;
                 }
                 r.written.push(snap);
@@ -370,7 +383,7 @@ mod tests {
     }
 
     fn opts() -> Options {
-        Options { filters: Vec::new(), update: false, max_time: 30.0 }
+        Options { filters: Vec::new(), update: false, max_time: 30.0, seed: None }
     }
 
     const DOOR_GAME: &str = r#"

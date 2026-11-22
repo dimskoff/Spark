@@ -37,19 +37,7 @@ impl Drop for Store {
 /// `%APPDATA%/SparkGames/<game>/save.json` (Windows), `~/Library/Application Support/SparkGames/<game>/save.json`
 /// (macOS) or `$XDG_DATA_HOME` / `~/.local/share/SparkGames/<game>/save.json` (Linux).
 pub fn default_save_path(game: &str) -> Option<PathBuf> {
-    let clean: String = game.chars().map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.') { c } else { '_' }).collect();
-    let clean = clean.trim().trim_matches('.').to_string();
-    let clean = if clean.is_empty() { "game".to_string() } else { clean };
-    let base = if cfg!(windows) {
-        std::env::var_os("APPDATA").map(PathBuf::from)
-    } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| Path::new(&h).join("Library/Application Support"))
-    } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| Path::new(&h).join(".local/share")))
-    }?;
-    Some(base.join("SparkGames").join(clean).join("save.json"))
+    spark_core::paths::game_dir(game).map(|d| d.join("save.json"))
 }
 
 fn load(path: &Path) -> Map<String, Json> {

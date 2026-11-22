@@ -19,7 +19,7 @@ spark --version
 ```
 
 Flags: `--headless`, `--frames N`, `--screenshot PATH`, `--dump-scene`, `--size WxH`, `--fixed-dt S`,
-`--no-vsync`, `--max-fps N`, `--mute`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
+`--no-vsync`, `--max-fps N`, `--mute`, `--seed N`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
 Headless testing: `--dump-scene-json PATH|-` (scene as JSON), `--screenshot-every N` (`shot-00060.png`, ...),
 `--timeout S` (fail when the run takes longer), `--input FILE` (scripted input, one event per line):
 
@@ -84,6 +84,29 @@ executable and show a message box when there is no console.
 Splash (opt-in: `splash = true` in game.toml or `--splash`): "POWERED BY SPARK" on a dark screen (~4 s; any key / click
 after the logo has faded in skips the pause), then `start()`. `--no-splash` turns it off for one run.
 In headless mode the first script error exits with code 1 and prints file:line + a stack trace.
+
+### Error codes
+
+Typos fail loudly, with a suggestion. Reading a global nobody assigned (`mth.sin(1)`) is an error
+(`unknown global 'mth' (did you mean 'math'?)`); writing new globals is fine and `rawget(_G, "name")` returns nil.
+A global function that looks like a misspelled callback (`function Update`, `fixedUpdate`, `draw2d`) is an error:
+callbacks are lowercase snake_case (`start`, `update`, `fixed_update`, `late_update`, `render`). `on("colision", fn)` is an
+error when the name is a near miss of a built-in event; any other name is a custom event. Unknown fields on objects
+(`cube.postion = ...`) are errors for reads and writes.
+
+`spark check --json` gives every error a stable `code` (and a `hint` when the message has a "did you mean"):
+
+| Code | Meaning |
+| --- | --- |
+| `SPK-1000` | other runtime error |
+| `SPK-1001` | unknown global (never assigned) |
+| `SPK-1002` | misspelled callback (`Update` instead of `update`) |
+| `SPK-1003` | unknown built-in event (`colision` instead of `collision`) |
+| `SPK-1004` | unknown field on an object |
+| `SPK-1005` | script ran too long (infinite loop; use `wait()` inside `task(function() ... end)`) |
+| `SPK-1006` | destroyed object used (check `obj:exists()`) |
+| `SPK-1100` | syntax error |
+| `SPK-1101` | type error from `--types` (luau-lsp) |
 
 ## Conventions
 
@@ -257,6 +280,8 @@ end)
 | `length(v)`, `normalize(v)` (zero-safe), `dot(a, b)`, `cross(a, b)`, `distance(a, b)` | |
 | `lerp(a, b, t)` | numbers or vectors |
 | Luau built-ins | `math.sin`, `math.clamp`, `math.random`, `math.rad`, `math.pi`, ... |
+
+Random numbers are reproducible with `--seed N` (restarts reseed too). Headless runs, `spark check` and `spark test` use seed 0 unless you pass `--seed`; windowed runs stay random.
 
 ## Meshes, textures, materials, colors
 

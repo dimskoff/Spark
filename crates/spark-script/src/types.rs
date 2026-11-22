@@ -171,6 +171,80 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
     Ok(())
 }
 
+/// Fields and methods of an object (suggestions for "unknown field"; the real lookup is mlua's).
+const OBJ_MEMBERS: &[&str] = &[
+    "id",
+    "name",
+    "position",
+    "x",
+    "y",
+    "z",
+    "rotation",
+    "scale",
+    "visible",
+    "color",
+    "material",
+    "blend",
+    "double_sided",
+    "cast_shadow",
+    "pbr",
+    "metallic",
+    "roughness",
+    "emissive",
+    "normal_map",
+    "orm_map",
+    "lod",
+    "shader",
+    "data",
+    "mesh",
+    "parent",
+    "body",
+    "velocity",
+    "angular_velocity",
+    "mass",
+    "gravity_scale",
+    "sensor",
+    "light",
+    "on",
+    "once",
+    "emit",
+    "emit_later",
+    "after",
+    "every",
+    "exists",
+    "destroy",
+    "rotate_x",
+    "rotate_y",
+    "rotate_z",
+    "translate",
+    "look_at",
+    "place_on",
+    "set_parent",
+    "children",
+    "world_position",
+    "forward",
+    "right",
+    "up",
+    "bounds",
+    "size",
+    "distance_to",
+    "add_body",
+    "remove_body",
+    "impulse",
+    "force",
+    "torque",
+    "play",
+    "stop",
+    "is_playing",
+    "animation",
+    "animation_time",
+    "set_animation_speed",
+    "animations",
+    "find",
+    "paint",
+    "move",
+];
+
 impl UserData for Obj {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("id", |_, this| Ok(this.0.index()));
@@ -354,6 +428,13 @@ impl UserData for Obj {
                 Ok(w.scene.world_position(this.0).distance(t))
             })
         });
+        // Fallbacks, reached only for names mlua found neither as a field nor as a method: a typo, not a silent nil.
+        m.add_meta_method(MetaMethod::Index, |_, _, key: Value| -> LuaResult<Value> {
+            Err(rt(crate::names::field_error(false, "Object", &key_name(&key), OBJ_MEMBERS)))
+        });
+        m.add_meta_method(MetaMethod::NewIndex, |_, _, (key, _): (Value, Value)| -> LuaResult<()> {
+            Err(rt(crate::names::field_error(true, "Object", &key_name(&key), OBJ_MEMBERS)))
+        });
         m.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
             Ok(match other {
                 Value::UserData(ud) => ud.borrow::<Obj>().map(|o| o.0 == this.0).unwrap_or(false),
@@ -369,6 +450,13 @@ impl UserData for Obj {
                 })
             })
         });
+    }
+}
+
+fn key_name(key: &Value) -> String {
+    match key {
+        Value::String(s) => s.to_string_lossy().to_string(),
+        other => format!("{other:?}"),
     }
 }
 

@@ -2297,6 +2297,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "licenses"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "linebender_resource_handle"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

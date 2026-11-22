@@ -49,7 +49,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/release/spark.exe, target/release/spark-editor.exe, LICENSE, README.md dist/
+          Copy-Item target/release/spark.exe, target/release/spark-editor.exe, LICENSE, THIRD_PARTY_LICENSES.md, README.md dist/
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.asset }} -Force
 
       - name: Package (tar.gz)
@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp target/release/spark target/release/spark-editor LICENSE README.md install.sh dist/
+          cp target/release/spark target/release/spark-editor LICENSE THIRD_PARTY_LICENSES.md README.md install.sh dist/
           chmod +x dist/spark dist/spark-editor dist/install.sh
           tar -czf ${{ matrix.asset }} -C dist .
 
