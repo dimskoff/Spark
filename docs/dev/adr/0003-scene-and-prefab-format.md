@@ -17,9 +17,9 @@ Facts about the tree that matter: `game.toml` already is TOML (parsed by hand in
 1. **TOML**, TOML 1.0 constructs only (no multi-line inline tables), UTF-8, LF. Extensions: `.scene` (a level) and `.prefab` (a reusable subtree). Same grammar, the header table differs (`[scene]` / `[prefab]`).
 2. **Flat node list with `parent` references**, not nested tables. One `[[node]]` per object; components are sub-tables `[node.<component>]`; siblings keep file order. The writer emits depth-first pre-order (parent before children), so the file reads like the hierarchy.
 3. **Stable ids are strings, unique per file**: `id = "a1f3c09e"` (8 lowercase hex by default, any `[a-z0-9_-]{1,32}` accepted so agents may write `id = "door_leaf"`). Not path-based: renaming or reparenting must not break references, overrides or diffs. Runtime `ObjectId` (slot + generation) is unrelated and never written. Duplicate or dangling ids are load errors with line numbers.
-4. **Components** are the names of the type registry (ADR 0004): `transform`, `mesh`, `material`, `body`, `light`, `camera`, `script`, `tags`. A missing component = not present; a missing field = the registry default. The writer omits fields equal to their default, writes fields in registry declaration order, writes floats in the shortest round-trip form, normalizes `-0`. Rule: **changing a default is a breaking change** and needs a format migration (otherwise old scenes silently change).
-5. **Value encodings** (the reflection `Value`, ADR 0004): vectors `[x, y, z]`; angles in **degrees** in files and the inspector (the Luau API keeps radians; the field's unit tells the layers apart); colors `"#rrggbb"` / `"#rrggbbaa"` when exactly representable, else `[r, g, b, a]` floats; enums as strings, data-bearing enums as inline tables with a `kind` key; node references as ids; assets as strings.
-6. **Asset references** are project-relative, forward-slash paths with an optional `#fragment`: `"assets/hero.glb#Body"`. The field type is "asset path"; the reader also accepts `{ guid = "...", path = "..." }` so the GUID `.meta` work (analysis 10.4) is a reader/writer change, not a format break. Procedural meshes get a recipe (`{ primitive = "box", size = [1,1,1] }`); a mesh made at run time by `Mesh.custom` has no recipe and cannot be saved (the save reports it; it is never silently dropped).
+4. **Components** are the names of the type registry (ADR 0004): `transform`, `mesh`, `material`, `body`, `light`, `camera`, `script`, `tags`. A missing component = not present; a missing field = the registry default. The writer omits fields equal to their default, writes fields in registry declaration order, writes floats in the shortest round-trip form, normalizes `-0`. A float scalar always has a decimal point (`range = 12.0`), vector and color components do not (`[0, 3, 8]`). Rule: **changing a default is a breaking change** and needs a format migration (otherwise old scenes silently change).
+5. **Value encodings** (the reflection `Value`, ADR 0004): vectors `[x, y, z]`; angles in **degrees** in files and the inspector (the Luau API keeps radians; the field's unit tells the layers apart); colors `"#rrggbb"` / `"#rrggbbaa"` when exactly representable, else `[r, g, b, a]` floats; enums as strings, data-bearing enums as inline tables with a `type` key (`kind = { type = "spot", angle = 50.0 }`; not `kind`, which collides with fields of that name); node references as ids; assets as strings.
+6. **Asset references** are project-relative, forward-slash paths with an optional `#fragment`: `"assets/hero.glb#Body"`. The field type is "asset path"; the reader also accepts `{ guid = "...", path = "..." }` so the GUID `.meta` work (analysis 10.4) is a reader/writer change, not a format break. Procedural meshes get a recipe (`{ primitive = "box", size = [1,1,1] }`; a recipe always lists its parameters, defaults included, so it does not change when a default does; a model mesh is `asset`, `node` and `part`, the primitive index, default 0); a mesh made at run time by `Mesh.custom` has no recipe and cannot be saved (the save reports it; it is never silently dropped).
 7. **Prefabs are scenes with one root** (first `[[node]]`, no `parent`). An instance is a node with `prefab = "prefabs/door.prefab"`:
    - the instance node's own components override the prefab root's;
    - `[node.overrides]` overrides descendants, keys are `"<node id in the prefab>/<component>.<field>"`;
@@ -43,8 +43,8 @@ ambient = "#59616f"
 background = "#141a1f"
 
 [environment.sun]
-direction = [-0.4, -1.0, -0.3]
-intensity = 1.0
+direction = [-0.5, -1, -0.25]
+intensity = 1.2
 
 [[node]]
 id = "cam0"
@@ -55,7 +55,7 @@ position = [0, 3, 8]
 rotation = [-20, 0, 0]
 
 [node.camera]
-fov = 60
+fov = 60.0
 active = true
 
 [[node]]
@@ -66,10 +66,10 @@ name = "Lamp"
 position = [2, 4, 0]
 
 [node.light]
-kind = { type = "spot", angle = 50, softness = 0.3 }
+kind = { type = "spot", angle = 50.0, softness = 0.4 }
 color = "#ffe9c4"
 intensity = 3.0
-range = 12
+range = 12.0
 shadows = true
 
 [[node]]
@@ -90,7 +90,6 @@ pbr = true
 roughness = 0.6
 
 [node.body]
-kind = "dynamic"
 mass = 4.0
 bounciness = 0.2
 
@@ -136,7 +135,6 @@ node = "Frame"
 
 [node.body]
 kind = "static"
-shape = { kind = "auto" }
 
 [[node]]
 id = "leaf"
@@ -155,6 +153,19 @@ color = "#a67c52"
 ```
 
 (`tags` is a plain key of the node table because it is a list of strings; it is still the `tags` component in the registry.)
+
+Both examples are canonical: they are the golden files of the round-trip test (`crates/spark-scene/tests/data/`), so the writer's output for them is these bytes. An example that spelled out a default (`kind = "dynamic"`, `softness = 0.3`, a sun equal to the default sun, `shape = { kind = "auto" }`) or wrote `range = 12` would not survive a save, so the examples were corrected when the writer landed (C-14).
+
+### C-14 decisions (the writer and reader, `crates/spark-scene`)
+
+- Header comment: the `# ...` lines at the very start of the file are kept; everything else is rewritten canonically.
+- Key order of a node: `id`, `parent`, `name`, `visible` (only when `false`), `prefab`, `tags`; then the component tables in the order `transform`, `mesh`, `material`, `body`, `light`, `camera`, `script`, then `overrides`. A required component (`transform`, `material`) at its defaults is omitted; an optional one that is present is written even when empty (`[node.body]`).
+- `[environment]` carries `ambient` and `background`; `[environment.sun]`, `.fog` and `.sky` follow. Every field at its default is omitted (a default sun writes nothing); a present `fog` / `sky` is always written, as it is optional.
+- Rotations are rounded to 4 decimals of a degree when captured: an Euler angle recovered from a quaternion has `f32` noise, and without rounding two saves of one scene could differ.
+- Spot angles are radians in the registry and degrees in files; the writer prints the fewest decimals that convert back to the same `f32`.
+- `camera`, `script`, `tags`, prefab instances and `overrides` are read and written (so a file survives a load and save) but not interpreted before C-16 / C-17 / C-15; instantiating such a file reports what it ignored.
+- A mesh made by `Mesh.custom`, a texture or other runtime handle cannot be saved: `to_string` fails and names the node (and the component); `to_string_lossy` saves the rest and returns the same list.
+- Format version 0 is the draft of this ADR (data-bearing enum tables named their variant with `kind`); `spark migrate` turns it into version 1.
 
 ## Consequences
 

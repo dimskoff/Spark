@@ -4085,6 +4085,7 @@ dependencies = [
  "spark",
  "spark-api",
  "spark-project",
+ "spark-scene",
  "windows-sys 0.61.2",
 ]
 
@@ -4191,6 +4192,15 @@ dependencies = [
  "pollster 1.0.1",
  "spark-core",
  "wgpu",
+]
+
+[[package]]
+name = "spark-scene"
+version = "0.1.0"
+dependencies = [
+ "spark-core",
+ "spark-reflect",
+ "toml",
 ]
 
 [[package]]

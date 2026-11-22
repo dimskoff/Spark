@@ -27,6 +27,7 @@ spark-project = { path = "crates/spark-project" }
 spark-api = { path = "crates/spark-api" }
 spark-reflect = { path = "crates/spark-reflect" }
 spark-reflect-derive = { path = "crates/spark-reflect-derive" }
+spark-scene = { path = "crates/spark-scene" }
 
 glam = { version = "0.34", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }

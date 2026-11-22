@@ -16,6 +16,7 @@ pub mod canvas;
 pub mod color;
 pub mod command;
 pub mod debug;
+pub mod doc;
 pub mod events;
 pub mod fbx;
 pub mod game;
@@ -53,6 +54,7 @@ pub use canvas::{Align, Batch, Canvas, CanvasTexture, Layer, LayerData, SpritePa
 pub use color::Color;
 pub use command::{Applied, Command, CommandError, ComponentState, MeshDoc, MeshState, NodeDoc, SceneDoc};
 pub use debug::{DebugLine, DebugOverlay};
+pub use doc::{Environment, FileKind, FileNode, InstantiateError, Instantiated, SceneFile};
 pub use events::{EventBus, ListenerId};
 pub use game::{Game, run_frame};
 pub use history::{Entry, History};

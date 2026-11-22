@@ -8,6 +8,7 @@
 //! `spark update [version]` - replace this spark executable with a GitHub release (Windows, Linux, macOS).
 //! `spark check path/to/game [--frames N] [--json]` - find script errors headless, without a window or GPU.
 //! `spark test path/to/game [NAME...] [--update] [--json]` - scenario tests in `tests/` (see `test.rs`).
+//! `spark migrate [--check] [--json] <path>...` - bring `.scene` / `.prefab` files to the current format (see `migrate.rs`).
 //!
 //! `spark build path/to/game` - a player build: ONE executable (this binary, no console window) with
 //! every game file packed inside, plus a .zip. When such an executable starts it runs its packed game.
@@ -22,6 +23,7 @@ mod editor;
 #[allow(unsafe_code)] // the only unsafe code of this crate: Win32 resource calls (see icon.rs)
 mod icon;
 mod mcp;
+mod migrate;
 mod new;
 mod test;
 mod update;
@@ -57,6 +59,8 @@ const USAGE: &str = "Usage:
   spark inspect path/to/game              dump the scene (objects, positions, bounds) [--frames N] [--json]
   spark golden path/to/game               compare a render with tests/golden.png [--update] [--tolerance T] [--json]
   spark diff a.png b.png                  compare two images [--tolerance T] [--out diff.png] [--json]
+  spark migrate <path>...                 bring .scene / .prefab files (or a folder of them) to the current format
+                [--check]                 write nothing; exit 1 when a file needs migration   [--json]
   spark mcp                               Model Context Protocol server on stdio (for AI agents)
   spark licenses                          print the third-party license notices (also shipped as THIRD_PARTY_LICENSES.txt with every build)
   spark update [version]                  download the latest (or given) Spark release from GitHub
@@ -99,6 +103,7 @@ fn main() {
             print!("{THIRD_PARTY_LICENSES}");
             return;
         }
+        Some("migrate") => std::process::exit(migrate::run(rest)),
         Some("mcp") => std::process::exit(mcp::run(rest)),
         Some("screenshot") => std::process::exit(visual::screenshot(rest)),
         Some("inspect") => std::process::exit(visual::inspect(rest)),

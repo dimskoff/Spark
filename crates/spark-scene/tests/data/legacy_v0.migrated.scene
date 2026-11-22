@@ -1,0 +1,19 @@
+[scene]
+format_version = 1
+name = "Old"
+
+[[node]]
+id = "lamp"
+name = "Lamp"
+
+[node.light]
+kind = { type = "spot", angle = 50.0 }
+range = 12.0
+
+[[node]]
+id = "block"
+name = "Block"
+
+[node.body]
+kind = "static"
+shape = { type = "box", size = [2, 1, 2] }

@@ -1,0 +1,71 @@
+# Arena: first test level
+[scene]
+format_version = 1
+name = "Arena"
+
+[environment]
+ambient = "#59616f"
+background = "#141a1f"
+
+[environment.sun]
+direction = [-0.5, -1, -0.25]
+intensity = 1.2
+
+[[node]]
+id = "cam0"
+name = "Camera"
+
+[node.transform]
+position = [0, 3, 8]
+rotation = [-20, 0, 0]
+
+[node.camera]
+fov = 60.0
+active = true
+
+[[node]]
+id = "lamp"
+name = "Lamp"
+
+[node.transform]
+position = [2, 4, 0]
+
+[node.light]
+kind = { type = "spot", angle = 50.0, softness = 0.4 }
+color = "#ffe9c4"
+intensity = 3.0
+range = 12.0
+shadows = true
+
+[[node]]
+id = "crate"
+name = "Crate"
+tags = ["pickup", "wood"]
+
+[node.transform]
+position = [0, 0.5, 0]
+
+[node.mesh]
+primitive = "box"
+size = [1, 1, 1]
+
+[node.material]
+color = "#d8a45a"
+pbr = true
+roughness = 0.6
+
+[node.body]
+mass = 4.0
+bounciness = 0.2
+
+[[node]]
+id = "door1"
+name = "Door A"
+prefab = "prefabs/door.prefab"
+
+[node.transform]
+position = [4, 0, -2]
+
+[node.overrides]
+"leaf/material.color" = "#8a3b2f"
+"leaf/transform.rotation" = [0, 90, 0]

@@ -548,7 +548,7 @@ impl World {
         })
     }
 
-    fn mesh_state(&self, o: &Object) -> Option<MeshState> {
+    pub(crate) fn mesh_state(&self, o: &Object) -> Option<MeshState> {
         let doc = |m: MeshId| MeshDoc { source: self.assets.mesh_source(m).clone(), handle: Some(m) };
         o.mesh.map(|m| MeshState { mesh: doc(m), lod: o.lod.iter().map(|&(d, m)| (d, doc(m))).collect() })
     }
