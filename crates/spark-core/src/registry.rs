@@ -192,6 +192,8 @@ pub const OBJECT_FIELDS: &[(&str, FieldDecision)] = &[
     ("lod", FieldDecision::Component("mesh")),
     ("material", FieldDecision::Component("material")),
     ("visible", FieldDecision::Node),
+    // The stable id is not a property (never set through a path); `crate::node_id` owns it.
+    ("node_id", FieldDecision::Runtime),
     ("body", FieldDecision::Component("body")),
     ("light", FieldDecision::Component("light")),
     ("parent", FieldDecision::Hierarchy),
@@ -440,7 +442,7 @@ mod tests {
             }};
         }
         let mut destructured =
-            object_fields!(name, transform, mesh, lod, material, visible, body, light, parent, children, local_bounds, interp);
+            object_fields!(name, transform, mesh, lod, material, visible, body, light, node_id, parent, children, local_bounds, interp);
         let mut listed: Vec<&str> = OBJECT_FIELDS.iter().map(|(n, _)| *n).collect();
         destructured.sort_unstable();
         listed.sort_unstable();

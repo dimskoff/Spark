@@ -43,6 +43,8 @@ pub struct World {
     pub debug: crate::debug::DebugOverlay,
     /// Immediate-mode UI state (buttons, sliders, panels).
     pub ui: crate::ui::Ui,
+    /// `NodeId -> ObjectId` table (see [`crate::node_id`]).
+    pub(crate) nodes: crate::node_id::NodeIndex,
     quit: bool,
     restart: bool,
 }
@@ -103,6 +105,7 @@ impl World {
     /// Used by hot reload.
     pub fn reset(&mut self) {
         self.scene = Scene::new();
+        self.nodes.clear();
         self.physics.clear();
         self.physics.gravity = Physics::default().gravity;
         self.physics.enabled = true;

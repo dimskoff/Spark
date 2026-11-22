@@ -9,6 +9,7 @@ use crate::color::Color;
 use crate::material::Material;
 use crate::math::look_rotation;
 use crate::mesh::Aabb;
+use crate::node_id::NodeId;
 use crate::physics::Body;
 
 /// Handle to an object in a [`Scene`]. Stays valid until the object is destroyed.
@@ -76,6 +77,8 @@ pub struct Object {
     pub body: Option<Body>,
     /// Light emitted from the object's position (spot lights shine along -Z).
     pub light: Option<Light>,
+    /// Stable id for commands and scene files, assigned lazily (see [`crate::node_id`]). Cleared by [`Scene::add`].
+    pub(crate) node_id: Option<NodeId>,
     pub(crate) parent: Option<ObjectId>,
     /// Direct children (kept in sync by `Scene::set_parent` / `destroy`).
     pub(crate) children: Vec<ObjectId>,
@@ -107,6 +110,7 @@ impl Object {
             visible: true,
             body: None,
             light: None,
+            node_id: None,
             parent: None,
             children: Vec::new(),
             local_bounds: Aabb::EMPTY,
@@ -140,6 +144,11 @@ impl Object {
 
     pub fn parent(&self) -> Option<ObjectId> {
         self.parent
+    }
+
+    /// Stable node id, if one was assigned (see [`crate::World::node_id`]).
+    pub fn node_id(&self) -> Option<&NodeId> {
+        self.node_id.as_ref()
     }
 
     /// Mesh bounds in the object's own space (no transform applied).
@@ -390,6 +399,7 @@ impl Scene {
     pub fn add(&mut self, mut object: Object) -> ObjectId {
         self.count += 1;
         object.children.clear();
+        object.node_id = None; // ids are bound by `World` (a cloned object must not share one)
         let parent = object.parent.filter(|p| self.contains(*p));
         object.parent = parent;
         let id = if let Some(index) = self.free.pop() {
