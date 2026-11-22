@@ -77,3 +77,26 @@ fn registry_names_get_suggested_for_typos() {
         assert!(e.contains(&format!("did you mean '{right}'?")), "{typo}: {e}");
     }
 }
+
+/// The generated accessors keep the argument forms and error texts the hand-written ones had (C-7).
+#[test]
+fn generated_accessors_keep_forms_and_errors() {
+    let ok = "local o = spawn(Mesh.cube(), \"red\")\n\
+        o.position = vec3(1, 2, 3)\no.position = {x = 1, y = 2, z = 3}\no.position = {4, 5, 6}\n\
+        assert(o.position == vec3(4, 5, 6))\no.scale = 2\nassert(o.scale == vec3(2, 2, 2))\no.scale = vec3(1, 2, 3)\n\
+        o.rotation = vec3(0.5, 0, 0)\nassert(math.abs(o.rotation.x - 0.5) < 1e-5)\n\
+        o.name = \"a\"\nassert(o.name == \"a\")\no.visible = false\nassert(o.visible == false)\no.visible = 1\nassert(o.visible == true)\n";
+    assert_eq!(run(ok), None);
+    for (stmt, msg) in [
+        ("o.position = \"x\"", "position: expected a vector like vec3(1, 2, 3), got string"),
+        ("o.rotation = true", "rotation: expected a vector like vec3(1, 2, 3), got boolean"),
+        ("o.scale = nil", "scale: expected a vector like vec3(1, 2, 3), got nil"),
+        ("o.name = 5", "name: expected a string, got integer"),
+        ("o.position = {x = 0/0}", "position: expected a finite number, got NaN"),
+    ] {
+        let e = run(&format!("local o = spawn(Mesh.cube(), \"red\")\n{stmt}\n")).expect("an error");
+        assert!(e.contains(msg), "{stmt}: {e}");
+    }
+    let e = run("local o = spawn(Mesh.cube(), \"red\")\no:destroy()\no.visible = true\n").expect("an error");
+    assert!(e.contains("object was destroyed"), "{e}");
+}

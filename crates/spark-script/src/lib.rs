@@ -27,6 +27,7 @@ mod model;
 mod modules;
 mod names;
 mod physics;
+mod reflect_bind;
 mod runtime;
 mod save;
 mod shader;

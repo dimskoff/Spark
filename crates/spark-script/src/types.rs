@@ -9,7 +9,7 @@ use crate::convert::*;
 #[derive(Clone, Copy)]
 pub struct Obj(pub ObjectId);
 
-fn read<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(&World, &Object) -> R) -> LuaResult<R> {
+pub(crate) fn read<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(&World, &Object) -> R) -> LuaResult<R> {
     with(lua, |w| {
         let w: &World = w;
         let o = w.scene.get(id).ok_or_else(dead)?;
@@ -17,7 +17,7 @@ fn read<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(&World, &Object) -> R) -> Lua
     })
 }
 
-fn write(lua: &Lua, id: ObjectId, f: impl FnOnce(&mut Object)) -> LuaResult<()> {
+pub(crate) fn write(lua: &Lua, id: ObjectId, f: impl FnOnce(&mut Object)) -> LuaResult<()> {
     with(lua, |w| {
         f(w.scene.get_mut(id).ok_or_else(dead)?);
         Ok(())
@@ -233,34 +233,14 @@ pub fn object_member_names() -> Vec<&'static str> {
 impl UserData for Obj {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("id", |_, this| Ok(this.0.index()));
-        f.add_field_method_get("name", |lua, this| read(lua, this.0, |_, o| o.name.clone()));
-        f.add_field_method_set("name", |lua, this, v: Value| {
-            let name = to_str(&v, "name")?;
-            write(lua, this.0, |o| o.name = name)
-        });
-        f.add_field_method_get("position", |lua, this| read(lua, this.0, |_, o| vv(o.transform.position)));
-        f.add_field_method_set("position", |lua, this, v: Value| {
-            let p = to_vec3(&v, "position")?;
-            write(lua, this.0, |o| o.transform.position = p)
-        });
+        // name, visible, position, rotation, scale: generated from the component registry.
+        crate::reflect_bind::add_fields(f);
         f.add_field_method_get("x", |lua, this| read(lua, this.0, |_, o| o.transform.position.x));
         f.add_field_method_get("y", |lua, this| read(lua, this.0, |_, o| o.transform.position.y));
         f.add_field_method_get("z", |lua, this| read(lua, this.0, |_, o| o.transform.position.z));
         f.add_field_method_set("x", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.x = v));
         f.add_field_method_set("y", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.y = v));
         f.add_field_method_set("z", |lua, this, Num(v): Num| write(lua, this.0, |o| o.transform.position.z = v));
-        f.add_field_method_get("rotation", |lua, this| read(lua, this.0, |_, o| vv(euler(o.transform.rotation))));
-        f.add_field_method_set("rotation", |lua, this, v: Value| {
-            let r = from_euler(to_vec3(&v, "rotation")?);
-            write(lua, this.0, |o| o.transform.rotation = r)
-        });
-        f.add_field_method_get("scale", |lua, this| read(lua, this.0, |_, o| vv(o.transform.scale)));
-        f.add_field_method_set("scale", |lua, this, v: Value| {
-            let s = to_scale(&v, "scale")?;
-            write(lua, this.0, |o| o.transform.scale = s)
-        });
-        f.add_field_method_get("visible", |lua, this| read(lua, this.0, |_, o| o.visible));
-        f.add_field_method_set("visible", |lua, this, v: bool| write(lua, this.0, |o| o.visible = v));
         f.add_field_method_get("color", |lua, this| read(lua, this.0, |_, o| LuaColor(o.material.color)));
         f.add_field_method_set("color", |lua, this, v: Value| {
             let c = to_color(&v, "color")?;
