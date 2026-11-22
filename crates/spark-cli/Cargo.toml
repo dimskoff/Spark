@@ -27,6 +27,8 @@ mlua.workspace = true
 serde_json.workspace = true
 # `spark migrate`: .scene / .prefab files (ADR 0003).
 spark-scene.workspace = true
+# MCP: scene_apply commands (JSON form) and the live link to a running game (attach).
+spark-devtools.workspace = true
 # spark api search, the MCP docs tools.
 spark-api.workspace = true
 # `spark build`: exe / .app icons from game.toml `icon`.

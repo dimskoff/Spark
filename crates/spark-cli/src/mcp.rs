@@ -4,8 +4,8 @@
 //! runs the matching `spark <command> --json` as a child process (same executable), so the MCP results are exactly what
 //! the CLI prints and a crash in a game cannot take the server down.
 //!
-//! Not (yet) here: attaching to a running game window (pause, step, live scene edits). That needs the token-authenticated
-//! devtools protocol; see docs/ROADMAP.md.
+//! Scene and live-game tools (`scene_read`, `scene_apply`, `attach`, `game_control`, `detach`) run in this process:
+//! see `mcp_scene.rs` and docs/dev/adr/0006-module-hot-reload-and-mcp-scene-tools.md.
 
 use std::io::{BufRead, Write};
 
@@ -27,6 +27,12 @@ fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value
 }
 
 pub fn tools() -> Vec<Value> {
+    let mut all = base_tools();
+    all.extend(crate::mcp_scene::tools());
+    all
+}
+
+fn base_tools() -> Vec<Value> {
     vec![
         tool(
             "spark_new",
@@ -143,6 +149,9 @@ fn from_child(command: &[String]) -> Out {
 }
 
 fn call(name: &str, a: &Value) -> Result<Out, String> {
+    if let Some(r) = crate::mcp_scene::call(name, a) {
+        return r.map(|(text, error)| Out { text, image: None, error });
+    }
     let s = |v: &str| v.to_string();
     let path = |req| safe_path(a, req);
     Ok(match name {
@@ -338,7 +347,12 @@ mod tests {
         assert!(handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"})).is_none());
         let r = handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).unwrap();
         let names: Vec<&str> = r["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert!(names.contains(&"spark_check") && names.contains(&"spark_screenshot"));
+        assert!(
+            names.contains(&"spark_check")
+                && names.contains(&"spark_screenshot")
+                && names.contains(&"scene_apply")
+                && names.contains(&"attach")
+        );
         let r = handle(&json!({"jsonrpc":"2.0","id":3,"method":"nope"})).unwrap();
         assert_eq!(r["error"]["code"], -32601);
     }

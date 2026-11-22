@@ -23,6 +23,7 @@ mod editor;
 #[allow(unsafe_code)] // the only unsafe code of this crate: Win32 resource calls (see icon.rs)
 mod icon;
 mod mcp;
+mod mcp_scene;
 mod migrate;
 mod new;
 mod test;

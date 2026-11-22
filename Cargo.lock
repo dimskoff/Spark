@@ -4084,6 +4084,7 @@ dependencies = [
  "serde_json",
  "spark",
  "spark-api",
+ "spark-devtools",
  "spark-project",
  "spark-scene",
  "windows-sys 0.61.2",
