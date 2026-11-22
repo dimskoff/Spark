@@ -9,6 +9,38 @@ use spark_core::glam::Quat;
 use spark_core::*;
 use spark_core::{Material, MeshData};
 
+/// GPU tests share one process-wide lock: creating several wgpu instances/devices at once has
+/// deadlocked inside the Windows driver under CPU/GPU contention (a full `cargo test --workspace`
+/// hung for 20+ minutes). The guard also arms a watchdog so a stuck test fails loudly after
+/// `GPU_TEST_TIMEOUT` instead of hanging CI forever.
+const GPU_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+struct GpuGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    done: std::sync::mpsc::Sender<()>,
+}
+
+impl Drop for GpuGuard {
+    fn drop(&mut self) {
+        let _ = self.done.send(());
+    }
+}
+
+fn gpu_guard() -> GpuGuard {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let name = std::thread::current().name().unwrap_or("?").to_string();
+    let (done, rx) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        if rx.recv_timeout(GPU_TEST_TIMEOUT) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
+            eprintln!(
+                "GPU test `{name}` made no progress for {GPU_TEST_TIMEOUT:?}: the GPU driver is hung (device creation, shader compile or readback). Aborting."
+            );
+            std::process::exit(101);
+        }
+    });
+    GpuGuard { _lock: lock, done }
+}
 #[test]
 fn uniforms_are_16_byte_aligned() {
     assert_eq!(size_of::<FrameUniform>() % 16, 0);
@@ -74,6 +106,7 @@ fn normal_matrix_degenerate_is_identity() {
 /// Skipped when the machine has no GPU / software Vulkan (CI installs lavapipe).
 #[test]
 fn headless_render_draws_scene() {
+    let _gpu = gpu_guard();
     let mut r = match Renderer::new_headless(64, 64) {
         Ok(r) => r,
         Err(e) => {
@@ -100,6 +133,7 @@ fn headless_render_draws_scene() {
 /// A material at 20% alpha is faint, not gone (the opaque cutout of 0.3 must not apply to blended materials).
 #[test]
 fn faint_alpha_material_is_still_drawn() {
+    let _gpu = gpu_guard();
     let mut r = match Renderer::new_headless(64, 64) {
         Ok(r) => r,
         Err(e) => {
@@ -133,6 +167,7 @@ fn test_world() -> World {
 #[test]
 fn builtin_effects_render() {
     use spark_core::render::*;
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(96, 64) else { return eprintln!("skipping GPU test: no adapter") };
     let mut world = test_world();
     world.render.postfx = PostProcessing {
@@ -163,6 +198,7 @@ fn builtin_effects_render() {
 #[test]
 fn pbr_normal_map_and_lod_render() {
     use spark_core::ImageData;
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(64, 64) else { return eprintln!("skipping GPU test: no adapter") };
     let mut world = World::default();
     world.scene.background = Color::BLACK;
@@ -196,6 +232,7 @@ fn pbr_normal_map_and_lod_render() {
 #[test]
 fn light_shadow_cube_faces_keep_their_casters() {
     use spark_core::Light;
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(64, 64) else { return eprintln!("skipping GPU test: no adapter") };
     let mut world = World::default();
     world.scene.background = Color::BLACK;
@@ -240,6 +277,7 @@ fn light_shadow_cube_faces_keep_their_casters() {
 /// draws its LOD mesh instead (here a small cube that leaves the edge pixels empty).
 #[test]
 fn emissive_and_lod_switch() {
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(64, 64) else { return eprintln!("skipping GPU test: no adapter") };
     let mut world = World::default();
     world.scene.background = Color::BLACK;
@@ -264,6 +302,7 @@ fn emissive_and_lod_switch() {
 #[test]
 fn sky_gradient_and_cubemap() {
     use spark_core::{ImageData, Sky};
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(32, 32) else { return eprintln!("skipping GPU test: no adapter") };
     let mut world = World::default();
     world.scene.background = Color::BLACK;
@@ -299,6 +338,7 @@ fn sky_gradient_and_cubemap() {
 #[test]
 fn sky_lights_the_scene() {
     use spark_core::Sky;
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(32, 32) else { return eprintln!("skipping GPU test: no adapter") };
     let mut world = World::default();
     world.scene.ambient = Color::BLACK;
@@ -324,6 +364,7 @@ fn sky_lights_the_scene() {
 #[test]
 fn hdr_scene_reaches_tonemapper() {
     use spark_core::render::Tonemap;
+    let _gpu = gpu_guard();
     let Ok(mut r) = Renderer::new_headless(64, 64) else { return eprintln!("skipping GPU test: no adapter") };
     if r.scene_format != HDR_FORMAT {
         return eprintln!("skipping: adapter has no HDR render target");
