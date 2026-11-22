@@ -178,7 +178,15 @@ function update(dt) player:update(dt) end
   game folder (where main.luau is). `.luau` is added; `require("./src/ui")` also finds `src/ui/init.luau`.
   A bare name (`require("player")`) is an error with a hint.
 - A module runs **once**; its return value is cached and shared by every `require` of the same file.
-- Saving **any** required file reloads the whole game (like saving main.luau).
+- **Hot reload of modules.** Saving `main.luau` restarts the game. Saving a required module reloads only that module
+  (the scene, objects and loaded assets stay): the file runs again and its returned table is updated **in place**, so
+  every `local Player = require(...)` and every object script sees the new functions. Fields that are gone are removed.
+  A module may define `function Player.on_reload(old) ... end`; it runs after the swap with a copy of the table as it
+  was (`old.count`), the place to carry state over. Objects you created with `setmetatable(o, Player)` keep working.
+  Local variables inside the module start fresh. A module that returns a function (not a table) restarts the game. A
+  module that fails to load keeps its old version running and shows a "Module error" banner until you save a fix.
+  Scripts attached to objects keep their `self` state (no `start` / `on_destroy` again); an instance that had failed is
+  recreated with its props and `start` runs.
 - Errors name the module file and line: `src/ui/hud.luau:42: ...`.
 - Cycles (`a` requires `b` requires `a` while loading) are an error that shows the chain
   (`src/a.luau -> src/b.luau -> src/a.luau`): move the shared part into a third module or require inside a function.
@@ -425,7 +433,8 @@ In a `.scene` / `.prefab` file the same is `[node.script]` with `path = "src/doo
   at the first frame stage after the script was attached (so `door:attach_script(...)` in `start()` works).
   `on_destroy` runs when the object is destroyed (`obj:destroy()` / `destroy(obj)`: the object still exists; any other
   removal: it is already gone, only `self` state is usable) or the script is detached or replaced. A game restart or
-  hot reload recreates everything without calling `on_destroy`.
+  a save of `main.luau` recreates everything without calling `on_destroy`. Saving only a script file (or any module it
+  requires) keeps the objects and their `self` state and swaps the code (see "Hot reload of modules" below).
 - **`self`**: a table per object. `self.object` is the `Object`. Reading or writing a member of the Object on `self`
   (`self.position`, `self.visible`, `self:rotate_y(a)`) goes to the object; any other key is your own instance state
   (`self.closed`). Methods of the module are found on `self` too. `self.object:rotate_y(a)` skips the forwarding and is

@@ -188,11 +188,18 @@ const MAX_TOKENS: usize = 256;
 pub(crate) struct CommandHost {
     next_token: u64,
     stored: VecDeque<(u64, Command)>,
+    /// `World::resets` when the tokens were made: a restart (hot reload of `main.luau`, Reload) clears the scene, so
+    /// the node ids and handles inside the stored commands are stale.
+    seen_resets: u64,
 }
 
 impl CommandHost {
     /// Applies one JSON command and builds the answer.
     pub fn run(&mut self, world: &mut World, request: u64, json: &serde_json::Value) -> CommandResult {
+        if self.seen_resets != world.resets() {
+            self.seen_resets = world.resets();
+            self.stored.clear();
+        }
         let cmd = match command_from_json(json, &|t| self.stored.iter().find(|(k, _)| *k == t).map(|(_, c)| c.clone())) {
             Ok(c) => c,
             Err(e) => return CommandResult::failure(request, CommandErrorInfo::from_json_error(&e)),

@@ -104,6 +104,12 @@ pub struct ScriptGame {
     /// What the error screen shows (built once per error).
     error_view: Option<error_screen::ErrorView>,
     shader_view: Option<error_screen::ErrorView>,
+    /// A hot-reloaded module that did not load (the old version keeps running).
+    module_error: Option<String>,
+    module_view: Option<error_screen::ErrorView>,
+    /// How many single-module hot reloads ran, and how long the last one took (see `ScriptGame::module_reloads`).
+    module_reloads: u32,
+    last_module_reload: Option<Duration>,
     /// `math.random` seed applied on every (re)load.
     seed: Option<u64>,
     log_dir: Option<PathBuf>,
@@ -150,6 +156,10 @@ impl ScriptGame {
             test: None,
             error_view: None,
             shader_view: None,
+            module_error: None,
+            module_view: None,
+            module_reloads: 0,
+            last_module_reload: None,
             seed: None,
             log_dir: None,
             objects: Rc::new(RefCell::new(object_scripts::ObjectScripts::new(Rc::default(), Duration::from_secs(5), false))),
@@ -297,6 +307,8 @@ impl ScriptGame {
         self.drop_lua();
         self.error = None;
         self.error_view = None;
+        self.module_error = None;
+        self.module_view = None;
         self.modified = modified(&self.path);
         self.frame_started = world.time.frame;
         world.reset();
@@ -407,23 +419,81 @@ impl ScriptGame {
         }
     }
 
-    /// Hot reload: the script (restarts the game) or single shaders (the game keeps running).
-    fn poll_files(&mut self, world: &mut World) {
-        if !self.hot_reload || self.last_check.elapsed() < Duration::from_millis(300) {
+    /// How many times a single module was hot-reloaded without restarting the game, and the time the last one took
+    /// (from the change being noticed to the game running again; ADR 0006).
+    pub fn module_reloads(&self) -> (u32, Option<Duration>) {
+        (self.module_reloads, self.last_module_reload)
+    }
+
+    /// Hot reload of changed modules (ADR 0006): the files are run again and their tables updated in place, the
+    /// scripts on objects are refreshed; the world, the objects and every loaded asset stay. Falls back to a restart
+    /// when a module cannot be swapped (it returns a function, not a table).
+    fn reload_modules(&mut self, world: &mut World, changed: Vec<PathBuf>) {
+        let started = Instant::now();
+        let root = self.root();
+        let rels: Vec<String> = changed.iter().map(|p| p.strip_prefix(&root).unwrap_or(p).to_string_lossy().replace('\\', "/")).collect();
+        let mut restart: Option<String> = None;
+        let mut problems: Vec<String> = Vec::new();
+        self.run(world, |lua| {
+            for (p, rel) in changed.iter().zip(&rels) {
+                match modules::reload(lua, p) {
+                    Ok(modules::Reload::InPlace) => {}
+                    Ok(modules::Reload::NeedsRestart(why)) => {
+                        restart = Some(why);
+                        return Ok(());
+                    }
+                    Err(e) => problems.push(format!("{rel}: {}", names::clean_error(&e.to_string()))),
+                }
+            }
+            object_scripts::refresh(lua, &rels, &mut problems)
+        });
+        if self.error.is_some() {
             return;
         }
-        self.last_check = Instant::now();
-        let m = modified(&self.path);
-        let changed_module = self
-            .modules
-            .as_ref()
-            .and_then(|ms| ms.borrow().files.iter().find(|(p, t)| t.is_some() && modified(p) != *t).map(|(p, _)| p.clone()));
-        if (m.is_some() && m != self.modified) || changed_module.is_some() {
-            log::info!("reloading {}", changed_module.as_deref().unwrap_or(&self.path).display());
+        if let Some(why) = restart {
+            log::info!("restarting: {why}");
             self.shader_mtimes.clear();
             self.shader_error = None;
             self.shader_view = None;
             self.load(world);
+            return;
+        }
+        self.last_module_reload = Some(started.elapsed());
+        self.module_reloads += 1;
+        if problems.is_empty() {
+            log::info!("module reloaded: {} ({:.1} ms)", rels.join(", "), started.elapsed().as_secs_f64() * 1000.0);
+            self.module_error = None;
+            self.module_view = None;
+        } else {
+            let msg = problems.join("\n");
+            log::error!("module not reloaded, the previous version keeps running: {msg}");
+            let hint = "Fix the module and save it: it reloads automatically (the previous version keeps running).";
+            self.module_view = Some(error_screen::ErrorView::new("Module error", &msg, &self.root(), hint));
+            self.module_error = Some(msg);
+        }
+    }
+
+    /// Hot reload: the script (restarts the game), single modules and shaders (the game keeps running).
+    fn poll_files(&mut self, world: &mut World) {
+        if !self.hot_reload || self.last_check.elapsed() < POLL_EVERY {
+            return;
+        }
+        self.last_check = Instant::now();
+        let m = modified(&self.path);
+        let changed = self.modules.as_ref().map(modules::changed).unwrap_or_default();
+        let main_changed = m.is_some() && m != self.modified;
+        if main_changed || (!changed.is_empty() && self.error.is_some()) {
+            log::info!("reloading {}", if main_changed { &self.path } else { &changed[0] }.display());
+            self.shader_mtimes.clear();
+            self.shader_error = None;
+            self.shader_view = None;
+            self.module_error = None;
+            self.module_view = None;
+            self.load(world);
+            return;
+        }
+        if !changed.is_empty() {
+            self.reload_modules(world, changed);
             return;
         }
         let files: Vec<(PathBuf, spark_core::ShaderId)> = world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
@@ -484,6 +554,9 @@ impl ScriptGame {
 fn modified(path: &Path) -> Option<SystemTime> {
     spark_core::vfs::modified(path)
 }
+
+/// How often the watched files are checked for changes (a few `stat` calls: cheap).
+const POLL_EVERY: Duration = Duration::from_millis(50);
 
 /// Most memory one game's Luau state may use: past it an allocation is a Lua error ("not enough memory"), not an OOM kill.
 const MEMORY_LIMIT: usize = 1 << 30;
@@ -641,7 +714,7 @@ impl Game for ScriptGame {
             save::flush_frame(lua);
             Ok(())
         });
-        if let Some(v) = &self.shader_view {
+        if let Some(v) = self.shader_view.as_ref().or(self.module_view.as_ref()) {
             error_screen::draw(world, v);
         }
         let failed = self.objects.borrow().failed();
@@ -651,7 +724,7 @@ impl Game for ScriptGame {
     }
 
     fn error(&self) -> Option<&str> {
-        self.error.as_deref().or(self.shader_error.as_deref())
+        self.error.as_deref().or(self.shader_error.as_deref()).or(self.module_error.as_deref())
     }
 }
 

@@ -536,6 +536,79 @@ pub(crate) fn sync(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
+/// Hot reload of modules (ADR 0006): the scripts whose file is in `changed` (game-relative paths) are loaded again.
+///
+/// * A running instance **keeps its `self` table** (props, everything the script stored); it gets the new metatable,
+///   the new callbacks, and the defaults of props that did not exist before. No `on_destroy` / `start` runs: the
+///   object did not go away, only its code changed. The module's own `on_reload(old)` hook is the place to fix up state.
+/// * An instance that had failed (an error in a callback, or the script did not load) is made again from scratch
+///   with the props of its component, and `start` runs: saving a fix gives the object another try.
+/// * A script that does not load now keeps running with its previous code; the problem is added to `errors`.
+pub(crate) fn refresh(lua: &Lua, changed: &[String], errors: &mut Vec<String>) -> LuaResult<()> {
+    let Some(st) = shared(lua) else { return Ok(()) };
+    let members = st.borrow().members.clone();
+    let paths: Vec<String> =
+        st.borrow().classes.keys().filter(|p| crate::modules::game_file(lua, p).is_some_and(|f| changed.contains(&f))).cloned().collect();
+    for path in &paths {
+        match load_class(lua, &members, path) {
+            Ok(c) => {
+                st.borrow_mut().classes.insert(path.clone(), Ok(c));
+            }
+            Err(e) => {
+                errors.push(e.clone());
+                let mut s = st.borrow_mut();
+                if s.classes.get(path).is_some_and(|c| c.is_err()) {
+                    s.classes.insert(path.clone(), Err(e));
+                }
+            }
+        }
+    }
+    let mut again = Vec::new();
+    let count = st.borrow().instances.len();
+    for n in 0..count {
+        let (state, path, this) = {
+            let s = st.borrow();
+            let i = &s.instances[n];
+            (i.state, i.path.clone(), i.this.clone())
+        };
+        let Some(Ok(class)) = st.borrow().classes.get(&path).cloned() else { continue };
+        if !paths.contains(&path) {
+            continue;
+        }
+        match (state, this) {
+            (State::Running, Some(this)) => {
+                this.set_metatable(Some(class.meta.clone()))?;
+                for (k, v) in &class.props {
+                    if this.raw_get::<Value>(k.as_str())?.is_nil() {
+                        this.raw_set(k.as_str(), deep_copy(lua, v, 0)?)?;
+                    }
+                }
+                st.borrow_mut().instances[n].class = Some(class);
+            }
+            (State::Failed, _) => again.push(n),
+            _ => {}
+        }
+    }
+    let mut redo = Vec::new();
+    {
+        let mut s = st.borrow_mut();
+        for n in again {
+            let (seq, id) = (s.instances[n].seq, s.instances[n].id);
+            s.instances[n].state = State::Gone;
+            s.failed = s.failed.saturating_sub(1);
+            redo.push((seq, id));
+        }
+        s.compact();
+    }
+    for (seq, id) in redo {
+        attach(lua, &st, seq, id)?;
+    }
+    let mut s = st.borrow_mut();
+    s.instances.sort_by_key(|i| i.seq);
+    s.compact();
+    Ok(())
+}
+
 /// Creates the instance of object `id` and runs its `start`.
 fn attach(lua: &Lua, st: &SharedObjects, seq: u64, id: ObjectId) -> LuaResult<()> {
     let Some(script) = with(lua, |w| Ok(w.scene.get(id).and_then(|o| o.script().cloned())))? else { return Ok(()) };

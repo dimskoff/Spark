@@ -67,6 +67,7 @@ pub struct World {
     script_failures: Vec<ScriptFailure>,
     quit: bool,
     restart: bool,
+    resets: u64,
 }
 
 impl World {
@@ -138,9 +139,15 @@ impl World {
         std::mem::take(&mut self.restart)
     }
 
+    /// How many times [World::reset] ran: node ids and handles taken before a change are stale (devtools drops its undo tokens).
+    pub fn resets(&self) -> u64 {
+        self.resets
+    }
+
     /// Clears scene, assets, render settings, bodies and sounds (keeps input, time, backends and asset root).
     /// Used by hot reload.
     pub fn reset(&mut self) {
+        self.resets += 1;
         self.scene = Scene::new();
         self.nodes.clear();
         self.prefabs.clear();
