@@ -25,10 +25,30 @@ fn check(rel: &str, expected: String) {
 
 #[test]
 fn generated_files_are_current() {
-    let api = spark_api::api();
+    // The component regions of spark.d.luau come from the registry; everything else is derived from the result
+    // (not from the compiled-in copy, which is stale during a bless run).
+    let luau = spark_api::components::splice(spark_api::D_LUAU).expect("markers in docs/spark.d.luau");
+    check("docs/spark.d.luau", luau.clone());
+    let api = spark_api::parse(&luau).expect("generated spark.d.luau parses");
     check("docs/API_REFERENCE.md", spark_api::markdown(&api, VERSION));
-    check("docs/api.json", serde_json::to_string_pretty(&api).unwrap() + "\n");
+    check("docs/api.json", spark_api::api_json(&api));
     check("llms.txt", spark_api::llms_txt(VERSION));
+}
+
+/// The spec types and class fields come from the registry: every spawn key is a documented field, and the registry's
+/// Luau names are all declared on `Object` (or on the `light` handle).
+#[test]
+fn registry_fields_are_declared() {
+    let api = spark_api::api();
+    let object = api.class("Object").unwrap();
+    let light = api.class("LightRef").unwrap();
+    for c in spark_api::components_json().components.iter().chain(std::iter::once(&spark_api::components_json().node)) {
+        for f in c.fields.iter().filter(|f| f.lua.is_some()) {
+            let name = f.lua.as_deref().unwrap();
+            let class = if c.lua_scope == "object" { object } else { light };
+            assert!(class.fields.iter().any(|d| d.name == name), "{}.{} (Luau '{name}') is not declared", c.name, f.name);
+        }
+    }
 }
 
 /// The narrative guide must mention every global function and table of the API.

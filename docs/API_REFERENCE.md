@@ -683,23 +683,40 @@ lightRef.type: "point" | "spot"
 lightRef.color: Color
 lightRef.intensity: number
 lightRef.range: number
+lightRef.shadows: boolean
 lightRef.angle: number
 lightRef.softness: number
-lightRef.shadows: boolean
 ```
+
+- `type`: Point or spot (Luau: `light.type`, `"point"` / `"spot"`).
+- `color`: Light color.
+- `intensity`: Brightness multiplier (0 = off). Negative values are clamped to 0. At least 0.
+- `range`: Distance in meters where the light has faded out completely. Values below 0.01 are clamped. At least 0.01 m.
+- `shadows`: Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`).
+- `angle`: Full cone angle of a spot light in degrees, 1 to 179 (new spot lights: 45). Used by "spot".
+- `softness`: 0..1 = blurry edge. Range 0 to 1. Used by "spot".
 
 ### `Object`
 
 ```luau
 object.id: number
-object.name: string
-object.position: vector
 object.x: number
 object.y: number
 object.z: number
+object.material: Material?
+object.parent: Object?
+object.light: LightRef?
+object.body: BodyType?
+object.name: string
+object.visible: boolean
+object.position: vector
 object.rotation: vector
 object.scale: vector
-object.visible: boolean
+object.mesh: Mesh?
+object.lod: { LodLevel }
+object.color: Color
+object.shader: Shader?
+object.data: { number }
 object.blend: BlendMode
 object.double_sided: boolean
 object.cast_shadow: boolean
@@ -709,20 +726,11 @@ object.roughness: number
 object.emissive: Color
 object.normal_map: Texture?
 object.orm_map: Texture?
-object.lod: { LodLevel }
-object.color: Color
-object.material: Material?
-object.mesh: Mesh?
-object.parent: Object?
-object.light: LightRef?
-object.shader: Shader?
-object.data: { number }
-object.body: BodyType?
+object.mass: number
+object.sensor: boolean
+object.gravity_scale: number
 object.velocity: vector
 object.angular_velocity: vector
-object.mass: number
-object.gravity_scale: number
-object.sensor: boolean
 object:rotate_x(angle: number)
 object:rotate_y(angle: number)
 object:rotate_z(angle: number)
@@ -763,7 +771,32 @@ object:torque(v: vector)
 object:move(delta: vector) -> (vector, boolean)
 ```
 
-- `body`: physics (see "Physics")
+- `x`: shortcuts for position.x / .y / .z
+- `body`: physics (see "Physics"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below
+- `name`: Name shown in the hierarchy and used by `find(name)`.
+- `visible`: Drawn (children inherit it being off). Default true.
+- `position`: Position in meters. Unit: m. Default vec3(0, 0, 0).
+- `rotation`: Rotation as Euler angles in radians: (pitch, yaw, roll) = rotation around X, Y, Z, applied Y, then X, then Z. Relative to the parent.
+- `scale`: Scale per axis (1 = original size). Default vec3(1, 1, 1).
+- `mesh`: The mesh drawn (a runtime handle). Default "runtime:mesh/0".
+- `lod`: Level of detail: from each distance on the renderer draws that mesh instead of `mesh`.
+- `color`: Base color (multiplied with the texture). Default rgba(1, 1, 1, 1).
+- `shader`: Custom surface shader (`nil` = the engine default).
+- `data`: Free per-material numbers for custom shaders (`object.data` in WGSL). Default vec4(0, 0, 0, 0).
+- `blend`: Blending with the background (see `BlendMode`). Default "auto".
+- `double_sided`: Draw back faces too (leaves, flags, planes seen from below). Default false.
+- `cast_shadow`: Casts a shadow from the sun (`RenderSettings::shadows`). Default true.
+- `pbr`: Physically based shading (Cook-Torrance GGX with `metallic` / `roughness`) instead of the classic diffuse look. Turned on by `Material::pbr`, `with_metallic`, `with_roughness`. Default false.
+- `metallic`: 0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on. Out-of-range values are clamped (like `Material::with_metallic`, which also turns `pbr` on; writing the field alone does not). Range 0 to 1. Default 0.
+- `roughness`: 0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on. Out-of-range values are clamped (like `Material::with_roughness`, which also turns `pbr` on; writing the field alone does not). Range 0 to 1. Default 0.5.
+- `emissive`: Light the surface emits by itself, added after lighting (black = none). Works in every mode. Default rgba(0, 0, 0, 1).
+- `normal_map`: Tangent-space normal map (OpenGL convention: green points along +V). Works with and without `pbr`.
+- `orm_map`: Packed surface data (used when `pbr` is on): R = ambient occlusion, G = roughness, B = metallic; each is multiplied with `roughness` / `metallic`. Like the normal map it holds data, not colors.
+- `mass`: Total mass in kg. Assigning `nil` lets the physics engine compute it from the volume (density 1). Greater than 0.
+- `sensor`: Sensors detect overlaps (collision events) but don't push anything. Default false.
+- `gravity_scale`: Multiplier of the world gravity for this body (0 = floats, negative = rises). Default 1.
+- `velocity`: World-space velocity (m/s). Written back by the simulation; set it to change it. Unit: m/s. Default vec3(0, 0, 0).
+- `angular_velocity`: World-space angular velocity (rad/s). Unit: rad/s. Default vec3(0, 0, 0).
 - `on`: events and timers owned by the object
 - `play`: animation (glTF models)
 - `add_body`: physics
@@ -843,6 +876,12 @@ type Align = "top_left" | "top" | "top_right" | "left" | "center" | "right" | "b
 type BodyType = "dynamic" | "static" | "kinematic"
 ```
 
+### `BlendMode`
+
+```luau
+type BlendMode = "auto" | "opaque" | "alpha" | "additive"
+```
+
 ### `BodySpec`
 
 ```luau
@@ -852,19 +891,13 @@ type BodySpec = { type: BodyType?, shape: ("auto" | "box" | "sphere" | "capsule"
 ### `LightSpec`
 
 ```luau
-type LightSpec = { type: ("point" | "spot")?, color: ColorLike?, intensity: number?, range: number?, angle: number?, softness: number?, shadows: boolean?, position: vector?, rotation: vector?, parent: Object?, name: string?, }
-```
-
-### `BlendMode`
-
-```luau
-type BlendMode = "auto" | "opaque" | "alpha" | "additive"
+type LightSpec = { type: ("point" | "spot")?, color: ColorLike?, intensity: number?, range: number?, shadows: boolean?, angle: number?, softness: number?, position: vector?, rotation: vector?, parent: Object?, name: string?, }
 ```
 
 ### `SpawnProps`
 
 ```luau
-type SpawnProps = { name: string?, position: vector?, rotation: vector?, scale: (number | vector)?, visible: boolean?, parent: Object?, color: ColorLike?, body: (BodyType | boolean | BodySpec)?, light: LightSpec?, shader: Shader?, data: { number }?, blend: BlendMode?, double_sided: boolean?, cast_shadow: boolean?, pbr: boolean?, metallic: number?, roughness: number?, emissive: ColorLike?, normal_map: (Texture | string | false)?, orm_map: (Texture | string | false)?, node: string?, lod: { LodLevel }?, }
+type SpawnProps = { name: string?, visible: boolean?, position: vector?, rotation: vector?, scale: (number | vector)?, color: ColorLike?, data: { number }?, blend: BlendMode?, double_sided: boolean?, cast_shadow: boolean?, pbr: boolean?, metallic: number?, roughness: number?, emissive: ColorLike?, parent: Object?, body: (BodyType | boolean | BodySpec)?, light: LightSpec?, shader: Shader?, normal_map: (Texture | string | false)?, orm_map: (Texture | string | false)?, node: string?, lod: { LodLevel }?, }
 ```
 
 ### `LodLevel`

@@ -4,13 +4,18 @@
 //! signature and the doc comment above it. This crate parses it into an [`Api`] registry and generates from it
 //! `docs/API_REFERENCE.md`, `llms.txt`, `llms-full.txt` and `docs/api.json`, and answers `spark api search`.
 //!
+//! The component part of the file (`Object` fields, `SpawnProps`, `BodySpec`, `LightSpec`, `LightRef`) is generated
+//! from the reflection registry between `-- @generated components begin/end` markers; see [`components`].
+//!
 //! The registry is checked against the running engine by `crates/spark-script/tests/api_drift.rs`: a function that exists
 //! in the VM but not in the registry (or the other way round) fails CI. See `docs/adr/0001-api-registry.md`.
 #![forbid(unsafe_code)]
 
+pub mod components;
 mod parse;
 mod render;
 
+pub use components::{ComponentsJson, api_json, components_json};
 pub use parse::{ParseError, parse};
 pub use render::{Hit, Kind, llms_txt, markdown, search};
 

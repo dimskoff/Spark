@@ -16,6 +16,7 @@ mod field;
 #[cfg(feature = "glam")]
 mod glam_impls;
 mod info;
+mod luau_decl;
 mod value;
 
 pub use error::{ReflectError, did_you_mean};
@@ -24,6 +25,7 @@ pub use field::{
     unknown_field,
 };
 pub use info::{AssetKind, EnumInfo, FieldFlags, FieldInfo, FieldType, TypeInfo, Unit, VariantInfo};
+pub use luau_decl::{Flavor, describe_range, describe_value, field_doc, luau_doc, luau_type, optional};
 pub use value::Value;
 
 #[cfg(feature = "derive")]

@@ -152,6 +152,8 @@ Rules: documentation comes from `///` (a lint test fails for a registered field 
 
 ADR 0001 keeps `docs/spark.d.luau` as the hand-written source for **functions, globals, namespaces**. This ADR changes only the **component/property part**: the `Object` fields, `SpawnProps`, `BodySpec`, `LightSpec` become generated blocks inside the same file. The parser, `API_REFERENCE.md`, `llms.txt`, `api.json` and `spark api search` are unchanged; `api_drift.rs` keeps checking functions and gains an automatic check that every registry `lua` name exists in the VM. The `OBJ_MEMBERS` field names and `PROPS` strings are deleted; the method names stay a hand-written list (methods are not reflected: they are behavior, and mlua cannot enumerate them).
 
+Implemented in step C-10: `spark-reflect::luau_decl` holds the registry-independent parts (`FieldType` to Luau type text, doc comments with range, unit and default); the walk over the registry (`spark-core`) is `spark-api/src/components.rs`, so `spark-reflect` still does not depend on `spark-core`. `docs/spark.d.luau` has three marker regions (spec types `BodySpec` / `LightSpec` / `SpawnProps`, the fields of `LightRef`, the registry fields of `Object`); `SPARK_BLESS=1 cargo test -p spark-api` rewrites them, and `api.json` gets a `components` section.
+
 ## Consequences
 
 - One edit (a field + its attributes) updates Luau access, did-you-mean, inspector, files, devtools and docs; the drift tests for fields become redundant for the generated blocks.

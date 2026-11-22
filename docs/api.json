@@ -41,23 +41,23 @@
       "doc": ""
     },
     {
+      "name": "BlendMode",
+      "def": "\"auto\" | \"opaque\" | \"alpha\" | \"additive\"",
+      "doc": ""
+    },
+    {
       "name": "BodySpec",
       "def": "{ type: BodyType?, shape: (\"auto\" | \"box\" | \"sphere\" | \"capsule\" | \"cylinder\")?, size: vector?, radius: number?, height: number?, mass: number?, friction: number?, bounciness: number?, sensor: boolean?, lock_rotation: boolean?, gravity_scale: number?, damping: number?, angular_damping: number?, ccd: boolean?, velocity: vector?, angular_velocity: vector?, }",
       "doc": ""
     },
     {
       "name": "LightSpec",
-      "def": "{ type: (\"point\" | \"spot\")?, color: ColorLike?, intensity: number?, range: number?, angle: number?, softness: number?, shadows: boolean?, position: vector?, rotation: vector?, parent: Object?, name: string?, }",
-      "doc": ""
-    },
-    {
-      "name": "BlendMode",
-      "def": "\"auto\" | \"opaque\" | \"alpha\" | \"additive\"",
+      "def": "{ type: (\"point\" | \"spot\")?, color: ColorLike?, intensity: number?, range: number?, shadows: boolean?, angle: number?, softness: number?, position: vector?, rotation: vector?, parent: Object?, name: string?, }",
       "doc": ""
     },
     {
       "name": "SpawnProps",
-      "def": "{ name: string?, position: vector?, rotation: vector?, scale: (number | vector)?, visible: boolean?, parent: Object?, color: ColorLike?, body: (BodyType | boolean | BodySpec)?, light: LightSpec?, shader: Shader?, data: { number }?, blend: BlendMode?, double_sided: boolean?, cast_shadow: boolean?, pbr: boolean?, metallic: number?, roughness: number?, emissive: ColorLike?, normal_map: (Texture | string | false)?, orm_map: (Texture | string | false)?, node: string?, lod: { LodLevel }?, }",
+      "def": "{ name: string?, visible: boolean?, position: vector?, rotation: vector?, scale: (number | vector)?, color: ColorLike?, data: { number }?, blend: BlendMode?, double_sided: boolean?, cast_shadow: boolean?, pbr: boolean?, metallic: number?, roughness: number?, emissive: ColorLike?, parent: Object?, body: (BodyType | boolean | BodySpec)?, light: LightSpec?, shader: Shader?, normal_map: (Texture | string | false)?, orm_map: (Texture | string | false)?, node: string?, lod: { LodLevel }?, }",
       "doc": ""
     },
     {
@@ -843,37 +843,37 @@
         {
           "name": "type",
           "ty": "\"point\" | \"spot\"",
-          "doc": ""
+          "doc": "Point or spot (Luau: `light.type`, `\"point\"` / `\"spot\"`)."
         },
         {
           "name": "color",
           "ty": "Color",
-          "doc": ""
+          "doc": "Light color."
         },
         {
           "name": "intensity",
           "ty": "number",
-          "doc": ""
+          "doc": "Brightness multiplier (0 = off). Negative values are clamped to 0.\nAt least 0."
         },
         {
           "name": "range",
           "ty": "number",
-          "doc": ""
-        },
-        {
-          "name": "angle",
-          "ty": "number",
-          "doc": ""
-        },
-        {
-          "name": "softness",
-          "ty": "number",
-          "doc": ""
+          "doc": "Distance in meters where the light has faded out completely. Values below 0.01 are clamped.\nAt least 0.01 m."
         },
         {
           "name": "shadows",
           "ty": "boolean",
-          "doc": ""
+          "doc": "Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`)."
+        },
+        {
+          "name": "angle",
+          "ty": "number",
+          "doc": "Full cone angle of a spot light in degrees, 1 to 179 (new spot lights: 45).\nUsed by \"spot\"."
+        },
+        {
+          "name": "softness",
+          "ty": "number",
+          "doc": "0..1 = blurry edge.\nRange 0 to 1.\nUsed by \"spot\"."
         }
       ],
       "methods": [],
@@ -888,19 +888,9 @@
           "doc": ""
         },
         {
-          "name": "name",
-          "ty": "string",
-          "doc": ""
-        },
-        {
-          "name": "position",
-          "ty": "vector",
-          "doc": ""
-        },
-        {
           "name": "x",
           "ty": "number",
-          "doc": ""
+          "doc": "shortcuts for position.x / .y / .z"
         },
         {
           "name": "y",
@@ -913,83 +903,8 @@
           "doc": ""
         },
         {
-          "name": "rotation",
-          "ty": "vector",
-          "doc": ""
-        },
-        {
-          "name": "scale",
-          "ty": "vector",
-          "doc": ""
-        },
-        {
-          "name": "visible",
-          "ty": "boolean",
-          "doc": ""
-        },
-        {
-          "name": "blend",
-          "ty": "BlendMode",
-          "doc": ""
-        },
-        {
-          "name": "double_sided",
-          "ty": "boolean",
-          "doc": ""
-        },
-        {
-          "name": "cast_shadow",
-          "ty": "boolean",
-          "doc": ""
-        },
-        {
-          "name": "pbr",
-          "ty": "boolean",
-          "doc": ""
-        },
-        {
-          "name": "metallic",
-          "ty": "number",
-          "doc": ""
-        },
-        {
-          "name": "roughness",
-          "ty": "number",
-          "doc": ""
-        },
-        {
-          "name": "emissive",
-          "ty": "Color",
-          "doc": ""
-        },
-        {
-          "name": "normal_map",
-          "ty": "Texture?",
-          "doc": ""
-        },
-        {
-          "name": "orm_map",
-          "ty": "Texture?",
-          "doc": ""
-        },
-        {
-          "name": "lod",
-          "ty": "{ LodLevel }",
-          "doc": ""
-        },
-        {
-          "name": "color",
-          "ty": "Color",
-          "doc": ""
-        },
-        {
           "name": "material",
           "ty": "Material?",
-          "doc": ""
-        },
-        {
-          "name": "mesh",
-          "ty": "Mesh?",
           "doc": ""
         },
         {
@@ -1003,44 +918,129 @@
           "doc": ""
         },
         {
+          "name": "body",
+          "ty": "BodyType?",
+          "doc": "physics (see \"Physics\"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below"
+        },
+        {
+          "name": "name",
+          "ty": "string",
+          "doc": "Name shown in the hierarchy and used by `find(name)`."
+        },
+        {
+          "name": "visible",
+          "ty": "boolean",
+          "doc": "Drawn (children inherit it being off).\nDefault true."
+        },
+        {
+          "name": "position",
+          "ty": "vector",
+          "doc": "Position in meters.\nUnit: m. Default vec3(0, 0, 0)."
+        },
+        {
+          "name": "rotation",
+          "ty": "vector",
+          "doc": "Rotation as Euler angles in radians: (pitch, yaw, roll) = rotation around X, Y, Z, applied Y, then X, then Z. Relative to the parent."
+        },
+        {
+          "name": "scale",
+          "ty": "vector",
+          "doc": "Scale per axis (1 = original size).\nDefault vec3(1, 1, 1)."
+        },
+        {
+          "name": "mesh",
+          "ty": "Mesh?",
+          "doc": "The mesh drawn (a runtime handle).\nDefault \"runtime:mesh/0\"."
+        },
+        {
+          "name": "lod",
+          "ty": "{ LodLevel }",
+          "doc": "Level of detail: from each distance on the renderer draws that mesh instead of `mesh`."
+        },
+        {
+          "name": "color",
+          "ty": "Color",
+          "doc": "Base color (multiplied with the texture).\nDefault rgba(1, 1, 1, 1)."
+        },
+        {
           "name": "shader",
           "ty": "Shader?",
-          "doc": ""
+          "doc": "Custom surface shader (`nil` = the engine default)."
         },
         {
           "name": "data",
           "ty": "{ number }",
-          "doc": ""
+          "doc": "Free per-material numbers for custom shaders (`object.data` in WGSL).\nDefault vec4(0, 0, 0, 0)."
         },
         {
-          "name": "body",
-          "ty": "BodyType?",
-          "doc": "physics (see \"Physics\")"
+          "name": "blend",
+          "ty": "BlendMode",
+          "doc": "Blending with the background (see `BlendMode`).\nDefault \"auto\"."
         },
         {
-          "name": "velocity",
-          "ty": "vector",
-          "doc": ""
+          "name": "double_sided",
+          "ty": "boolean",
+          "doc": "Draw back faces too (leaves, flags, planes seen from below).\nDefault false."
         },
         {
-          "name": "angular_velocity",
-          "ty": "vector",
-          "doc": ""
+          "name": "cast_shadow",
+          "ty": "boolean",
+          "doc": "Casts a shadow from the sun (`RenderSettings::shadows`).\nDefault true."
+        },
+        {
+          "name": "pbr",
+          "ty": "boolean",
+          "doc": "Physically based shading (Cook-Torrance GGX with `metallic` / `roughness`) instead of the\nclassic diffuse look. Turned on by `Material::pbr`, `with_metallic`, `with_roughness`.\nDefault false."
+        },
+        {
+          "name": "metallic",
+          "ty": "number",
+          "doc": "0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on. Out-of-range values are clamped\n(like `Material::with_metallic`, which also turns `pbr` on; writing the field alone does not).\nRange 0 to 1. Default 0."
+        },
+        {
+          "name": "roughness",
+          "ty": "number",
+          "doc": "0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on. Out-of-range values are clamped\n(like `Material::with_roughness`, which also turns `pbr` on; writing the field alone does not).\nRange 0 to 1. Default 0.5."
+        },
+        {
+          "name": "emissive",
+          "ty": "Color",
+          "doc": "Light the surface emits by itself, added after lighting (black = none). Works in every mode.\nDefault rgba(0, 0, 0, 1)."
+        },
+        {
+          "name": "normal_map",
+          "ty": "Texture?",
+          "doc": "Tangent-space normal map (OpenGL convention: green points along +V). Works with and without `pbr`."
+        },
+        {
+          "name": "orm_map",
+          "ty": "Texture?",
+          "doc": "Packed surface data (used when `pbr` is on): R = ambient occlusion, G = roughness, B = metallic; each is\nmultiplied with `roughness` / `metallic`. Like the normal map it holds data, not colors."
         },
         {
           "name": "mass",
           "ty": "number",
-          "doc": ""
-        },
-        {
-          "name": "gravity_scale",
-          "ty": "number",
-          "doc": ""
+          "doc": "Total mass in kg. Assigning `nil` lets the physics engine compute it from the volume (density 1).\nGreater than 0."
         },
         {
           "name": "sensor",
           "ty": "boolean",
-          "doc": ""
+          "doc": "Sensors detect overlaps (collision events) but don't push anything.\nDefault false."
+        },
+        {
+          "name": "gravity_scale",
+          "ty": "number",
+          "doc": "Multiplier of the world gravity for this body (0 = floats, negative = rises).\nDefault 1."
+        },
+        {
+          "name": "velocity",
+          "ty": "vector",
+          "doc": "World-space velocity (m/s). Written back by the simulation; set it to change it.\nUnit: m/s. Default vec3(0, 0, 0)."
+        },
+        {
+          "name": "angular_velocity",
+          "ty": "vector",
+          "doc": "World-space angular velocity (rad/s).\nUnit: rad/s. Default vec3(0, 0, 0)."
         }
       ],
       "methods": [
@@ -5110,5 +5110,820 @@
       "ty": "Camera",
       "doc": ""
     }
-  ]
+  ],
+  "components": {
+    "node": {
+      "name": "node",
+      "doc": "The node-level fields of an object, as a reflected struct (a copy: `name` and `visible`).",
+      "required": true,
+      "lua_scope": "object",
+      "fields": [
+        {
+          "name": "name",
+          "lua": "name",
+          "kind": "string",
+          "luau_type": "string",
+          "doc": "Name shown in the hierarchy and used by `find(name)`.",
+          "default": "",
+          "read_only": false,
+          "hidden": false,
+          "transient": false
+        },
+        {
+          "name": "visible",
+          "lua": "visible",
+          "kind": "bool",
+          "luau_type": "boolean",
+          "doc": "Drawn (children inherit it being off).",
+          "default": true,
+          "read_only": false,
+          "hidden": false,
+          "transient": false
+        }
+      ]
+    },
+    "components": [
+      {
+        "name": "transform",
+        "doc": "Local position, rotation and scale of an [Object] (relative to its parent, or the world).",
+        "required": true,
+        "lua_scope": "object",
+        "fields": [
+          {
+            "name": "position",
+            "lua": "position",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "Position in meters.",
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "unit": "m",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "rotation",
+            "lua": "rotation",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "Rotation, reflected as Euler angles in degrees (pitch, yaw, roll; Y-X-Z order). The scripting API\nuses radians for the same angles.",
+            "default": [
+              -0.0,
+              0.0,
+              0.0
+            ],
+            "unit": "deg",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "scale",
+            "lua": "scale",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "Scale per axis (1 = original size).",
+            "default": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          }
+        ]
+      },
+      {
+        "name": "mesh",
+        "doc": "The mesh an object draws and its level-of-detail meshes (`Object::mesh`, `Object::lod`). Present when the object\nhas a mesh. Read-only for now: meshes are runtime handles until mesh recipes exist (step C-11).",
+        "required": false,
+        "lua_scope": "object",
+        "fields": [
+          {
+            "name": "mesh",
+            "lua": "mesh",
+            "kind": "asset",
+            "luau_type": "Mesh?",
+            "doc": "The mesh drawn (a runtime handle).",
+            "default": "runtime:mesh/0",
+            "read_only": true,
+            "hidden": false,
+            "transient": true
+          },
+          {
+            "name": "lod",
+            "lua": "lod",
+            "kind": "list",
+            "luau_type": "{ LodLevel }",
+            "doc": "Level of detail: from each distance on the renderer draws that mesh instead of `mesh`.",
+            "default": [],
+            "read_only": true,
+            "hidden": false,
+            "transient": true
+          }
+        ]
+      },
+      {
+        "name": "material",
+        "doc": "How a mesh looks. Lit by the sun + ambient unless `unlit`.",
+        "required": true,
+        "lua_scope": "object",
+        "fields": [
+          {
+            "name": "color",
+            "lua": "color",
+            "kind": "color",
+            "luau_type": "Color",
+            "doc": "Base color (multiplied with the texture).",
+            "default": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "texture",
+            "kind": "option",
+            "luau_type": "Texture?",
+            "doc": "Base color texture (a runtime handle; no scene-file form until assets have paths).",
+            "default": null,
+            "read_only": true,
+            "hidden": false,
+            "transient": true
+          },
+          {
+            "name": "tiling",
+            "kind": "vec2",
+            "luau_type": "vector",
+            "doc": "Texture repeats across the surface (e.g. `(4, 4)` on a ground plane).",
+            "default": [
+              1.0,
+              1.0
+            ],
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "unlit",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Ignore lighting: shows the exact color (UI, glowing things, sprites).",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "shader",
+            "lua": "shader",
+            "kind": "option",
+            "luau_type": "Shader?",
+            "doc": "Surface shader (`None` = [`crate::RenderSettings::shader`], else the engine default).",
+            "default": null,
+            "read_only": true,
+            "hidden": false,
+            "transient": true
+          },
+          {
+            "name": "data",
+            "lua": "data",
+            "kind": "vec4",
+            "luau_type": "{ number }",
+            "doc": "Free per-material numbers for custom shaders (`object.data` in WGSL).",
+            "default": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "blend",
+            "lua": "blend",
+            "kind": "enum",
+            "luau_type": "BlendMode",
+            "doc": "Blending with the background (see [`BlendMode`]).",
+            "default": "auto",
+            "read_only": false,
+            "hidden": false,
+            "transient": false,
+            "variants": [
+              {
+                "name": "auto",
+                "doc": "`Alpha` when `color.a < 1`, otherwise `Opaque`.",
+                "fields": []
+              },
+              {
+                "name": "opaque",
+                "doc": "Solid; pixels with alpha < 0.01 are cut out (foliage, fences).",
+                "fields": []
+              },
+              {
+                "name": "alpha",
+                "doc": "See-through (glass, water, fading objects). Drawn after opaque objects, back to front.",
+                "fields": []
+              },
+              {
+                "name": "additive",
+                "doc": "Adds light (fire, lasers, glow). Drawn with the transparent objects.",
+                "fields": []
+              }
+            ]
+          },
+          {
+            "name": "double_sided",
+            "lua": "double_sided",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Draw back faces too (leaves, flags, planes seen from below).",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "cast_shadow",
+            "lua": "cast_shadow",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Casts a shadow from the sun (`RenderSettings::shadows`).",
+            "default": true,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "pbr",
+            "lua": "pbr",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Physically based shading (Cook-Torrance GGX with `metallic` / `roughness`) instead of the\nclassic diffuse look. Turned on by [`Material::pbr`], `with_metallic`, `with_roughness`.",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "metallic",
+            "lua": "metallic",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on. Out-of-range values are clamped\n(like [`Material::with_metallic`], which also turns `pbr` on; writing the field alone does not).",
+            "default": 0.0,
+            "range": {
+              "min": 0.0,
+              "max": 1.0,
+              "clamp": true
+            },
+            "step": 0.01,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "roughness",
+            "lua": "roughness",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on. Out-of-range values are clamped\n(like [`Material::with_roughness`], which also turns `pbr` on; writing the field alone does not).",
+            "default": 0.5,
+            "range": {
+              "min": 0.0,
+              "max": 1.0,
+              "clamp": true
+            },
+            "step": 0.01,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "emissive",
+            "lua": "emissive",
+            "kind": "color",
+            "luau_type": "Color",
+            "doc": "Light the surface emits by itself, added after lighting (black = none). Works in every mode.",
+            "default": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "normal_map",
+            "lua": "normal_map",
+            "kind": "option",
+            "luau_type": "Texture?",
+            "doc": "Tangent-space normal map (OpenGL convention: green points along +V). Works with and without `pbr`.",
+            "default": null,
+            "read_only": true,
+            "hidden": false,
+            "transient": true
+          },
+          {
+            "name": "orm_map",
+            "lua": "orm_map",
+            "kind": "option",
+            "luau_type": "Texture?",
+            "doc": "Packed surface data (used when `pbr` is on): R = ambient occlusion, G = roughness, B = metallic; each is\nmultiplied with `roughness` / `metallic`. Like the normal map it holds data, not colors.",
+            "default": null,
+            "read_only": true,
+            "hidden": false,
+            "transient": true
+          }
+        ]
+      },
+      {
+        "name": "body",
+        "doc": "A rigid body attached to an object (`Object::body`).",
+        "required": false,
+        "lua_scope": "object",
+        "fields": [
+          {
+            "name": "kind",
+            "kind": "enum",
+            "luau_type": "BodyType",
+            "doc": "How the body moves.",
+            "default": "dynamic",
+            "read_only": false,
+            "hidden": false,
+            "transient": false,
+            "variants": [
+              {
+                "name": "dynamic",
+                "doc": "Moved by the simulation (gravity, collisions, impulses).",
+                "fields": []
+              },
+              {
+                "name": "static",
+                "doc": "Never moves on its own (ground, walls). You can still teleport it.",
+                "fields": []
+              },
+              {
+                "name": "kinematic",
+                "doc": "Moved only by your code (position / rotation); pushes dynamic bodies.",
+                "fields": []
+              }
+            ]
+          },
+          {
+            "name": "shape",
+            "kind": "enum",
+            "luau_type": "\"auto\" | \"box\" | \"sphere\" | \"capsule\" | \"cylinder\"",
+            "doc": "Collision shape in the object's local space.",
+            "default": "auto",
+            "read_only": false,
+            "hidden": false,
+            "transient": false,
+            "variants": [
+              {
+                "name": "auto",
+                "doc": "Derived from the mesh: box / sphere / cylinder for primitives, triangle mesh (static,\nkinematic) or convex hull (dynamic) for custom meshes.",
+                "fields": []
+              },
+              {
+                "name": "box",
+                "doc": "Box.",
+                "fields": [
+                  {
+                    "name": "size",
+                    "kind": "vec3",
+                    "luau_type": "vector",
+                    "doc": "Full size (width, height, depth).",
+                    "default": [
+                      1.0,
+                      1.0,
+                      1.0
+                    ],
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  }
+                ]
+              },
+              {
+                "name": "sphere",
+                "doc": "Ball.",
+                "fields": [
+                  {
+                    "name": "radius",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "Radius.",
+                    "default": 0.5,
+                    "range": {
+                      "min": 0.0,
+                      "min_exclusive": true,
+                      "clamp": false
+                    },
+                    "unit": "m",
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  }
+                ]
+              },
+              {
+                "name": "capsule",
+                "doc": "Capsule along Y.",
+                "fields": [
+                  {
+                    "name": "radius",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "Radius of the caps and the body.",
+                    "default": 0.5,
+                    "range": {
+                      "min": 0.0,
+                      "min_exclusive": true,
+                      "clamp": false
+                    },
+                    "unit": "m",
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  },
+                  {
+                    "name": "height",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "Total height including the caps.",
+                    "default": 2.0,
+                    "range": {
+                      "min": 0.0,
+                      "min_exclusive": true,
+                      "clamp": false
+                    },
+                    "unit": "m",
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  }
+                ]
+              },
+              {
+                "name": "cylinder",
+                "doc": "Cylinder along Y.",
+                "fields": [
+                  {
+                    "name": "radius",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "Radius.",
+                    "default": 0.5,
+                    "range": {
+                      "min": 0.0,
+                      "min_exclusive": true,
+                      "clamp": false
+                    },
+                    "unit": "m",
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  },
+                  {
+                    "name": "height",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "Height.",
+                    "default": 1.0,
+                    "range": {
+                      "min": 0.0,
+                      "min_exclusive": true,
+                      "clamp": false
+                    },
+                    "unit": "m",
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "mass",
+            "lua": "mass",
+            "kind": "option",
+            "luau_type": "number",
+            "doc": "Total mass in kg. `None` = computed from volume (density 1).",
+            "default": null,
+            "range": {
+              "min": 0.0,
+              "min_exclusive": true,
+              "clamp": false
+            },
+            "unit": "kg",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "friction",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Surface friction (0 = ice).",
+            "default": 0.5,
+            "range": {
+              "min": 0.0,
+              "clamp": false
+            },
+            "step": 0.05,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "bounciness",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "0 = no bounce, 1 = perfectly elastic.",
+            "default": 0.0,
+            "step": 0.01,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "sensor",
+            "lua": "sensor",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Sensors detect overlaps (collision events) but don't push anything.",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "lock_rotation",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Keeps the body upright (characters).",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "gravity_scale",
+            "lua": "gravity_scale",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Multiplier of the world gravity for this body (0 = floats, negative = rises).",
+            "default": 1.0,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "linear_damping",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Slows the linear velocity down over time.",
+            "default": 0.0,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "angular_damping",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Slows the rotation down over time.",
+            "default": 0.05,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "ccd",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Continuous collision detection for fast objects (bullets).",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "velocity",
+            "lua": "velocity",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "World-space velocity (m/s). Written back by the simulation; set it to change it.",
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "unit": "m/s",
+            "read_only": false,
+            "hidden": false,
+            "transient": true
+          },
+          {
+            "name": "angular_velocity",
+            "lua": "angular_velocity",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "World-space angular velocity (rad/s).",
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "unit": "rad/s",
+            "read_only": false,
+            "hidden": false,
+            "transient": true
+          },
+          {
+            "name": "impulse",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "Impulse applied at the next physics step, then reset.",
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "read_only": false,
+            "hidden": true,
+            "transient": true
+          },
+          {
+            "name": "torque_impulse",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "Angular impulse applied at the next physics step, then reset.",
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "read_only": false,
+            "hidden": true,
+            "transient": true
+          },
+          {
+            "name": "force",
+            "kind": "vec3",
+            "luau_type": "vector",
+            "doc": "Force applied during the next physics step, then reset (call every fixed_update).",
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "read_only": false,
+            "hidden": true,
+            "transient": true
+          }
+        ]
+      },
+      {
+        "name": "light",
+        "doc": "Point or spot light attached to an object. Reaches exactly `range` meters (smooth falloff).\n\nThe `lua` names of its fields are members of the Luau `obj.light` handle (`obj.light.intensity`), not of the\nobject itself (`obj.color` is the material color).",
+        "required": false,
+        "lua_scope": "handle:light",
+        "fields": [
+          {
+            "name": "kind",
+            "lua": "type",
+            "kind": "enum",
+            "luau_type": "\"point\" | \"spot\"",
+            "doc": "Point or spot (Luau: `light.type`, `\"point\"` / `\"spot\"`).",
+            "default": "point",
+            "read_only": false,
+            "hidden": false,
+            "transient": false,
+            "variants": [
+              {
+                "name": "point",
+                "doc": "Shines in all directions.",
+                "fields": []
+              },
+              {
+                "name": "spot",
+                "doc": "Cone along the object's -Z.",
+                "fields": [
+                  {
+                    "name": "angle",
+                    "lua": "angle",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "Full cone angle in radians (the scripting API uses degrees, 1 to 179).",
+                    "default": 0.7853982,
+                    "range": {
+                      "min": 0.017453292,
+                      "max": 3.1241393,
+                      "clamp": true
+                    },
+                    "unit": "rad",
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  },
+                  {
+                    "name": "softness",
+                    "lua": "softness",
+                    "kind": "float",
+                    "luau_type": "number",
+                    "doc": "0..1 = blurry edge.",
+                    "default": 0.3,
+                    "range": {
+                      "min": 0.0,
+                      "max": 1.0,
+                      "clamp": true
+                    },
+                    "step": 0.01,
+                    "read_only": false,
+                    "hidden": false,
+                    "transient": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "color",
+            "lua": "color",
+            "kind": "color",
+            "luau_type": "Color",
+            "doc": "Light color.",
+            "default": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "intensity",
+            "lua": "intensity",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Brightness multiplier (0 = off). Negative values are clamped to 0.",
+            "default": 1.0,
+            "range": {
+              "min": 0.0,
+              "clamp": true
+            },
+            "step": 0.05,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "range",
+            "lua": "range",
+            "kind": "float",
+            "luau_type": "number",
+            "doc": "Distance in meters where the light has faded out completely. Values below 0.01 are clamped.",
+            "default": 10.0,
+            "range": {
+              "min": 0.01,
+              "clamp": true
+            },
+            "unit": "m",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "shadows",
+            "lua": "shadows",
+            "kind": "bool",
+            "luau_type": "boolean",
+            "doc": "Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`).",
+            "default": false,
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          }
+        ]
+      }
+    ]
+  }
 }

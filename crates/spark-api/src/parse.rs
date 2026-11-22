@@ -237,6 +237,7 @@ pub fn parse(src: &str) -> Result<Api, ParseError> {
         if code.trim().is_empty() {
             match comment {
                 // Banner lines (`-- ====`) and blank lines end a doc block.
+                Some(c) if c.starts_with("@generated") => {}
                 Some(c) if !c.starts_with("====") && !c.is_empty() => doc.push(c.to_string()),
                 _ => doc.clear(),
             }
@@ -280,6 +281,7 @@ pub fn parse(src: &str) -> Result<Api, ParseError> {
                 let code = code.trim();
                 if code.is_empty() {
                     match comment {
+                        Some(c) if c.starts_with("@generated") => {}
                         Some(c) if !c.is_empty() => cdoc.push(c.to_string()),
                         _ => cdoc.clear(),
                     }
