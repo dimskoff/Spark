@@ -36,8 +36,6 @@ pub(crate) fn set_parent(w: &mut World, id: ObjectId, parent: Option<ObjectId>) 
     w.scene.set_parent(id, parent).map_err(rt)
 }
 
-const PROPS: &str = "name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod";
-
 /// `nil` / `false` -> none, else a Texture or an image path.
 fn to_normal_map(w: &mut World, v: &Value, what: &str) -> LuaResult<Option<TextureId>> {
     match v {
@@ -124,6 +122,16 @@ pub(crate) fn data_table(lua: &mlua::Lua, d: [f32; 4]) -> LuaResult<Table> {
     Ok(t)
 }
 
+/// Error for a key of a spawn table that is not a property: suggests the closest accepted key (`colour` -> `color`).
+fn unknown_property(key: &str) -> mlua::Error {
+    let names = crate::reflect_bind::prop_names();
+    let hint = match crate::names::suggest(key, names.iter().copied()) {
+        Some(s) => format!(" (did you mean '{s}'?)"),
+        None => String::new(),
+    };
+    rt(format!("unknown property '{key}'{hint} (allowed: {})", names.join(", ")))
+}
+
 /// `spawn(mesh, mat, { position = ..., ... })` property table.
 pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> LuaResult<()> {
     let Some(t) = props else { return Ok(()) };
@@ -154,7 +162,7 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
                     "lod" => o.lod = to_lod(&v, &what)?,
                     "body" => o.body = Some(crate::physics::to_body(&v, &what)?),
                     "light" => o.light = Some(crate::light::to_light(&v, &what)?),
-                    _ => return Err(rt(format!("unknown property '{k}' (allowed: {PROPS})"))),
+                    _ => return Err(unknown_property(&k)),
                 }
             }
         }

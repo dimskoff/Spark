@@ -20,7 +20,7 @@ fn is_light_key(k: &str) -> bool {
     matches!(k, "type" | "color" | "intensity" | "range" | "angle" | "softness" | "shadows")
 }
 
-fn set_light_key(l: &mut Light, k: &str, v: &Value, what: &str) -> LuaResult<()> {
+pub(crate) fn set_light_key(l: &mut Light, k: &str, v: &Value, what: &str) -> LuaResult<()> {
     let w = format!("{what}.{k}");
     match k {
         "type" => {
@@ -71,9 +71,9 @@ pub(crate) fn to_light(v: &Value, what: &str) -> LuaResult<Light> {
 }
 
 /// `obj.light`: live view of an object's light.
-pub struct LightRef(ObjectId);
+pub struct LightRef(pub(crate) ObjectId);
 
-fn with_light<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(&mut Light) -> LuaResult<R>) -> LuaResult<R> {
+pub(crate) fn with_light<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(&mut Light) -> LuaResult<R>) -> LuaResult<R> {
     with(lua, |w| {
         let o = w.scene.get_mut(id).ok_or_else(dead)?;
         let l = o.light.as_mut().ok_or_else(|| rt("light was removed from this object"))?;
@@ -83,13 +83,9 @@ fn with_light<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(&mut Light) -> LuaResul
 
 impl UserData for LightRef {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
-        f.add_field_method_get("type", |lua, this| {
-            with_light(lua, this.0, |l| Ok(if matches!(l.kind, LightKind::Spot { .. }) { "spot" } else { "point" }))
-        });
-        f.add_field_method_get("color", |lua, this| with_light(lua, this.0, |l| Ok(crate::types::LuaColor(l.color))));
-        f.add_field_method_get("intensity", |lua, this| with_light(lua, this.0, |l| Ok(l.intensity)));
-        f.add_field_method_get("range", |lua, this| with_light(lua, this.0, |l| Ok(l.range)));
-        f.add_field_method_get("shadows", |lua, this| with_light(lua, this.0, |l| Ok(l.shadows)));
+        // type, color, intensity, range, shadows: generated from the registry. `angle` and `softness` belong to the spot
+        // variant of the kind (not fields of the component), so they stay hand-written.
+        crate::reflect_bind::add_light_fields(f);
         f.add_field_method_get("angle", |lua, this| {
             with_light(lua, this.0, |l| {
                 Ok(match l.kind {
@@ -106,7 +102,7 @@ impl UserData for LightRef {
                 })
             })
         });
-        for key in ["type", "color", "intensity", "range", "angle", "softness", "shadows"] {
+        for key in ["angle", "softness"] {
             f.add_field_method_set(key, move |lua, this, v: Value| with_light(lua, this.0, |l| set_light_key(l, key, &v, "light")));
         }
     }

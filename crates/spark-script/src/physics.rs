@@ -69,12 +69,15 @@ fn body_from_table(t: &Table, what: &str) -> LuaResult<Body> {
     Ok(body)
 }
 
+/// Writing a body field of an object that has none.
+pub(crate) fn no_body(what: &str) -> mlua::Error {
+    rt(format!("{what}: object has no body (add one with obj:add_body() or spawn(..., {{ body = \"dynamic\" }}))"))
+}
+
 fn body_mut<R>(lua: &Lua, id: ObjectId, what: &str, f: impl FnOnce(&mut Body) -> R) -> LuaResult<R> {
     with(lua, |w| {
         let o = w.scene.get_mut(id).ok_or_else(dead)?;
-        let b = o.body.as_mut().ok_or_else(|| {
-            rt(format!("{what}: object has no body (add one with obj:add_body() or spawn(..., {{ body = \"dynamic\" }}))"))
-        })?;
+        let b = o.body.as_mut().ok_or_else(|| no_body(what))?;
         Ok(f(b))
     })
 }
@@ -86,6 +89,7 @@ fn body_ref<R>(lua: &Lua, id: ObjectId, f: impl FnOnce(Option<&Body>) -> R) -> L
     })
 }
 
+/// `body`; the scalars of the body (`velocity`, `mass`, ...) are generated from the registry (`reflect_bind`).
 pub(crate) fn add_object_fields<F: UserDataFields<Obj>>(f: &mut F) {
     f.add_field_method_get("body", |lua, this| body_ref(lua, this.0, |b| b.map(|b| b.kind.name())));
     f.add_field_method_set("body", |lua, this, v: Value| {
@@ -95,29 +99,6 @@ pub(crate) fn add_object_fields<F: UserDataFields<Obj>>(f: &mut F) {
             Ok(())
         })
     });
-    f.add_field_method_get("velocity", |lua, this| body_ref(lua, this.0, |b| vv(b.map(|b| b.velocity).unwrap_or(Vec3::ZERO))));
-    f.add_field_method_set("velocity", |lua, this, v: Value| {
-        let v = to_vec3(&v, "obj.velocity")?;
-        body_mut(lua, this.0, "obj.velocity", |b| b.velocity = v)
-    });
-    f.add_field_method_get("angular_velocity", |lua, this| {
-        body_ref(lua, this.0, |b| vv(b.map(|b| b.angular_velocity).unwrap_or(Vec3::ZERO)))
-    });
-    f.add_field_method_set("angular_velocity", |lua, this, v: Value| {
-        let v = to_vec3(&v, "obj.angular_velocity")?;
-        body_mut(lua, this.0, "obj.angular_velocity", |b| b.angular_velocity = v)
-    });
-    f.add_field_method_get("mass", |lua, this| body_ref(lua, this.0, |b| b.and_then(|b| b.mass)));
-    f.add_field_method_set("mass", |lua, this, ONum(v): ONum| {
-        if let Some(m) = v {
-            positive(m, "obj.mass")?;
-        }
-        body_mut(lua, this.0, "obj.mass", |b| b.mass = v)
-    });
-    f.add_field_method_get("gravity_scale", |lua, this| body_ref(lua, this.0, |b| b.map(|b| b.gravity_scale)));
-    f.add_field_method_set("gravity_scale", |lua, this, Num(v): Num| body_mut(lua, this.0, "obj.gravity_scale", |b| b.gravity_scale = v));
-    f.add_field_method_get("sensor", |lua, this| body_ref(lua, this.0, |b| b.is_some_and(|b| b.sensor)));
-    f.add_field_method_set("sensor", |lua, this, v: bool| body_mut(lua, this.0, "obj.sensor", |b| b.sensor = v));
 }
 
 pub(crate) fn add_object_methods<M: UserDataMethods<Obj>>(m: &mut M) {

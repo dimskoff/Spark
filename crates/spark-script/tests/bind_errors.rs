@@ -284,30 +284,30 @@ const SNAPSHOT: &[(&str, &str)] = &[
     ("spawn(Mesh.cube(), \"red\", { data = \"x\" })", "property 'data': expected a number, got string"),
     (
         "spawn(Mesh.cube(), \"red\", { colour = \"red\" })",
-        "unknown property 'colour' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'colour' (did you mean 'color'?) (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
     (
         "spawn(Mesh.cube(), \"red\", { mass = 5 })",
-        "unknown property 'mass' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'mass' (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
     (
         "spawn(Mesh.cube(), \"red\", { velocity = vec3(1, 0, 0) })",
-        "unknown property 'velocity' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'velocity' (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
     (
         "spawn(Mesh.cube(), \"red\", { x = 1 })",
-        "unknown property 'x' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'x' (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
     (
         "spawn(Mesh.cube(), \"red\", { metalic = 1 })",
-        "unknown property 'metalic' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'metalic' (did you mean 'metallic'?) (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
     (
         "light({ intensty = 2 })",
-        "unknown property 'intensty' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'intensty' (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
     (
         "light({ colour = \"red\" })",
-        "unknown property 'colour' (allowed: name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod)",
+        "unknown property 'colour' (did you mean 'color'?) (allowed: name, visible, position, rotation, scale, color, data, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, parent, shader, lod, normal_map, orm_map, body, light)",
     ),
 ];

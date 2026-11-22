@@ -1,11 +1,11 @@
-//! Luau field accessors of `Object` generated from the component registry (ADR 0004, steps C-7 and C-8).
+//! Luau field accessors of `Object` generated from the component registry (ADR 0004, steps C-7 to C-9).
 //!
 //! The list of fields (which names exist, on which component) comes from the registry: every field with a `lua` name of
-//! the node (`name`, `visible`) and of the components whose names are flat on the object (`transform`, `material`:
-//! `position`, `color`, `metallic`, ...) gets a getter and a setter on `Obj`. The accessors themselves are small typed
-//! functions looked up by the field's registry path (`"material.metallic"`): scripts read and write these on thousands
-//! of objects per frame, so they touch the typed `Object` fields directly instead of going through
-//! `spark_reflect::Value`.
+//! the node (`name`, `visible`) and of the components whose names are flat on the object (`transform`, `material`,
+//! `body`: `position`, `color`, `velocity`, ...) gets a getter and a setter on `Obj`; the `lua` names of the `light`
+//! component become the members of the `obj.light` handle. The accessors themselves are small typed functions looked
+//! up by the field's registry path (`"material.metallic"`): scripts read and write these on thousands of objects per
+//! frame, so they touch the typed `Object` fields directly instead of going through `spark_reflect::Value`.
 //!
 //! The argument forms and error messages are the ones the hand-written closures had (`to_vec3`, `to_color`, Luau
 //! truthiness for flags, `Num` arguments reporting as `bad argument #2 to Obj.metallic`, ...); `tests/bind_errors.rs`
@@ -16,15 +16,18 @@
 //! argument checks differ (`property 'color'` in messages, flags must be booleans).
 //!
 //! Hand-written adapters (handles and values that are not plain fields): `material`, `shader`, `normal_map`, `orm_map`,
-//! `mesh`, `lod`, and the `x` / `y` / `z` shortcuts.
+//! `mesh`, `lod`, `body`, `light`, `parent`, the `angle` / `softness` members of a spot light, and the `x` / `y` / `z`
+//! shortcuts.
+
 use std::sync::{Arc, OnceLock};
 
 use mlua::{IntoLua, Lua, UserDataFields, Value};
 use spark_core::material::BlendMode;
 use spark_core::registry::{LuaScope, registry};
-use spark_core::{Color, Object, Quat, Vec3};
+use spark_core::{Body, Color, Light, LightKind, Object, Quat, Vec3};
 
 use crate::convert::*;
+use crate::light::{LightRef, set_light_key, with_light};
 use crate::types::{LuaColor, Obj, data_table, read, to_blend, to_data};
 
 /// How an argument is checked: the Luau name of the field, the word that starts its error messages, and whether the
@@ -43,6 +46,7 @@ pub(crate) enum Staged {
     Bool(bool),
     Color(Color),
     Num(f32),
+    OptNum(Option<f32>),
     Blend(BlendMode),
     Data([f32; 4]),
 }
@@ -68,7 +72,7 @@ impl Accessor {
 
 /// `Num` arguments (`Num(v): Num` in the old closures) failed inside mlua's argument conversion: `bad argument #2 to
 /// Obj.metallic: ...`. Spawn tables report the plain message.
-// mlua::Error::BadArgument holds its cause in an Arc (mlua is built without the send feature).
+// `mlua::Error::BadArgument` holds its cause in an `Arc` (mlua is built without the `send` feature).
 #[allow(clippy::arc_with_non_send_sync)]
 fn number(v: &Value, c: &Ctx) -> LuaResult<f32> {
     if c.spawn {
@@ -85,6 +89,10 @@ fn number(v: &Value, c: &Ctx) -> LuaResult<f32> {
 /// Flags: Luau truthiness for assignments (`v: bool` of the old closures), booleans only in spawn tables.
 fn flag(v: &Value, c: &Ctx) -> LuaResult<bool> {
     if c.spawn { to_bool(v, c.what) } else { Ok(!matches!(v, Value::Nil | Value::Boolean(false))) }
+}
+
+fn body_of<'a>(o: &'a mut Object, what: &str) -> LuaResult<&'a mut Body> {
+    o.body.as_mut().ok_or_else(|| crate::physics::no_body(what))
 }
 
 /// Stores `$staged` when it is the expected variant (the conversion of the same accessor made it).
@@ -189,6 +197,87 @@ const ACCESSORS: &[Accessor] = &[
         stage: |v, c| to_color(v, c.what).map(Staged::Color),
         set: store!(o, Staged::Color(x) => o.material.emissive = x),
     },
+    // Body scalars. A body-less object reads as "no velocity, no mass, no sensor"; writing needs a body.
+    Accessor {
+        path: "body.velocity",
+        get: |_, o| Ok(Value::Vector(vv(o.body.as_ref().map(|b| b.velocity).unwrap_or(Vec3::ZERO)))),
+        stage: |v, c| to_vec3(v, c.what).map(Staged::Vec3),
+        set: |o, s, w| {
+            if let Staged::Vec3(x) = s {
+                body_of(o, w)?.velocity = x;
+            }
+            Ok(())
+        },
+    },
+    Accessor {
+        path: "body.angular_velocity",
+        get: |_, o| Ok(Value::Vector(vv(o.body.as_ref().map(|b| b.angular_velocity).unwrap_or(Vec3::ZERO)))),
+        stage: |v, c| to_vec3(v, c.what).map(Staged::Vec3),
+        set: |o, s, w| {
+            if let Staged::Vec3(x) = s {
+                body_of(o, w)?.angular_velocity = x;
+            }
+            Ok(())
+        },
+    },
+    Accessor {
+        path: "body.mass",
+        get: |_, o| Ok(o.body.as_ref().and_then(|b| b.mass).map_or(Value::Nil, |m| Value::Number(m as f64))),
+        // `nil` removes the mass (the physics engine derives it from the shape); a number must be greater than 0.
+        stage: |v, c| {
+            let m = if v.is_nil() { None } else { Some(number(v, c)?) };
+            if let Some(m) = m {
+                positive(m, c.what)?;
+            }
+            Ok(Staged::OptNum(m))
+        },
+        set: |o, s, w| {
+            if let Staged::OptNum(m) = s {
+                body_of(o, w)?.mass = m;
+            }
+            Ok(())
+        },
+    },
+    Accessor {
+        path: "body.gravity_scale",
+        get: |_, o| Ok(o.body.as_ref().map_or(Value::Nil, |b| Value::Number(b.gravity_scale as f64))),
+        stage: |v, c| number(v, c).map(Staged::Num),
+        set: |o, s, w| {
+            if let Staged::Num(x) = s {
+                body_of(o, w)?.gravity_scale = x;
+            }
+            Ok(())
+        },
+    },
+    Accessor {
+        path: "body.sensor",
+        get: |_, o| Ok(Value::Boolean(o.body.as_ref().is_some_and(|b| b.sensor))),
+        stage: |v, c| flag(v, c).map(Staged::Bool),
+        set: |o, s, w| {
+            if let Staged::Bool(x) = s {
+                body_of(o, w)?.sensor = x;
+            }
+            Ok(())
+        },
+    },
+];
+
+/// The fields of the `light` component that are plain members of the handle. `set` is the shared validation of
+/// light keys (`set_light_key`, also used by spawn tables and `light({...})`: types, clamping, `type` resetting the kind).
+struct LightAccessor {
+    path: &'static str,
+    get: fn(&Lua, &Light) -> LuaResult<Value>,
+}
+
+const LIGHT_ACCESSORS: &[LightAccessor] = &[
+    LightAccessor {
+        path: "light.kind",
+        get: |lua, l| Ok(Value::String(lua.create_string(if matches!(l.kind, LightKind::Spot { .. }) { "spot" } else { "point" })?)),
+    },
+    LightAccessor { path: "light.color", get: |lua, l| color_value(lua, l.color) },
+    LightAccessor { path: "light.intensity", get: |_, l| Ok(Value::Number(l.intensity as f64)) },
+    LightAccessor { path: "light.range", get: |_, l| Ok(Value::Number(l.range as f64)) },
+    LightAccessor { path: "light.shadows", get: |_, l| Ok(Value::Boolean(l.shadows)) },
 ];
 
 /// `(luau name, registry path)` of the fields of the object that are bound from the registry, in registry order:
@@ -213,29 +302,76 @@ pub(crate) fn bound_fields() -> Vec<(&'static str, String)> {
     out
 }
 
+/// `(luau name, registry path)` of the members of the `obj.light` handle that are bound from the registry.
+pub(crate) fn bound_light_fields() -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    if let Some(c) = registry().component("light") {
+        debug_assert_eq!(c.lua, LuaScope::Handle("light"));
+        for f in c.info().fields {
+            if let Some(lua) = f.lua {
+                out.push((lua, format!("light.{}", f.name)));
+            }
+        }
+    }
+    out.retain(|(_, path)| LIGHT_ACCESSORS.iter().any(|a| a.path == path));
+    out
+}
+
+/// What a name is called in messages: the body fields were `obj.velocity` in their errors, the others plain.
+fn what_of(path: &str, lua_name: &str) -> String {
+    if path.starts_with("body.") { format!("obj.{lua_name}") } else { lua_name.to_string() }
+}
+
 /// Registers the getter and setter of every bound field on `Obj`.
 pub(crate) fn add_fields<F: UserDataFields<Obj>>(f: &mut F) {
     for (lua_name, path) in bound_fields() {
         let acc = ACCESSORS.iter().find(|a| a.path == path).expect("filtered by bound_fields");
         let (get, stage, set) = (acc.get, acc.stage, acc.set);
+        let what = what_of(&path, lua_name);
         f.add_field_method_get(lua_name, move |lua, this| read(lua, this.0, |_, o| get(lua, o))?);
         f.add_field_method_set(lua_name, move |lua, this, v: Value| {
-            let staged = stage(&v, &Ctx { what: lua_name, name: lua_name, spawn: false })?;
+            let staged = stage(&v, &Ctx { what: &what, name: lua_name, spawn: false })?;
             with(lua, |w| {
                 let o = w.scene.get_mut(this.0).ok_or_else(dead)?;
-                set(o, staged, lua_name)
+                set(o, staged, &what)
             })
         });
     }
 }
 
-/// The accessor of a spawn-table key (`color`, `metallic`, `position`, ...). The hand-written fields (`shader`, `normal_map`, ...) are not here.
+/// Registers the bound members of `obj.light` (`type`, `color`, `intensity`, `range`, `shadows`).
+pub(crate) fn add_light_fields<F: UserDataFields<LightRef>>(f: &mut F) {
+    for (lua_name, path) in bound_light_fields() {
+        let acc = LIGHT_ACCESSORS.iter().find(|a| a.path == path).expect("filtered by bound_light_fields");
+        let get = acc.get;
+        f.add_field_method_get(lua_name, move |lua, this| with_light(lua, this.0, |l| get(lua, l)));
+        f.add_field_method_set(lua_name, move |lua, this, v: Value| with_light(lua, this.0, |l| set_light_key(l, lua_name, &v, "light")));
+    }
+}
+
+/// The accessor of a spawn-table key (`color`, `metallic`, `position`, ...). Body scalars are not spawn keys (`body =
+/// { mass = 5 }` is), nor are the hand-written fields.
 pub(crate) fn prop_accessor(key: &str) -> Option<&'static Accessor> {
     static PROPS: OnceLock<Vec<(&'static str, &'static Accessor)>> = OnceLock::new();
     let props = PROPS.get_or_init(|| {
-        bound_fields().into_iter().filter_map(|(lua, path)| ACCESSORS.iter().find(|a| a.path == path).map(|a| (lua, a))).collect()
+        bound_fields()
+            .into_iter()
+            .filter(|(_, path)| !path.starts_with("body."))
+            .filter_map(|(lua, path)| ACCESSORS.iter().find(|a| a.path == path).map(|a| (lua, a)))
+            .collect()
     });
     props.iter().find(|(lua, _)| *lua == key).map(|(_, a)| *a)
+}
+
+/// Spawn-table keys that are not plain registry fields: handles and values with their own conversion.
+pub(crate) const HAND_WRITTEN_PROPS: &[&str] = &["parent", "shader", "lod", "normal_map", "orm_map", "body", "light"];
+
+/// Every key `spawn(mesh, mat, { ... })` accepts: the bound registry fields, then the hand-written ones.
+pub(crate) fn prop_names() -> Vec<&'static str> {
+    let mut names: Vec<&'static str> =
+        bound_fields().into_iter().filter(|(_, path)| !path.starts_with("body.")).map(|(lua, _)| lua).collect();
+    names.extend(HAND_WRITTEN_PROPS);
+    names
 }
 
 #[cfg(test)]
@@ -261,9 +397,16 @@ mod tests {
                 "pbr",
                 "metallic",
                 "roughness",
-                "emissive"
+                "emissive",
+                "mass",
+                "sensor",
+                "gravity_scale",
+                "velocity",
+                "angular_velocity"
             ]
         );
+        let light: Vec<&str> = bound_light_fields().iter().map(|(n, _)| *n).collect();
+        assert_eq!(light, ["type", "color", "intensity", "range", "shadows"]);
     }
 
     #[test]
@@ -272,5 +415,20 @@ mod tests {
         for a in ACCESSORS {
             assert!(bound.iter().any(|(_, p)| p == a.path), "accessor '{}' has no registry field with a lua name", a.path);
         }
+        let light = bound_light_fields();
+        for a in LIGHT_ACCESSORS {
+            assert!(light.iter().any(|(_, p)| p == a.path), "light accessor '{}' has no registry field with a lua name", a.path);
+        }
+    }
+
+    #[test]
+    fn spawn_keys_are_the_old_list() {
+        let mut names = prop_names();
+        names.sort_unstable();
+        let mut old = "name, position, rotation, scale, visible, parent, color, shader, data, body, light, blend, double_sided, cast_shadow, pbr, metallic, roughness, emissive, normal_map, orm_map, lod"
+            .split(", ")
+            .collect::<Vec<_>>();
+        old.sort_unstable();
+        assert_eq!(names, old);
     }
 }
