@@ -171,40 +171,11 @@ pub(crate) fn apply_props(w: &mut World, id: ObjectId, props: Option<Table>) -> 
     Ok(())
 }
 
-/// Fields and methods of an object (suggestions for "unknown field"; the real lookup is mlua's).
-const OBJ_MEMBERS: &[&str] = &[
-    "id",
-    "name",
-    "position",
-    "x",
-    "y",
-    "z",
-    "rotation",
-    "scale",
-    "visible",
-    "color",
-    "material",
-    "blend",
-    "double_sided",
-    "cast_shadow",
-    "pbr",
-    "metallic",
-    "roughness",
-    "emissive",
-    "normal_map",
-    "orm_map",
-    "lod",
-    "shader",
-    "data",
-    "mesh",
-    "parent",
-    "body",
-    "velocity",
-    "angular_velocity",
-    "mass",
-    "gravity_scale",
-    "sensor",
-    "light",
+/// Object members that are not registry fields: the id, the `x`/`y`/`z` shortcuts, the component handles and the hierarchy.
+const OBJ_EXTRA_FIELDS: &[&str] = &["id", "x", "y", "z", "material", "parent", "body", "light"];
+
+/// Methods of an object (suggestions for "unknown field"; the real lookup is mlua's).
+const OBJ_METHODS: &[&str] = &[
     "on",
     "once",
     "emit",
@@ -245,6 +216,20 @@ const OBJ_MEMBERS: &[&str] = &[
     "move",
 ];
 
+/// Every name that can follow `obj.`: the fields of the component registry that live flat on the object (`lua` names
+/// of `LuaScope::Object` components and of the node), a few extra fields and the methods. Suggestion candidates for
+/// "unknown field"; the lookup itself is mlua's.
+#[doc(hidden)]
+pub fn object_member_names() -> Vec<&'static str> {
+    let reg = spark_core::registry::registry();
+    let mut names: Vec<&'static str> = reg.node_info().fields.iter().filter_map(|f| f.lua).collect();
+    for c in reg.components.iter().filter(|c| c.lua == spark_core::registry::LuaScope::Object) {
+        names.extend(c.info().fields.iter().filter_map(|f| f.lua));
+    }
+    names.extend(OBJ_EXTRA_FIELDS);
+    names.extend(OBJ_METHODS);
+    names
+}
 impl UserData for Obj {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("id", |_, this| Ok(this.0.index()));
@@ -430,10 +415,10 @@ impl UserData for Obj {
         });
         // Fallbacks, reached only for names mlua found neither as a field nor as a method: a typo, not a silent nil.
         m.add_meta_method(MetaMethod::Index, |_, _, key: Value| -> LuaResult<Value> {
-            Err(rt(crate::names::field_error(false, "Object", &key_name(&key), OBJ_MEMBERS)))
+            Err(rt(crate::names::field_error(false, "Object", &key_name(&key), &object_member_names())))
         });
         m.add_meta_method(MetaMethod::NewIndex, |_, _, (key, _): (Value, Value)| -> LuaResult<()> {
-            Err(rt(crate::names::field_error(true, "Object", &key_name(&key), OBJ_MEMBERS)))
+            Err(rt(crate::names::field_error(true, "Object", &key_name(&key), &object_member_names())))
         });
         m.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
             Ok(match other {

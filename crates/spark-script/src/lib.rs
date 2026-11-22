@@ -47,6 +47,8 @@ use spark_core::{Game, World};
 pub use names::{classify, clean_error, hint};
 pub use runtime::TaskStatus;
 pub use save::default_save_path;
+#[doc(hidden)]
+pub use types::object_member_names;
 
 use convert::Shared;
 use runtime::SharedRuntime;
