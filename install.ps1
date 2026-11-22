@@ -51,21 +51,46 @@ try {
     }
     Expand-Archive -Path $zip -DestinationPath (Join-Path $tmp 'x') -Force
 
-    function Install-Exe([string]$name, [bool]$required) {
+    # Installs one exe without ever leaving the folder without a working copy:
+    #   1. copy the new exe next to the old one as <name>.new.exe (never over it);
+    #   2. $verify: run `<name>.new.exe --version`; a broken download or a blocked exe stops here, nothing was replaced;
+    #   3. rename the old exe away (a running spark.exe, e.g. `spark update`, can be renamed but not overwritten),
+    #      then rename the new one into place; if either step fails the old exe is renamed back.
+    function Install-Exe([string]$name, [bool]$required, [bool]$verify) {
         $src = Join-Path $tmp "x\$name"
         if (-not (Test-Path $src)) { if ($required) { throw "$assetName does not contain $name" } else { return } }
         $dst = Join-Path $bin $name
+        $base = [IO.Path]::GetFileNameWithoutExtension($name)
+        $new = Join-Path $bin "$base.new.exe"
         # Leftovers of earlier updates (deleted once they are no longer running).
         Get-ChildItem $bin -Filter "$name.old*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-        # A running spark.exe (`spark update`) can't be overwritten, but it can be renamed.
-        if (Test-Path $dst) { Move-Item $dst "$dst.old-$([DateTime]::Now.Ticks)" -Force }
-        Copy-Item $src $dst -Force
+        Remove-Item $new -Force -ErrorAction SilentlyContinue
+        Copy-Item $src $new -Force
+        if ($verify) {
+            $ok = $false
+            try { & $new --version | Out-Null; $ok = ($LASTEXITCODE -eq 0) } catch { $ok = $false }
+            if (-not $ok) {
+                Remove-Item $new -Force -ErrorAction SilentlyContinue
+                throw "the downloaded $name does not run (--version failed); the installed version was left untouched"
+            }
+        }
+        $old = $null
+        try {
+            if (Test-Path $dst) { $old = "$dst.old-$([DateTime]::Now.Ticks)"; Move-Item $dst $old -Force }
+            Move-Item $new $dst -Force
+        } catch {
+            $err = $_.Exception.Message
+            if ($old -and -not (Test-Path $dst) -and (Test-Path $old)) { Move-Item $old $dst -Force -ErrorAction SilentlyContinue }
+            Remove-Item $new -Force -ErrorAction SilentlyContinue
+            throw "cannot install ${name}: $err (the previous version was kept)"
+        }
         # Not running (fresh install, installer started by hand): remove it right away.
         Get-ChildItem $bin -Filter "$name.old*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
     }
     $exe = Join-Path $bin 'spark.exe'
-    Install-Exe 'spark.exe' $true
-    Install-Exe 'spark-editor.exe' $false
+    Install-Exe 'spark.exe' $true $true
+    # spark-editor is a GUI app: it is not started here, only swapped atomically with rollback.
+    Install-Exe 'spark-editor.exe' $false $false
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

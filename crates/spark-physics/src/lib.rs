@@ -6,6 +6,7 @@
 //! ```ignore
 //! world.physics.set_backend(Box::new(spark_physics::RapierBackend::new()));
 //! ```
+#![forbid(unsafe_code)]
 
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;

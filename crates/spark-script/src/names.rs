@@ -129,14 +129,19 @@ pub fn field_error(write: bool, ty: &str, name: &str, known: &[&str]) -> String 
 
 /// Makes reading a global that was never assigned an error ("unknown global 'mth' (did you mean 'math'?)").
 /// Writing new globals stays allowed, `rawget(_G, name)` still returns nil. Engine code must use `raw_get`.
+///
+/// Call it on the BASE globals (Spark's libraries) before `lua.sandbox(true)`: the sandbox's per-script
+/// environment falls back to the base table, and a miss there lands in this `__index`. The suggestions
+/// are taken from the base table and from the script's own globals (`lua.globals()` after the sandbox).
 pub(crate) fn strict_globals(lua: &Lua) -> mlua::Result<()> {
     let mt = lua.create_table()?;
     mt.set(
         "__index",
-        lua.create_function(|_, (globals, key): (Table, Value)| -> mlua::Result<Value> {
+        lua.create_function(|lua, (globals, key): (Table, Value)| -> mlua::Result<Value> {
             let Value::String(name) = key else { return Ok(Value::Nil) };
             let name = name.to_string_lossy().to_string();
-            let keys: Vec<String> = globals.pairs::<String, Value>().filter_map(|p| p.ok().map(|(k, _)| k)).collect();
+            let mut keys: Vec<String> = globals.pairs::<String, Value>().filter_map(|p| p.ok().map(|(k, _)| k)).collect();
+            keys.extend(lua.globals().pairs::<String, Value>().filter_map(|p| p.ok().map(|(k, _)| k)));
             Err(mlua::Error::runtime(match suggest(&name, keys.iter().map(String::as_str)) {
                 Some(s) => format!("unknown global '{name}' (did you mean '{s}'?)"),
                 None => format!("unknown global '{name}' (never assigned: declare it with `local {name}` or assign it before reading)"),
@@ -185,8 +190,13 @@ pub fn clean_error(msg: &str) -> String {
     while out.last().is_some_and(|l| l.trim() == "stack traceback:" || l.trim().is_empty()) {
         out.pop();
     }
-    out.join("\n")
+    out.join("\n").replace(READONLY, READONLY_EXPLAINED)
 }
+
+/// Luau's message for a write into a table that `lua.sandbox` made read-only.
+const READONLY: &str = "attempt to modify a readonly table";
+const READONLY_EXPLAINED: &str = "cannot modify a built-in library (Spark's libraries and API tables - math, string, table, Mesh, \
+     input, ... - are read-only; keep your own data in your own table or local variable, e.g. `local M = {}`)";
 
 /// Stable error code of a script error message (see "Error codes" in docs/SPARK_API.md).
 pub fn classify(message: &str) -> &'static str {
@@ -203,6 +213,8 @@ pub fn classify(message: &str) -> &'static str {
         "SPK-1005"
     } else if m.contains("was destroyed") || m.contains("destroyed object") {
         "SPK-1006"
+    } else if m.contains("cannot modify a built-in library") || m.contains(READONLY) {
+        "SPK-1007"
     } else {
         "SPK-1000"
     }
@@ -270,6 +282,8 @@ mod tests {
         assert_eq!(classify("attempt to set an unknown field 'a' on Object"), "SPK-1004");
         assert_eq!(classify("script ran for more than 5.0 s without returning (infinite loop?)"), "SPK-1005");
         assert_eq!(classify("object was destroyed"), "SPK-1006");
+        assert_eq!(classify("attempt to modify a readonly table"), "SPK-1007");
+        assert_eq!(classify(&clean_error("x: attempt to modify a readonly table")), "SPK-1007");
         assert_eq!(classify("boom"), "SPK-1000");
         assert_eq!(hint("unknown global 'mth' (did you mean 'math'?)").as_deref(), Some("use 'math'"));
         assert_eq!(hint("boom"), None);

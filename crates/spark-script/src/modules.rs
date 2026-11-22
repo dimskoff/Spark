@@ -135,7 +135,7 @@ fn require(lua: &Lua, spec: String) -> LuaResult<Value> {
     let mtime = spark_core::vfs::modified(&path);
     modules.borrow_mut().files.push((path, mtime));
     modules.borrow_mut().loading.push(rel.clone());
-    let result = lua.load(source.as_str()).set_name(format!("@{rel}")).into_function().and_then(|f| f.call::<Value>(()));
+    let result = crate::chunk(lua, source.as_str()).set_name(format!("@{rel}")).into_function().and_then(|f| f.call::<Value>(()));
     modules.borrow_mut().loading.pop();
     let value = match result? {
         Value::Nil => Value::Boolean(true),

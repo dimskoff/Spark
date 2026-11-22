@@ -570,9 +570,44 @@ pub(crate) fn request_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, w
     pollster::block_on(adapter.request_device(&desc)).map_err(|e| format!("cannot open GPU device: {e}"))
 }
 
-pub(crate) fn sanitize_backend_env() {
-    if std::env::var_os("WGPU_BACKEND").is_some_and(|v| v.to_string_lossy().trim().is_empty()) {
-        // SAFETY: called before the GPU instance (and any of its threads) exists.
-        unsafe { std::env::remove_var("WGPU_BACKEND") };
+/// Backends chosen by a `WGPU_BACKEND` value: `None` (unset or blank) means "all backends";
+/// otherwise the comma list (`dx12`, `vulkan,gl`, ...). Pure, so it needs no environment access.
+pub(crate) fn backends_from_value(value: Option<&std::ffi::OsStr>) -> wgpu::Backends {
+    match value.map(|v| v.to_string_lossy()) {
+        Some(v) if !v.trim().is_empty() => wgpu::Backends::from_comma_list(&v),
+        _ => wgpu::Backends::default(),
+    }
+}
+
+/// Applies the `WGPU_BACKEND` env var to `desc` (read once, never modified). wgpu itself would treat a
+/// blank value as "no backend at all", so a blank value is handled here as "unset".
+pub(crate) fn with_backend_env(mut desc: wgpu::InstanceDescriptor) -> wgpu::InstanceDescriptor {
+    desc.backends = backends_from_value(std::env::var_os("WGPU_BACKEND").as_deref());
+    desc
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn unset_or_blank_means_all_backends() {
+        assert_eq!(backends_from_value(None), wgpu::Backends::all());
+        assert_eq!(backends_from_value(Some(OsStr::new(""))), wgpu::Backends::all());
+        assert_eq!(backends_from_value(Some(OsStr::new("  \t"))), wgpu::Backends::all());
+    }
+
+    #[test]
+    fn names_are_parsed() {
+        assert_eq!(backends_from_value(Some(OsStr::new("dx12"))), wgpu::Backends::DX12);
+        assert_eq!(backends_from_value(Some(OsStr::new(" GL , vk "))), wgpu::Backends::GL | wgpu::Backends::VULKAN);
+        assert_eq!(backends_from_value(Some(OsStr::new("d3d12,vulkan"))), wgpu::Backends::DX12 | wgpu::Backends::VULKAN);
+    }
+
+    #[test]
+    fn unknown_names_select_nothing() {
+        // same as wgpu's own behavior: the error then surfaces as "no compatible GPU"
+        assert!(backends_from_value(Some(OsStr::new("bogus"))).is_empty());
     }
 }

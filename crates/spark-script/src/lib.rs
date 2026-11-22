@@ -12,6 +12,7 @@
 //!
 //! Bigger games split into modules (`require("./src/player")`, see `modules.rs`).
 //! The game reloads automatically when any of its files is saved.
+#![forbid(unsafe_code)]
 
 mod api;
 mod audio;
@@ -328,9 +329,12 @@ impl ScriptGame {
             }
             // Reading a global nobody defined is a typo: fail with a suggestion instead of "attempt to index nil".
             names::strict_globals(lua)?;
+            // Spark's libraries (and Luau's own: math, string, ...) become read-only; the script gets a
+            // private, writable globals table that falls back to them (docs/dev/adr/0002-luau-hardening.md).
+            sandbox(lua)?;
             let known: std::collections::HashSet<String> =
                 lua.globals().pairs::<String, Value>().filter_map(|p| p.ok().map(|(k, _)| k)).collect();
-            lua.load(source.as_str()).set_name(format!("@{name}")).exec()?;
+            chunk(lua, source.as_str()).set_name(format!("@{name}")).exec()?;
             if matches!(lua.globals().raw_get::<Value>("draw")?, Value::Function(_)) {
                 return Err(mlua::Error::runtime(
                     "'draw' is Spark's 2D drawing library (draw.rect, draw.text, ...). \
@@ -374,7 +378,7 @@ impl ScriptGame {
         let name = t.name.clone();
         let mut status = None;
         self.run(world, |lua| {
-            let f = lua.load(source.as_str()).set_name(format!("@{name}")).into_function()?;
+            let f = chunk(lua, source.as_str()).set_name(format!("@{name}")).into_function()?;
             status = Some(runtime::spawn_task(lua, f, MultiValue::new()).map_err(|e| e.context("in test"))?.status);
             Ok(())
         });
@@ -469,6 +473,74 @@ const MEMORY_LIMIT: usize = 1 << 30;
 const BIG_MAIN: usize = 800;
 static BIG_HINT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// `lua.sandbox(true)` plus `_G` pointing at the script's own globals (so `_G.score = 1` and
+/// `rawget(_G, "score")` keep working instead of hitting the read-only base table).
+fn sandbox(lua: &Lua) -> mlua::Result<()> {
+    // The sandbox turns on Luau's "safe environment": `sound.volume` in a chunk is resolved ONCE, when the
+    // chunk loads, and the value is baked into the bytecode. That is right for `math.sin` and wrong for
+    // globals whose fields are computed on every read (`time.dt`, `camera.fov`, `screen.height`, `sound.volume`,
+    // ...: userdata and tables with a metatable). The compiler must not import field chains of those.
+    let dynamic: Vec<String> = lua
+        .globals()
+        .pairs::<String, Value>()
+        .filter_map(Result::ok)
+        .filter(|(_, v)| match v {
+            Value::UserData(_) => true,
+            Value::Table(t) => t.metatable().is_some(),
+            _ => false,
+        })
+        .map(|(k, _)| k)
+        .collect();
+    let stat: std::collections::HashSet<String> =
+        lua.globals().pairs::<String, Value>().filter_map(Result::ok).map(|(k, _)| k).filter(|k| !dynamic.contains(k)).collect();
+    lua.set_compiler(mlua::chunk::Compiler::new().set_mutable_globals(dynamic));
+    lua.set_app_data(ChunkNames { stat });
+    lua.sandbox(true)?;
+    let user = lua.globals();
+    user.raw_set("_G", user.clone())
+}
+
+/// Names of the read-only built-ins, for `chunk`.
+struct ChunkNames {
+    /// Plain built-ins (`math`, `Mesh`, `spawn`, ...): their values never change, safe to import at load.
+    stat: std::collections::HashSet<String>,
+}
+
+/// Loads Luau source so that a script's own globals are always read at run time. Luau's sandbox resolves a global
+/// read ("import") once, when a chunk loads, and bakes the value into the bytecode: right for built-ins, silently
+/// stale for globals that change later (`opened = true` in `update`, read by a test chunk or a module). The
+/// compiler never imports a global the chunk itself assigns, so a dead `if false then name = nil ... end` for every
+/// identifier of the chunk that is not a plain built-in is put in front of the code (on the first line, so line
+/// numbers stay). The identifier scan is a conservative over-approximation: locals, fields and words in strings or
+/// comments just become "assigned" too, which costs nothing.
+pub(crate) fn chunk(lua: &Lua, source: &str) -> mlua::chunk::Chunk<'static> {
+    let Some(names) = lua.app_data_ref::<ChunkNames>() else { return lua.load(source.to_string()) };
+    const KEYWORDS: &[&str] = &[
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if", "in", "local", "nil", "not", "or", "repeat",
+        "return", "then", "true", "until", "while", "continue",
+    ];
+    let mut seen = std::collections::HashSet::new();
+    let mut prefix = String::from("if false then ");
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' {
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            let word = &source[start..i];
+            if !names.stat.contains(word) && !KEYWORDS.contains(&word) && seen.insert(word) {
+                prefix.push_str(word);
+                prefix.push_str("=nil ");
+            }
+        } else {
+            i += 1;
+        }
+    }
+    prefix.push_str("end ");
+    lua.load(prefix + source)
+}
 fn call_global(lua: &Lua, name: &str, dt: f32) -> mlua::Result<()> {
     if let Some(f) = lua.globals().raw_get::<Option<Function>>(name)? {
         f.call::<()>(dt)?;

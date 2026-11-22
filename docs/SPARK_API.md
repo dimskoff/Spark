@@ -94,6 +94,12 @@ callbacks are lowercase snake_case (`start`, `update`, `fixed_update`, `late_upd
 error when the name is a near miss of a built-in event; any other name is a custom event. Unknown fields on objects
 (`cube.postion = ...`) are errors for reads and writes.
 
+Spark's libraries are read-only: Luau's own (`math`, `string`, `table`, `os`, ...) and Spark's API tables (`Mesh`, `input`, `draw`,
+`ui`, ...). `math.sin = nil`, `Mesh.cube = f` or `setmetatable(string, {})` fail with "cannot modify a built-in library"; make your
+own table instead (`local M = {}`). Your own globals (`function update(dt)`, `score = 0`, `_G.score`) work as usual and are
+shared by `main.luau`, required modules and tasks, but a global can shadow a built-in only in your own game
+(`function draw() end` is still rejected, see the callback names above).
+
 `spark check --json` gives every error a stable `code` (and a `hint` when the message has a "did you mean"):
 
 | Code | Meaning |
@@ -105,6 +111,7 @@ error when the name is a near miss of a built-in event; any other name is a cust
 | `SPK-1004` | unknown field on an object |
 | `SPK-1005` | script ran too long (infinite loop; use `wait()` inside `task(function() ... end)`) |
 | `SPK-1006` | destroyed object used (check `obj:exists()`) |
+| `SPK-1007` | write to a built-in library or API table (`math.sin = nil`, `Mesh.cube = f`, `setmetatable(string, {})`) |
 | `SPK-1100` | syntax error |
 | `SPK-1101` | type error from `--types` (luau-lsp) |
 

@@ -19,10 +19,12 @@
 //! Run (F5) starts the game in its own process, exactly as players get it. The viewport panel also
 //! links the engine: it draws the game on the editor's GPU device (fly camera, Play mode in the panel).
 #![cfg_attr(all(feature = "gui", windows), windows_subsystem = "windows")]
+#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
 
 mod app;
 mod i18n;
 mod logcap;
+#[allow(unsafe_code)] // Win32 cursor calls, see the SAFETY comments
 mod os;
 mod process;
 mod settings;

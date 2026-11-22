@@ -9,6 +9,7 @@
 //! workspace's own crates. Dev-dependencies and build-scripts-only dependencies are not shipped and are left out.
 //!
 //! `cargo run -p licenses` writes the file; `cargo test -p licenses` fails when the committed file is stale.
+#![forbid(unsafe_code)]
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};

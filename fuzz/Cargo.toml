@@ -1,0 +1,29 @@
+[package]
+name = "spark-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+spark-core = { path = "../crates/spark-core" }
+
+# Own workspace: cargo-fuzz builds with nightly + sanitizers, so this crate stays out of the engine workspace.
+[workspace]
+
+[[bin]]
+name = "fbx"
+path = "fuzz_targets/fbx.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gltf"
+path = "fuzz_targets/gltf.rs"
+test = false
+doc = false
+bench = false

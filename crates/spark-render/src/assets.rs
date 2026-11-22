@@ -58,8 +58,12 @@ impl Renderer {
         while self.textures.len() < assets.texture_count() {
             // loop condition guarantees texture id < assets.texture_count().
             let image = assets.texture(TextureId(self.textures.len() as u32)).expect("texture id in range");
-            let gpu = if image.width == 0 || image.height == 0 || image.width > max || image.height > max {
-                log::error!("texture {}x{} is not supported (max {max}x{max}); using magenta", image.width, image.height);
+            let invalid = image.validate().err();
+            let gpu = if invalid.is_some() || image.width == 0 || image.height == 0 || image.width > max || image.height > max {
+                match &invalid {
+                    Some(e) => log::error!("texture is invalid ({e}); using magenta"),
+                    None => log::error!("texture {}x{} is not supported (max {max}x{max}); using magenta", image.width, image.height),
+                }
                 let magenta = ImageData::solid(Color::hex(0xff00ff));
                 upload_texture(
                     &self.device,
@@ -88,8 +92,12 @@ impl Renderer {
         while self.cubemaps.len() < assets.cubemap_count() {
             // loop condition guarantees cubemap id < assets.cubemap_count().
             let faces = assets.cubemap(CubemapId(self.cubemaps.len() as u32)).expect("cubemap id in range");
-            let gpu = if faces[0].width > max {
-                log::error!("cubemap faces {0}x{0} are too big (max {1}); using white", faces[0].width, max);
+            let invalid = faces.iter().find_map(|f| f.validate().err());
+            let gpu = if invalid.is_some() || faces[0].width > max {
+                match &invalid {
+                    Some(e) => log::error!("cubemap is invalid ({e}); using white"),
+                    None => log::error!("cubemap faces {0}x{0} are too big (max {1}); using white", faces[0].width, max),
+                }
                 upload_cube(&self.device, &self.queue, &std::array::from_fn(|_| ImageData::solid(Color::WHITE)))
             } else {
                 upload_cube(&self.device, &self.queue, faces)

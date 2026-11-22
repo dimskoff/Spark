@@ -1,5 +1,21 @@
-# ADR 0002: Luau hardening without `lua.sandbox(true)`
+# ADR 0002: Luau hardening with `lua.sandbox(true)`
 
-**Context.** Mods and agent-written code are semi-trusted. Luau (mlua) has no `io` / `os.execute`; the risks are memory exhaustion, endless loops, and file access through Spark's own API.
-**Tried.** `lua.sandbox(true)` after installing the API. 9 of 15 script contract tests failed: globals assigned from required modules hit a read-only table, and writes to userdata properties through globals broke. It needs a redesign of how modules and globals are installed.
-**Decision for now.** (1) memory limit 1 GiB per game (`set_memory_limit`), (2) existing 5 s callback watchdog, (3) path jail for every file API, (4) finite-number validation. `sandbox(true)` stays on the roadmap (Phase 7) together with a mod policy.
+**Context.** Mods and agent-written code are semi-trusted. Luau (mlua) has no `io` / `os.execute`; the risks are memory exhaustion, endless loops, file access through Spark's own API, and (audit K9c / S4) a script that monkeypatches libraries or Spark's API (`math.sin = nil`, `Mesh.cube = f`, `setmetatable(string, ...)`) and breaks the engine or other scripts.
+
+**History.** A first try (`lua.sandbox(true)` after installing the API, nothing else changed) failed 9 of 15 script contract tests. Two causes, both solved below: (1) globals assigned by the script / required modules hit the read-only globals table, (2) properties computed on read (`sound.volume`, `screen.height`, `time.dt`) came back stale.
+
+**Decision.**
+1. Memory limit 1 GiB per game (`set_memory_limit`), the 5 s callback watchdog, a path jail for every file API, finite-number validation (unchanged).
+2. `ScriptGame::load` installs everything into the real globals (`api::install`, `require`, `test`, strict-globals metatable), then calls `lua.sandbox(true)` (`sandbox()` in `lib.rs`). mlua/Luau then: makes every library and API table, the builtin metatables (string) and the base globals read-only; gives the main thread a private writable globals table (the "proxy") whose `__index` is the read-only base table. `lua.globals()` is the proxy from then on, so the engine's `raw_get("update")`, `raw_get("render")`, ... find what the script defined. Tasks (`create_thread`), `require`d modules, the scenario test chunk and the `start()` task all inherit the same proxy (Luau threads share the creating thread's globals; `lua.load` uses the current thread's), so they see one set of user globals.
+3. `_G` in the proxy points to the proxy itself, so `_G.score = 1` / `rawget(_G, "score")` keep working (Luau's own `_G` is the read-only base).
+4. Strict globals stay: the `__index` error function (did-you-mean) sits on the metatable of the BASE table. A miss in the proxy falls through to the base table, and a miss there errors. Suggestions merge the base keys and the script's own globals (`lua.globals()` is the proxy inside the callback).
+5. Safe-env imports: the sandbox turns on Luau's "safeenv" fast paths (builtin `math.*` calls, `GETIMPORT`). `GETIMPORT` resolves a chain such as `sound.volume` once, at chunk load, and bakes the value in, which is wrong for globals whose fields are computed on every read. `sandbox()` therefore finds those globals (userdata: `camera`, `graphics`, `physics`, `time`, `window`; tables with a metatable: `debug`, `screen`, `sound`) and gives them to the compiler as `mutable_globals`, which stops chain imports for them. New API globals of these kinds are picked up automatically. Plain tables of functions (`Mesh`, `input`, `math`, ...) are imported as usual.
+   The same load-time resolution also applies to single-level reads of the script's OWN globals (`opened`): a chunk that never assigns `opened` (a test chunk, a module) would keep the value it saw at load. `chunk()` in `lib.rs` therefore loads every chunk (main, modules, test) with a one-line prefix `if false then name=nil ... end` naming every identifier that is not a plain built-in; the compiler never imports a global that the chunk assigns, so those reads happen at run time. Built-ins keep the fast paths.
+6. Writing to a read-only table gives Luau's "attempt to modify a readonly table"; `names::clean_error` rewrites it to "cannot modify a built-in library (...)" and `names::classify` maps it to `SPK-1007`.
+
+**Consequences.**
+- A script can still shadow a built-in name with its own global (`function spawn() end`): it only affects that game, the base table is untouched. A chunk that was already loaded keeps the builtin it imported at load time (Luau behavior), so shadow a name before the modules that use it are required, or just don't.
+- A script can `setmetatable(_G, nil)` (its own proxy) and lose access to the built-ins: it breaks only that game.
+- Measured (60 frames of 600k `math.*` calls per frame, dev profile): 4.7 s before, 1.55 s after (safeenv builtin fast paths), so the sandbox is faster, not slower.
+- Hot reload recreates the Lua state and the sandbox each time, nothing to undo.
+- Still open (Phase 7): a mod permission policy (which mods may use `save`, `discord`, `Texture.load` ...).

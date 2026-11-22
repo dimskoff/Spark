@@ -53,7 +53,14 @@ download() { # url file
 }
 
 tmp="$(mktemp -d 2>/dev/null || mktemp -d -t spark-install)"
-trap 'rm -rf "$tmp"' EXIT INT TERM
+newfile=
+cleanup() {
+    rm -rf "$tmp"
+    [ -n "$newfile" ] && rm -f "$newfile"
+    return 0
+}
+trap cleanup EXIT
+trap 'exit 1' INT TERM
 
 if [ -n "${SPARK_ARCHIVE:-}" ]; then
     cp "$SPARK_ARCHIVE" "$tmp/spark.tar.gz"
@@ -70,13 +77,20 @@ else
     download "$url" "$tmp/spark.tar.gz" || fail "download failed: $url (does release $tag have $asset?)"
     # The release publishes <asset>.sha256 next to every archive: refuse a corrupted or tampered download.
     if download "$url.sha256" "$tmp/spark.sha256" 2>/dev/null; then
-        expected="$(cut -d' ' -f1 "$tmp/spark.sha256" | head -n 1)"
+        expected="$(cut -d' ' -f1 "$tmp/spark.sha256" | head -n 1 | tr 'A-F' 'a-f')"
+        case "$expected" in
+            *[!0-9a-f]* | "") fail "$asset.sha256 does not contain a SHA-256 checksum" ;;
+        esac
+        [ "${#expected}" -eq 64 ] || fail "$asset.sha256 does not contain a SHA-256 checksum"
         if command -v sha256sum >/dev/null 2>&1; then
             actual="$(sha256sum "$tmp/spark.tar.gz" | cut -d' ' -f1)"
         elif command -v shasum >/dev/null 2>&1; then
             actual="$(shasum -a 256 "$tmp/spark.tar.gz" | cut -d' ' -f1)"
         else
-            fail "neither sha256sum nor shasum is installed, so the download cannot be verified (install coreutils / perl, or set SPARK_ALLOW_UNVERIFIED=1)"
+            # fail closed: no tool, no install (unless the user explicitly opted out of verification)
+            [ -n "${SPARK_ALLOW_UNVERIFIED:-}" ] || fail "neither sha256sum nor shasum is installed, so the download cannot be verified (install coreutils / perl, or set SPARK_ALLOW_UNVERIFIED=1)"
+            echo "spark install: warning: no sha256 tool, installing UNVERIFIED (SPARK_ALLOW_UNVERIFIED is set)" >&2
+            actual="$expected"
         fi
         if [ "$actual" != "$expected" ]; then
             fail "checksum mismatch for $asset (expected $expected, got $actual)"
@@ -97,14 +111,21 @@ install_exe() {
         [ "${2:-}" = required ] && fail "$asset does not contain $1"
         return 0
     fi
-    chmod +x "$found"
+    [ -d "$bin/$1" ] && fail "$bin/$1 is a folder"
     # macOS: files downloaded by a browser are quarantined; curl doesn't do that, but a local archive might.
     if [ "$os" = macos ] && command -v xattr >/dev/null 2>&1; then
         xattr -d com.apple.quarantine "$found" 2>/dev/null || true
     fi
-    cp "$found" "$bin/$1.new"
-    chmod 755 "$bin/$1.new"
-    mv -f "$bin/$1.new" "$bin/$1"
+    # A fresh file with an unpredictable name made by mktemp (O_EXCL, mode 600) in the target folder, so the final
+    # mv is a same-filesystem rename and nobody can pre-plant a symlink under a fixed "<name>.new" path.
+    newfile="$(mktemp "$bin/.$1.XXXXXX")" || fail "cannot create a temporary file in $bin"
+    cp "$found" "$newfile"
+    chmod 755 "$newfile"
+    if [ "${2:-}" = required ]; then
+        "$newfile" --version >/dev/null 2>&1 || fail "the downloaded $1 does not run (--version failed); the installed version was left untouched"
+    fi
+    mv -f "$newfile" "$bin/$1"
+    newfile=
 }
 install_exe spark required
 install_exe spark-editor

@@ -1,4 +1,5 @@
 //! Spark Engine - Window and input: maps winit events to [`spark_core::Input`].
+#![forbid(unsafe_code)]
 
 pub use winit;
 

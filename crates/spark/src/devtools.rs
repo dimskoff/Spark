@@ -28,6 +28,10 @@ pub(crate) struct Devtools {
 impl Devtools {
     /// Connects to the editor. `None` (with a warning) when it is not reachable: the game runs normally.
     pub fn connect(addr: &str, gpu: &str) -> Option<Self> {
+        // Belt and braces: `App::new` already drops the flag for packed games.
+        if spark_core::vfs::is_packed() {
+            return None;
+        }
         match Link::connect(addr, CONNECT_TIMEOUT) {
             Ok(link) => {
                 link.send(GameMessage::Hello {

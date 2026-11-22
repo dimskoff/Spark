@@ -6,6 +6,7 @@
 //!
 //! The registry is checked against the running engine by `crates/spark-script/tests/api_drift.rs`: a function that exists
 //! in the VM but not in the registry (or the other way round) fails CI. See `docs/adr/0001-api-registry.md`.
+#![forbid(unsafe_code)]
 
 mod parse;
 mod render;

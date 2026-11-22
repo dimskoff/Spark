@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GameMessage {
     /// First message after connecting.
-    /// `token` is the value of `SPARK_DEVTOOLS_TOKEN` the editor gave the game (checked by the editor once it hands out tokens).
+    /// `token` is the value of `SPARK_DEVTOOLS_TOKEN` the editor gave the game (the editor drops connections without the right token, protocol 3+).
     Hello {
         protocol: u32,
         engine: String,

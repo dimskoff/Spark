@@ -138,8 +138,8 @@ impl Renderer {
     where
         W: wgpu::rwh::HasWindowHandle + wgpu::rwh::HasDisplayHandle + std::fmt::Debug + Send + Sync + 'static,
     {
-        sanitize_backend_env();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(window.clone())));
+        let instance =
+            wgpu::Instance::new(with_backend_env(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(window.clone()))));
         let surface = instance.create_surface(window.clone()).map_err(|e| format!("cannot create window surface: {e}"))?;
         let adapter = request_adapter(&instance, Some(&surface))?;
         let (device, queue) = request_device(&adapter)?;
@@ -171,8 +171,7 @@ impl Renderer {
 
     /// Renderer without a window (tests, CI, AI screenshots).
     pub fn new_headless(width: u32, height: u32) -> Result<Self, String> {
-        sanitize_backend_env();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let instance = wgpu::Instance::new(with_backend_env(wgpu::InstanceDescriptor::new_without_display_handle_from_env()));
         let adapter = request_adapter(&instance, None)?;
         let (device, queue) = request_device(&adapter)?;
         Ok(Self::build(instance, &adapter, device, queue, width, height))
@@ -254,7 +253,7 @@ impl Renderer {
         let height = self.height;
 
         // Move the instance out (replace with a dummy that will be discarded on overwrite).
-        let dummy = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let dummy = wgpu::Instance::new(with_backend_env(wgpu::InstanceDescriptor::new_without_display_handle_from_env()));
         let instance = std::mem::replace(&mut self.instance, dummy);
 
         let adapter = request_adapter(&instance, surface.as_ref().map(|s| &s.surface))?;

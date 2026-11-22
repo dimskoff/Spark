@@ -323,6 +323,12 @@ impl Workspace {
                         toasts.error(t("game.script_error"));
                     }
                 }
+                ViewportEvent::Panicked(text) => {
+                    self.problems.set_runtime(Some(&text));
+                    self.console.push(editor_line(JobKind::Run, Level::Error, text, &self.clock));
+                    toasts.error(t("viewport.panicked_toast"));
+                    self.show_tab(Tab::Console);
+                }
             }
         }
 

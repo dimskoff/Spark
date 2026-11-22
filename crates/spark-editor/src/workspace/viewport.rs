@@ -43,6 +43,23 @@ pub enum Mode {
 pub enum ViewportEvent {
     /// The in-editor game hit a script error (`Some`) or is fine again (`None`).
     Error(Option<String>),
+    /// The game or the engine panicked inside the editor; the game was stopped (text is ready to show).
+    Panicked(String),
+}
+
+/// Longest a script call may run in the viewport before the watchdog raises a script error.
+const SCRIPT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Runs `f`; a panic becomes `Err(message)` instead of unwinding into the editor UI.
+/// (The editor never installs the engine's MessageBox panic hook: that is only done by `App::new`.)
+pub(crate) fn run_guarded<T>(f: impl FnOnce() -> T) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|payload| {
+        payload
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "unknown panic".to_string())
+    })
 }
 
 struct Target {
@@ -136,6 +153,8 @@ pub struct Viewport {
     last_frame: Instant,
     last_error: Option<String>,
     gpu_error: Option<String>,
+    /// The game panicked: no automatic rebuild until Play / Stop / a saved file.
+    crashed: bool,
     events: Vec<ViewportEvent>,
     fps: f32,
     fps_frames: u32,
@@ -162,6 +181,7 @@ impl Viewport {
             last_frame: Instant::now(),
             last_error: None,
             gpu_error: None,
+            crashed: false,
             events: Vec::new(),
             fps: 0.0,
             fps_frames: 0,
@@ -216,6 +236,9 @@ impl Viewport {
 
     pub fn play(&mut self) {
         self.build(true);
+        if self.crashed {
+            return;
+        }
         self.mode = Mode::Play;
         self.focus_next = true;
     }
@@ -252,28 +275,44 @@ impl Viewport {
     }
 
     /// A fresh game (Play: hot reload + sound; Edit: `start` and one frame).
+    /// A panic anywhere in the game / engine is caught (see [`run_guarded`]): the viewport stops, the editor lives.
     fn build(&mut self, play: bool) {
+        self.crashed = false;
         crate::logcap::capture(true);
-        let mut game = ScriptGame::new(self.entry.clone()).hot_reload(play);
-        let mut world = World::new();
-        world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
-        if play
-            && !self.mute
-            && let Some(audio) = engine::audio::KiraBackend::new()
-        {
-            world.audio.set_backend(Box::new(audio));
+        let (entry, mute, size) = (self.entry.clone(), self.mute, self.target.as_ref().map(|t| t.size));
+        let built = run_guarded(move || {
+            // The watchdog turns `while true do end` into a script error instead of a frozen editor.
+            let mut game = ScriptGame::new(entry).hot_reload(play).timeout(Some(SCRIPT_TIMEOUT));
+            let mut world = World::new();
+            world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
+            if play
+                && !mute
+                && let Some(audio) = engine::audio::KiraBackend::new()
+            {
+                world.audio.set_backend(Box::new(audio));
+            }
+            if let Some(size) = size {
+                world.canvas.set_output_size(size.0, size.1);
+            }
+            game.start(&mut world);
+            if !play {
+                run_frame(&mut game, &mut world, EDIT_DT);
+            }
+            Session { game, world }
+        });
+        match built {
+            Ok(session) => {
+                if !self.cam.ready {
+                    self.cam = FlyCam::from_camera(&session.world.scene.camera, self.cam.speed);
+                }
+                self.session = Some(session);
+            }
+            Err(message) => {
+                self.session = None;
+                self.on_panic("start", message);
+                return;
+            }
         }
-        if let Some(t) = &self.target {
-            world.canvas.set_output_size(t.size.0, t.size.1);
-        }
-        game.start(&mut world);
-        if !play {
-            run_frame(&mut game, &mut world, EDIT_DT);
-        }
-        if !self.cam.ready {
-            self.cam = FlyCam::from_camera(&world.scene.camera, self.cam.speed);
-        }
-        self.session = Some(Session { game, world });
         self.stale_since = None;
         self.last_frame = Instant::now();
         self.fps_frames = 0;
@@ -287,8 +326,25 @@ impl Viewport {
             s.world.canvas.set_output_size(t.size.0, t.size.1);
         }
         s.world.debug.record_frame(dt);
-        run_frame(&mut s.game, &mut s.world, dt);
-        self.report_error();
+        match run_guarded(|| run_frame(&mut s.game, &mut s.world, dt)) {
+            Ok(()) => self.report_error(),
+            Err(message) => self.on_panic("frame", message),
+        }
+    }
+
+    /// The game (or the renderer) panicked: drop the game, show why, keep the editor alive. Nothing is rebuilt until
+    /// the user presses Play / Stop or saves a file.
+    fn on_panic(&mut self, stage: &str, message: String) {
+        if let Some(s) = self.session.take() {
+            // The state may be half-updated: dropping it can panic again, which must not escape either.
+            let _ = run_guarded(move || drop(s));
+        }
+        self.crashed = true;
+        self.mode = Mode::Edit;
+        self.stale_since = None;
+        let text = tf("viewport.panicked", &[("stage", &stage), ("message", &message)]);
+        self.last_error = Some(text.clone());
+        self.events.push(ViewportEvent::Panicked(text));
     }
 
     fn report_error(&mut self) {
@@ -342,17 +398,18 @@ impl Viewport {
             cam.position = self.cam.pos;
             cam.rotation = self.cam.rotation();
         }
-        let result = r.render_to_view(&s.world, &target.view, VIEW_FORMAT);
+        let result = run_guarded(|| r.render_to_view(&s.world, &target.view, VIEW_FORMAT));
         s.world.scene.camera = game_camera;
         match result {
-            Ok(_) => self.gpu_error = None,
-            Err(e) => {
+            Ok(Ok(_)) => self.gpu_error = None,
+            Ok(Err(e)) => {
                 if r.is_device_lost() {
                     // The device belongs to egui: nothing to recover here, eframe will fail too.
                     log::error!("viewport: {e}");
                 }
                 self.gpu_error = Some(e);
             }
+            Err(message) => self.on_panic("render", message),
         }
     }
 
@@ -390,7 +447,8 @@ impl Viewport {
         if rect.width() < 2.0 || rect.height() < 2.0 || !self.ensure_gpu(size) {
             return;
         }
-        if self.session.is_none() {
+        // After a crash nothing is rebuilt on its own (that would crash every frame): Play, Stop or a saved file retries.
+        if self.session.is_none() && !self.crashed {
             self.build(false);
         }
         if self.mode == Mode::Edit && self.stale_since.is_some_and(|s| s.elapsed() >= RELOAD_DELAY) {
@@ -808,6 +866,16 @@ mod tests {
         assert_eq!(map_key(egui::Key::OpenBracket), Some(SKey::BracketLeft));
         assert_eq!(map_key(egui::Key::ShiftLeft), Some(SKey::LShift));
         assert_eq!(map_key(egui::Key::PageDown), Some(SKey::PageDown));
+    }
+
+    #[test]
+    fn panics_become_errors() {
+        assert_eq!(run_guarded(|| 7), Ok(7));
+        assert_eq!(run_guarded(|| -> u8 { panic!("boom {}", 1) }), Err("boom 1".to_string()));
+        assert_eq!(run_guarded(|| -> u8 { panic!("static") }), Err("static".to_string()));
+        assert_eq!(run_guarded(|| -> u8 { std::panic::panic_any(5_u32) }), Err("unknown panic".to_string()));
+        // still usable afterwards
+        assert_eq!(run_guarded(|| "ok"), Ok("ok"));
     }
 
     #[test]

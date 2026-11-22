@@ -33,16 +33,19 @@ ID задач (B1, S2, L1, J1 …) совпадают с ID в файлах ра
 
 ## Этап B — Безопасность и устойчивость
 
-| ID | Задача | Статус |
-|---|---|---|
-| B-1 | FBX: проверки индексов, лимит inflate, fuzz-цели (S1, S12) | ⏳ |
-| B-2 | Убрать `unsafe env::remove_var`, `forbid(unsafe_code)` (S5) | ⏳ |
-| B-3 | Devtools-токен от редактора, игнор `--devtools` в упакованных играх (S2, S3) | ⏳ |
-| B-4 | Luau `sandbox(true)` (S4) | ⏳ |
-| B-5 | Вьюпорт редактора: `catch_unwind`/watchdog, Play отдельным процессом (S6) | ⏳ |
-| B-6 | `ImageData`, `dist.rs` симлинки/`tar --`, установщики (S8–S10) | ⏳ |
-| B-7 | minisign по умолчанию + проверка в `spark update` (S7) | ⏳ |
-| B-8 | Golden на CI блокирующие, MSRV-джоба (J9) | ⏳ |
+| ID | Задача | Статус | Кто |
+|---|---|---|---|
+| B-1 | FBX: проверки индексов, лимит inflate, мутационные тесты, скелет `fuzz/` (S1, S12); ревизия glTF | ✅ | `fbx.rs`, `model.rs` (`ModelData::load_bytes`, `catch_unwind` вокруг крейта `gltf`), `spark-core/tests/fbx_robustness.rs` (7000 мутантов, 0 паник), `fuzz/` (не запускался) |
+| B-1b | Хвосты: крейт `gltf` сам паникует на битых accessor'ах (сейчас ловим `catch_unwind`) — нужна своя проверка до вызова; линейный поиск связей FBX O(n²); лимиты декодирования текстур `image` | ⏳ | |
+| B-2 | Убрать `unsafe env::remove_var`, `forbid(unsafe_code)`, `icon.rs` (S5, S11) | ✅ | `spark-render/src/init.rs::backends_from_value`; `forbid(unsafe_code)` в 10 крейтах; unsafe остался только Win32 (icon.rs, app.rs MessageBox, editor os.rs) с SAFETY |
+| B-2b | Атрибуты в корни `spark-script` (forbid), `spark` и `spark-editor` (deny + allow на модуль) | ✅ | `#[allow(unsafe_code)]` только на `app.rs::report_fatal` и `editor mod os` |
+| B-3 | Devtools-токен через `SPARK_DEVTOOLS_TOKEN`, только loopback, игнор в упакованных играх (S2, S3) | ✅ код (ждёт общий прогон) | `spark-devtools` (протокол 3, мин. 2; `Server::poll_game`, 8 плохих попыток), `spark-editor/src/process.rs`, `spark/src/{app,devtools}.rs` (`vfs::is_packed`) |
+| B-4 | Luau sandbox: встроенные библиотеки и API только для чтения, SPK-1007 (S4) | ✅ | `lua.sandbox(true)`, свой env пользователя; `lib.rs::chunk()` — все чанки (main, модули, тест) грузятся с префиксом `if false then name=nil … end` для всех не-встроенных идентификаторов, чтобы Luau не кэшировал пользовательские глобалы; `tests/sandbox.rs` (17 тестов); ADR 0002 обновлён. Скорость `math.*`: 4.7 с → 1.44 с |
+| B-4b | Тех. долг sandbox: префикс мёртвого кода — хак; `loadstring` компилируется без него (возможны устаревшие значения); затенение встроенного имени не видно уже загруженным модулям; SPK-1007 не называет таблицу; политика модов (этап 7) | ⏳ | найдено на общем прогоне: без исправления тест видел `opened = false` после `opened = true` |
+| B-5 | Вьюпорт редактора: `catch_unwind` + watchdog 3 с (S6); правка Transform/visible в инспекторе через `SetObject` (E1, без undo) | ✅ код / ⏳ ручная проверка в редакторе | `viewport.rs::run_guarded`, `workspace/{mod,game}.rs`, локали `viewport.panicked*` |
+| B-6 | `ImageData`, `dist.rs` симлинки/`tar --`, установщики (S4 установщики, S8, S10) | ✅ / ⏳ install.sh не прогонялся (нет bash) | `assets.rs` (`try_new/validate`, 16384, checked), `dist.rs`, `install.ps1` (проверка + откат), `install.sh` (`mktemp`, атомарный `mv`) |
+| B-7 | minisign по умолчанию + проверка в `spark update` (S7) | ⏸ | нужен ключ владельца. Сейчас: `spark update` minisign не проверяет вообще, только SHA-256 из того же релиза (ловит порчу, не подмену) |
+| B-8 | Golden на CI блокирующие, MSRV-джоба (J9) | ⏸ | нужен прогон CI на GitHub (push) |
 
 ## Этапы C–G
 
@@ -57,3 +60,4 @@ ID задач (B1, S2, L1, J1 …) совпадают с ID в файлах ра
 | 2026-11-22 | Агенты 1 и 2 готовы (A1–A6, A8–A10). Удалены `crates/spark-editor.zip` и пустая `examples/starfall`. Запущен агент 3 (A7 сид, A12 логи, общий const лицензий, doc-комментарий `max_fps`) |
 | 2026-11-22 | Агент 3 готов. Общая проверка: fmt/clippy чисто, **233 теста прошли**, 0 упало, 3 пропущены; все примеры и шаблон `spark new` проходят `check`/`test`. Замер: строгие глобалы без потерь (цикл `math.*` 64.7 мс глобал vs 64.9 мс локальный алиас); 10k тел 30 мс/кадр, 10k кубов 3.9 мс. `spark.exe` release 23.1 МБ (было 21.2, +1.9 МБ — текст лицензий). Коммит `6509e0d`. Запущен агент 4 (A15) |
 | 2026-11-22 | A15 (чужие ассеты удалены, коммит `3d81d44`), A16 (лицензии 1.8 МБ → 104 КБ, exe 21.4 МБ). **Этап A закрыт**, кроме хвостов A4/A6b, A8b, A9 (проверка cargo-deny на CI). Старт этапа B |
+| 2026-11-22 | **Этап B закрыт** (B-1..B-6; B-7 и B-8 ждут владельца/CI). Общий прогон нашёл баг sandbox (устаревшие глобалы между чанками) — исправлен. Итог: fmt/clippy чисто, **288 тестов**, 0 упало, 3 пропущены; все примеры проходят; `spark.exe` 21.5 МБ |

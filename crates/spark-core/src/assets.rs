@@ -21,7 +21,13 @@ pub struct CubemapId(pub u32);
 /// Cube faces in GPU layer order.
 pub const CUBE_FACES: [&str; 6] = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"];
 
+/// Largest accepted image side in pixels (a 16384 x 16384 RGBA8 image is 1 GiB).
+pub const MAX_IMAGE_SIDE: u32 = 16384;
+
 /// RGBA8 image in sRGB space.
+///
+/// The fields are public for convenience, so every consumer (GPU upload, [`ImageData::save_png`], icons)
+/// calls [`ImageData::validate`] first. Build images with [`ImageData::try_new`] when the size is not trusted.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImageData {
     pub width: u32,
@@ -30,9 +36,38 @@ pub struct ImageData {
 }
 
 impl ImageData {
+    /// Byte length of a `width` x `height` RGBA8 image, or `None` if a side is over [`MAX_IMAGE_SIDE`] or the size overflows.
+    pub fn byte_len(width: u32, height: u32) -> Option<usize> {
+        if width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE {
+            return None;
+        }
+        (width as usize).checked_mul(height as usize)?.checked_mul(4)
+    }
+
+    /// Checked constructor: sides within [`MAX_IMAGE_SIDE`] and `pixels.len() == width * height * 4`.
+    pub fn try_new(width: u32, height: u32, pixels: Vec<u8>) -> Result<Self, String> {
+        let image = Self { width, height, pixels };
+        image.validate()?;
+        Ok(image)
+    }
+
+    /// Fails when the pixel buffer does not match the size (or the size is over the limit).
+    pub fn validate(&self) -> Result<(), String> {
+        let Some(expected) = Self::byte_len(self.width, self.height) else {
+            return Err(format!("image {}x{} is too large (max side {MAX_IMAGE_SIDE})", self.width, self.height));
+        };
+        if self.pixels.len() != expected {
+            return Err(format!("image {}x{} needs {expected} bytes of RGBA pixels, got {}", self.width, self.height, self.pixels.len()));
+        }
+        Ok(())
+    }
+
+    /// Like [`ImageData::try_new`] but panics on a mismatch (for sizes the caller computed itself).
     pub fn new(width: u32, height: u32, pixels: Vec<u8>) -> Self {
-        assert_eq!(pixels.len(), (width * height * 4) as usize, "ImageData: pixels must be width*height*4 bytes");
-        Self { width, height, pixels }
+        match Self::try_new(width, height, pixels) {
+            Ok(image) => image,
+            Err(e) => panic!("ImageData::new: {e}"),
+        }
     }
 
     /// 1x1 image of one color.
@@ -42,10 +77,10 @@ impl ImageData {
 
     /// Checkerboard: `size` pixels wide, `cells` squares per side.
     pub fn checker(size: u32, cells: u32, a: Color, b: Color) -> Self {
-        let size = size.max(1);
+        let size = size.clamp(1, MAX_IMAGE_SIDE);
         let cell = (size / cells.max(1)).max(1);
         let (a, b) = (a.to_rgba8(), b.to_rgba8());
-        let mut pixels = Vec::with_capacity((size * size * 4) as usize);
+        let mut pixels = Vec::with_capacity(Self::byte_len(size, size).unwrap_or(0));
         for y in 0..size {
             for x in 0..size {
                 pixels.extend(if ((x / cell) + (y / cell)) % 2 == 0 { a } else { b });
@@ -57,12 +92,20 @@ impl ImageData {
     /// Loads a PNG or JPEG file.
     pub fn load(path: &Path) -> Result<Self, String> {
         let bytes = crate::vfs::read(path)?;
-        let img = image::load_from_memory(&bytes).map_err(|e| format!("cannot load image '{}': {e}", path.display()))?.to_rgba8();
-        Ok(Self { width: img.width(), height: img.height(), pixels: img.into_raw() })
+        let fail = |e: &dyn std::fmt::Display| format!("cannot load image '{}': {e}", path.display());
+        // read the header first so a huge declared size is refused before any pixel memory is allocated
+        let reader = image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format().map_err(|e| fail(&e))?;
+        let (w, h) = reader.into_dimensions().map_err(|e| fail(&e))?;
+        if Self::byte_len(w, h).is_none() {
+            return Err(fail(&format!("{w}x{h} is too large (max side {MAX_IMAGE_SIDE})")));
+        }
+        let img = image::load_from_memory(&bytes).map_err(|e| fail(&e))?.to_rgba8();
+        Self::try_new(img.width(), img.height(), img.into_raw()).map_err(|e| fail(&e))
     }
 
     /// Saves as PNG, creating parent folders.
     pub fn save_png(&self, path: &Path) -> Result<(), String> {
+        self.validate().map_err(|e| format!("cannot save '{}': {e}", path.display()))?;
         if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir).map_err(|e| format!("cannot create '{}': {e}", dir.display()))?;
         }
@@ -78,7 +121,7 @@ impl ImageData {
     }
 
     pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
-        let i = ((y * self.width + x) * 4) as usize;
+        let i = (y as usize * self.width as usize + x as usize) * 4;
         [self.pixels[i], self.pixels[i + 1], self.pixels[i + 2], self.pixels[i + 3]]
     }
 }
@@ -199,6 +242,7 @@ impl Assets {
             return Err("cubemap faces are empty".into());
         }
         for (f, name) in faces.iter().zip(CUBE_FACES) {
+            f.validate().map_err(|e| format!("cubemap face {name}: {e}"))?;
             if f.width != size || f.height != size {
                 return Err(format!("cubemap face {name} is {}x{}; all faces must be {size}x{size}", f.width, f.height));
             }
@@ -301,11 +345,13 @@ fn split_strip(strip: &ImageData) -> Result<[ImageData; 6], String> {
             strip.width, strip.height
         ));
     }
+    strip.validate()?;
+    let (side, width) = (size as usize, strip.width as usize);
     Ok(std::array::from_fn(|face| {
-        let mut pixels = Vec::with_capacity((size * size * 4) as usize);
-        for y in 0..size {
-            let start = ((y * strip.width + face as u32 * size) * 4) as usize;
-            pixels.extend_from_slice(&strip.pixels[start..start + (size * 4) as usize]);
+        let mut pixels = Vec::with_capacity(side * side * 4);
+        for y in 0..side {
+            let start = (y * width + face * side) * 4;
+            pixels.extend_from_slice(&strip.pixels[start..start + side * 4]);
         }
         ImageData::new(size, size, pixels)
     }))
@@ -317,6 +363,42 @@ mod cubemap_tests {
 
     fn face(c: u8, size: u32) -> ImageData {
         ImageData::new(size, size, [c, c, c, 255].repeat((size * size) as usize))
+    }
+
+    #[test]
+    fn image_size_is_checked() {
+        assert_eq!(ImageData::byte_len(2, 3), Some(24));
+        assert_eq!(ImageData::byte_len(MAX_IMAGE_SIDE, MAX_IMAGE_SIDE), Some(MAX_IMAGE_SIDE as usize * MAX_IMAGE_SIDE as usize * 4));
+        assert_eq!(ImageData::byte_len(MAX_IMAGE_SIDE + 1, 1), None);
+        // 65536 * 65536 * 4 overflowed u32 (to 0) before; now it is refused, not silently "valid" for an empty buffer
+        assert_eq!(ImageData::byte_len(65536, 65536), None);
+        assert!(ImageData::try_new(65536, 65536, Vec::new()).unwrap_err().contains("too large"));
+        assert!(ImageData::try_new(u32::MAX, u32::MAX, Vec::new()).is_err());
+        assert!(ImageData::try_new(2, 2, vec![0; 15]).unwrap_err().contains("needs 16 bytes"));
+        assert!(ImageData::try_new(2, 2, vec![0; 17]).is_err());
+        assert!(ImageData::try_new(2, 2, vec![0; 16]).is_ok());
+        assert!(ImageData::try_new(0, 0, Vec::new()).is_ok());
+    }
+
+    #[test]
+    fn mismatched_public_fields_are_caught_by_consumers() {
+        let bad = ImageData { width: 4, height: 4, pixels: vec![0; 8] };
+        assert!(bad.validate().is_err());
+        let dir = std::env::temp_dir().join(format!("spark-imagedata-test-{}", std::process::id()));
+        let err = bad.save_png(&dir.join("bad.png")).unwrap_err();
+        assert!(err.contains("needs 64 bytes"), "{err}");
+        assert!(!dir.join("bad.png").exists());
+        let mut a = Assets::new();
+        let mut faces: [ImageData; 6] = std::array::from_fn(|_| face(0, 4));
+        faces[2].pixels.truncate(8);
+        assert!(a.add_cubemap(faces).unwrap_err().contains("+Y"));
+        assert!(split_strip(&ImageData { width: 12, height: 2, pixels: vec![0; 4] }).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "ImageData::new")]
+    fn new_panics_on_mismatch() {
+        let _ = ImageData::new(2, 2, vec![0; 3]);
     }
 
     #[test]

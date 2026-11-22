@@ -12,12 +12,14 @@
 //! `spark build path/to/game` - a player build: ONE executable (this binary, no console window) with
 //! every game file packed inside, plus a .zip. When such an executable starts it runs its packed game.
 #![cfg_attr(all(feature = "gui", windows), windows_subsystem = "windows")]
+#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
 
 mod api_cmd;
 mod check;
 mod dist;
 mod doctor;
 mod editor;
+#[allow(unsafe_code)] // the only unsafe code of this crate: Win32 resource calls (see icon.rs)
 mod icon;
 mod mcp;
 mod new;

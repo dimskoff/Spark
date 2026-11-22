@@ -17,6 +17,8 @@
 //! ```
 //!
 //! Conventions: Y-up, right-handed, meters, radians, sRGB colors.
+// Unsafe only for the Win32 crash message box (`app::report_fatal`), allowed there.
+#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
 
 mod app;
 mod devtools;

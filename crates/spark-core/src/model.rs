@@ -172,10 +172,26 @@ impl ModelData {
     pub fn load(path: &Path, assets: &mut Assets) -> Result<Self, String> {
         let err = |e: String| format!("cannot load model '{}': {e}", path.display());
         let bytes = crate::vfs::read(path).map_err(err)?;
+        Self::load_bytes(path, &bytes, assets)
+    }
+
+    /// Like [`ModelData::load`] for file contents already in memory. `path` selects the format (`.fbx`, otherwise glTF),
+    /// names the model and is the folder external files (textures, `.bin`) are looked up in. Malformed data gives
+    /// `Err`, never a panic.
+    pub fn load_bytes(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<Self, String> {
+        let err = |e: String| format!("cannot load model '{}': {e}", path.display());
         if path.extension().map(|e| e.eq_ignore_ascii_case("fbx")).unwrap_or(false) {
-            return crate::fbx::load(path, &bytes, assets);
+            return crate::fbx::load(path, bytes, assets);
         }
-        let gltf = gltf::Gltf::from_slice(&bytes).map_err(|e| err(e.to_string()))?;
+        // The `gltf` crate (1.4) panics on some malformed accessors (size asserts, arithmetic overflow, `unreachable!`),
+        // so a bad file must not take the game down: turn any panic inside the glTF reader into an error.
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Self::load_gltf(path, bytes, assets)))
+            .unwrap_or_else(|_| Err(err("malformed glTF data (the glTF reader rejected it)".into())))
+    }
+
+    fn load_gltf(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<Self, String> {
+        let err = |e: String| format!("cannot load model '{}': {e}", path.display());
+        let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| err(e.to_string()))?;
         let dir = path.parent().unwrap_or(Path::new("."));
         let mut buffers: Vec<Vec<u8>> = Vec::new();
         for b in gltf.buffers() {
@@ -201,8 +217,9 @@ impl ModelData {
             let img = gltf.images().nth(index).ok_or("bad image index")?;
             let data = match img.source() {
                 gltf::image::Source::View { view, .. } => {
-                    let buf = &buffers[view.buffer().index()];
-                    buf.get(view.offset()..view.offset() + view.length()).ok_or("image view out of range")?.to_vec()
+                    let buf = buffers.get(view.buffer().index()).ok_or("image buffer out of range")?;
+                    let end = view.offset().checked_add(view.length()).ok_or("image view out of range")?;
+                    buf.get(view.offset()..end).ok_or("image view out of range")?.to_vec()
                 }
                 gltf::image::Source::Uri { uri, .. } => read_uri(dir, uri)?,
             };
@@ -224,8 +241,12 @@ impl ModelData {
                 let positions: Vec<[f32; 3]> = positions.collect();
                 let uvs: Vec<[f32; 2]> =
                     r.read_tex_coords(0).map(|t| t.into_f32().collect()).unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
-                let indices: Vec<u32> =
+                let mut indices: Vec<u32> =
                     r.read_indices().map(|i| i.into_u32().collect()).unwrap_or_else(|| (0..positions.len() as u32).collect());
+                indices.truncate(indices.len() / 3 * 3);
+                if let Some(bad) = indices.iter().find(|&&i| i as usize >= positions.len()) {
+                    return Err(err(format!("mesh index {bad} is out of range ({} vertices)", positions.len())));
+                }
                 let normals: Vec<[f32; 3]> = match r.read_normals() {
                     Some(n) => n.collect(),
                     None => smooth_normals(&positions, &indices),

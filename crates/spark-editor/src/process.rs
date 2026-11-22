@@ -83,8 +83,14 @@ enum Captured {
 impl Job {
     /// Starts `exe args...` in `cwd`.
     pub fn spawn(kind: JobKind, exe: &Path, args: &[String], cwd: &Path) -> Result<Self, String> {
+        Self::spawn_with_env(kind, exe, args, cwd, &[])
+    }
+
+    /// Like [`Job::spawn`] with extra environment variables (secrets go here, not into argv).
+    pub fn spawn_with_env(kind: JobKind, exe: &Path, args: &[String], cwd: &Path, envs: &[(&str, &str)]) -> Result<Self, String> {
         let mut cmd = Command::new(exe);
         cmd.args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.envs(envs.iter().copied());
         // Colors / timestamps off: the console parses the plain env_logger format.
         cmd.env("RUST_LOG_STYLE", "never");
         #[cfg(windows)]

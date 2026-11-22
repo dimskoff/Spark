@@ -21,6 +21,12 @@ read the entries below for your old version and the new one, fix the code, then 
   instead of never being called. Helper names like `updateScore` are not affected.
 - `on` / `once` / `obj:on` / `obj:once` reject a near miss of a built-in event (`colision` -> "did you mean 'collision'?").
   Custom event names still work.
+- **Luau sandbox:** built-in libraries (`math`, `string`, `table`, ...) and Spark API tables (`Mesh`, `Material`, `input`, `ui`,
+  `draw`, `sound`, ...) are read-only; writing to them (`math.sin = nil`, `Mesh.cube = f`, `setmetatable(string, ...)`) fails
+  with `SPK-1007`. Scripts get their own writable globals shared by `main.luau`, modules, tasks and tests; `_G` and callbacks
+  work as before; your own globals are always read with their current value in every file (main, modules, tests).
+  Side effect: `math.*`-heavy scripts run about 3x faster (Luau safe-env fast paths for built-ins).
+- `--devtools` accepts only loopback addresses and is ignored by packed (shipped) games.
 - **Unknown object fields are errors for reads too** (`cube.postion` -> "did you mean 'position'?"); before, reading one
   returned `nil`.
 
@@ -35,6 +41,20 @@ read the entries below for your old version and the new one, fix the code, then 
 - Spark Editor: untagged stderr lines (panics) are no longer shown as Info.
 
 - Script error tracebacks no longer show engine-internal frames (`__mlua_*`, `[C]: in ?`).
+- **Security / robustness:**
+  - FBX loader no longer panics or exhausts memory on malformed files (checked indices and arithmetic, caps on nesting,
+    nodes, arrays and inflated bytes, parent cycles repaired); glTF index buffers are validated and a panic inside the
+    `gltf` crate becomes a load error. Seeded mutation tests in `spark-core/tests/fbx_robustness.rs`, cargo-fuzz skeleton in `fuzz/`.
+  - Devtools link is authenticated (protocol 3): Spark Editor issues a per-run token through `SPARK_DEVTOOLS_TOKEN` and drops
+    connections with a wrong or missing token or from non-loopback peers.
+  - `ImageData` is validated (size cap 16384, checked arithmetic); invalid images fall back to a placeholder instead of panicking.
+  - `spark build` does not follow symlinks / junctions and passes `--` to `tar`; the exe-icon step uses a unique temp file.
+  - Installers verify the new binary before replacing the old one; `install.ps1` rolls back on failure, `install.sh` uses
+    `mktemp` + atomic `mv` and honours `SPARK_ALLOW_UNVERIFIED`.
+  - The renderer no longer mutates the environment (`unsafe remove_var("WGPU_BACKEND")` removed); `#![forbid(unsafe_code)]`
+    in every crate without FFI, the rest (`spark`, `spark-cli`, `spark-editor`) deny it outside the Win32 modules.
+- Spark Editor survives a panic of the in-editor game (viewport stops, message in console / problems / toast; script
+  watchdog 3 s) and its Scene inspector can edit a running game's object (position, rotation, scale, visibility).
 - The infinite-loop message points to `task(function() ... end)` instead of the non-existent `task.spawn`.
 
 ### Tooling

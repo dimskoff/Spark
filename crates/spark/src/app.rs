@@ -123,7 +123,11 @@ impl RunArgs {
                 "--no-splash" => out.no_splash = true,
                 "--fullscreen" => out.fullscreen = true,
                 "--windowed" => out.windowed = true,
-                "--devtools" => out.devtools = Some(value("--devtools")?),
+                "--devtools" => {
+                    let v = value("--devtools")?;
+                    check_loopback_addr(&v)?;
+                    out.devtools = Some(v);
+                }
                 "--help" | "-h" => out.help = true,
                 "--licenses" => out.licenses = true,
                 // A mistyped flag must not silently open a window (`--headles`): fail with a suggestion.
@@ -133,6 +137,18 @@ impl RunArgs {
         }
         Ok(out)
     }
+}
+
+/// `--devtools` talks to Spark Editor on this machine only: `127.0.0.1:PORT`, `[::1]:PORT` or `localhost:PORT`.
+fn check_loopback_addr(addr: &str) -> Result<(), String> {
+    let bad = |why: &str| format!("--devtools: '{addr}' {why} (expected a loopback address like 127.0.0.1:50123)");
+    let (host, port) = addr.rsplit_once(':').ok_or_else(|| bad("has no port"))?;
+    if port.parse::<u16>().is_err() {
+        return Err(bad("has an invalid port"));
+    }
+    let host = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(host);
+    let ok = host.eq_ignore_ascii_case("localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    if ok { Ok(()) } else { Err(bad("is not a loopback address")) }
 }
 
 const FLAGS: &[&str] = &[
@@ -220,6 +236,11 @@ impl App {
         if args.licenses {
             print!("{THIRD_PARTY_LICENSES}");
             std::process::exit(0);
+        }
+        let mut args = args;
+        // Shipped (packed) games never open a devtools link, whatever the command line says.
+        if spark_core::vfs::is_packed() && args.devtools.take().is_some() {
+            log::debug!("--devtools ignored: this is a packed game");
         }
         install_panic_hook();
         Self {
@@ -309,6 +330,7 @@ impl App {
 /// (shipped games have no console, so errors would otherwise be invisible).
 /// Not packed: next to the executable first (the exe folder may be read-only, e.g. Program Files);
 /// packed games, and when that fails: the per-user logs folder (`spark_core::paths::log_dir`).
+#[allow(unsafe_code)] // Win32 GetConsoleWindow / MessageBoxW, see the SAFETY comments
 fn report_fatal(msg: &str) {
     let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf()));
     let logs = spark_core::paths::log_dir(&spark_core::paths::game_name().unwrap_or_else(|| "Spark".into()));
@@ -972,6 +994,29 @@ mod input_script_tests {
         assert_eq!(args(&["--headless", "--seed", "5"]).unwrap().effective_seed(), Some(5));
         assert_eq!(args(&["--seed", "5"]).unwrap().effective_seed(), Some(5));
         assert!(HELP.contains("--seed"));
+    }
+
+    #[test]
+    fn devtools_flag_accepts_only_loopback() {
+        let args = |a: &str| RunArgs::parse(["game".to_string(), "--devtools".to_string(), a.to_string()]);
+        for ok in ["127.0.0.1:50123", "127.5.5.5:1", "[::1]:50123", "localhost:8000", "LOCALHOST:8000"] {
+            assert_eq!(args(ok).unwrap().devtools.as_deref(), Some(ok), "{ok}");
+        }
+        for bad in [
+            "192.168.1.5:50123",
+            "0.0.0.0:80",
+            "example.com:80",
+            "10.0.0.1:1",
+            "127.0.0.1",
+            "127.0.0.1:notaport",
+            "[::2]:1",
+            "localhost.evil.com:1",
+            "",
+        ] {
+            let e = args(bad).unwrap_err();
+            assert!(e.contains("--devtools"), "{bad}: {e}");
+        }
+        assert!(RunArgs::parse(["--devtools".to_string()]).is_err());
     }
 
     #[test]

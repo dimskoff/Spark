@@ -140,6 +140,8 @@ speed = "camera {speed} m/s"
 hint = "RMB + mouse: look · WASD/QE: fly · Shift: faster · wheel: forward/speed · MMB: pan"
 click_to_play = "Click to control the game"
 no_gpu = "The viewport is unavailable: the editor runs without the wgpu renderer."
+panicked = "The in-editor game crashed ({stage}): {message}"
+panicked_toast = "The game in the viewport crashed and was stopped"
 help = "Edit mode: the scene after start(), the game is frozen.\nHold RMB + mouse to look around, WASD to fly, Q/E down/up, Shift faster, wheel with RMB changes speed, wheel moves forward/back, MMB pans.\n\nPlay (Ctrl+P) runs the game in the panel with keyboard and mouse. Stop resets the scene.\nEsc frees a captured mouse. Pause (Ctrl+Shift+P) lets you fly around with the editor camera.\nSaved files apply right away."
 
 [asset]

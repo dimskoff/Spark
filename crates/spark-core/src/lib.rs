@@ -5,6 +5,7 @@
 //! - Objects and cameras look along their local -Z axis.
 //! - Angles are in radians (camera FOV is in degrees).
 //! - Colors are sRGB 0..1, like CSS / three.js.
+#![forbid(unsafe_code)]
 
 pub mod animation;
 pub mod assets;
@@ -38,7 +39,7 @@ pub mod world;
 pub use glam::{self, EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4, vec2, vec3, vec4};
 
 pub use animation::{AnimParams, Animator};
-pub use assets::{Assets, CUBE_FACES, CubemapId, ImageData, MeshId, TextureId};
+pub use assets::{Assets, CUBE_FACES, CubemapId, ImageData, MAX_IMAGE_SIDE, MeshId, TextureId};
 pub use audio::{Audio, AudioBackend, AudioCommand, BusId, PlayParams, SoundId, SoundSource};
 pub use branding::{BadgeParams, BadgeState, Branding, SPARK_URL, Splash};
 pub use camera::Camera;

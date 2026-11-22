@@ -19,6 +19,7 @@
 //! - `shaders`      - game / built-in shader modules and pipelines
 //! - `capture`      - screenshots and frame readback
 //! - `uniforms`, `consts`, `resources`, `stats`, `gpu_util`, `culling` - shared types and helpers
+#![forbid(unsafe_code)]
 
 mod assets;
 mod canvas;
