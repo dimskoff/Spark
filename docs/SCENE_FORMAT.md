@@ -46,7 +46,7 @@ bounciness = 0.2
 
 - `[scene]` (or `[prefab]` for a prefab) is the header. `format_version` is required; `name` is optional.
 - `[environment]` is the scene's lighting and background: `ambient`, `background`, and the tables `[environment.sun]`
-  (`direction`, `color`, `intensity`), `[environment.fog]` and `[environment.sky]`. A prefab has none.
+  (`direction`, `color`, `intensity`), `[environment.fog]` and `[environment.sky]`. A prefab has none. Commands (editor, devtools, MCP `scene_apply`) edit it with `{"op":"set","node":"@environment","path":"sun.intensity","value":2.0}`; paths are the field names above (`ambient`, `sun.color`, `fog.far`, `sky.top`, ...), and `@environment` is rejected by every other command.
 - Every object is a `[[node]]`. The nodes form a **flat list**; the hierarchy is given by `parent`.
 
 ## Nodes

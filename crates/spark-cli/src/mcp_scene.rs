@@ -600,6 +600,28 @@ mod tests {
     }
 
     #[test]
+    fn offline_environment_edit_and_its_inverse_restore_the_file_byte_for_byte() {
+        let dir = temp("environment");
+        let (path, text, _, _) = fixture(&dir);
+        let cmds = json!([
+            { "op": "set", "node": "@environment", "path": "sun.intensity", "value": 2.5 },
+            { "op": "set", "node": "@environment", "path": "ambient", "value": { "$color": [0.2, 0.3, 0.4, 1.0] } },
+        ]);
+        let r = apply(&path, cmds);
+        assert_eq!(r["ok"], true, "{r}");
+        let changed = std::fs::read_to_string(&path).unwrap();
+        assert!(changed.contains("[environment") && changed.contains("intensity = 2.5"), "{changed}");
+        let r = apply(&path, json!([r["inverse"].clone()]));
+        assert_eq!(r["ok"], true, "{r}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        let r = apply(&path, json!([{ "op": "set", "node": "@environment", "path": "sun.intensty", "value": 2.5 }]));
+        assert_eq!(r["error"]["code"], "unknown_field", "{r}");
+        let r = apply(&path, json!([{ "op": "delete", "node": "@environment" }]));
+        assert_eq!(r["error"]["code"], "invalid", "{r}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+
+    #[test]
     fn tools_go_through_the_mcp_server() {
         let names: Vec<String> = tools().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
         assert_eq!(names, ["scene_read", "scene_apply", "attach", "game_control", "detach"]);

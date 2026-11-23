@@ -29,7 +29,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use spark_reflect::{FieldFlags, FieldType, ReflectEnum, ReflectError, TypeInfo, Unit, Value, did_you_mean};
+use spark_reflect::{FieldFlags, FieldType, Reflect, ReflectEnum, ReflectError, TypeInfo, Unit, Value, did_you_mean};
 
 use crate::color::Color;
 use crate::command::{Command, CommandError, MeshDoc, MeshState, NodeDoc, SceneDoc};
@@ -72,7 +72,7 @@ impl FileKind {
 }
 
 /// Scene-level lighting and background (`[environment]`). Today these live on [`Scene`], not on objects.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Environment {
     pub ambient: Color,
     pub background: Color,

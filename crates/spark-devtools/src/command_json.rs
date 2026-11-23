@@ -6,6 +6,9 @@
 //! {"op":"batch","commands":[{"op":"delete","node":"a1f3c09e"},{"op":"reparent","node":"b2","parent":"c3"}]}
 //! ```
 //!
+//! `{"op":"set","node":"@environment","path":"sun.intensity","value":2.0}` edits the scene environment (`sun`,
+//! `ambient`, `background`, `fog`, `sky`); `@environment` is accepted by `set` only.
+//!
 //! `op` is one of `spawn`, `delete`, `set`, `reparent`, `add_component`, `remove_component`, `batch`, `restore`.
 //!
 //! Property values are [`spark_reflect::Value`]s in a natural JSON form ([`value_to_json`] / [`value_from_json`]):
@@ -369,6 +372,12 @@ fn node_id(j: &Json, at: &str) -> Res<NodeId> {
     NodeId::new(s).map_err(|e| JsonError::new("invalid_node_id", at, e.to_string()))
 }
 
+/// A node address: a node id or the reserved `@environment`.
+fn node_addr(j: &Json, at: &str) -> Res<NodeId> {
+    let s = j.as_str().ok_or_else(|| JsonError::new("invalid_node_id", at, "a node id is a string"))?;
+    NodeId::address(s).map_err(|e| JsonError::new("invalid_node_id", at, e.to_string()))
+}
+
 fn field<'a>(m: &'a Map<String, Json>, k: &str, at: &str) -> Res<&'a Json> {
     m.get(k).ok_or_else(|| JsonError::new("bad_command", at, format!("missing `{k}`")))
 }
@@ -383,13 +392,13 @@ fn join(at: &str, k: &str) -> String {
 }
 
 fn node_field(m: &Map<String, Json>, k: &str, at: &str) -> Res<NodeId> {
-    node_id(field(m, k, at)?, &join(at, k))
+    node_addr(field(m, k, at)?, &join(at, k))
 }
 
 fn opt_node_field(m: &Map<String, Json>, k: &str, at: &str) -> Res<Option<NodeId>> {
     match m.get(k) {
         None | Some(Json::Null) => Ok(None),
-        Some(j) => node_id(j, &join(at, k)).map(Some),
+        Some(j) => node_addr(j, &join(at, k)).map(Some),
     }
 }
 
@@ -671,6 +680,22 @@ mod tests {
         w.apply(&cmd(r#"{"op":"set","node":"s1","path":"script.props.speed","value":9}"#)).unwrap();
         let s = w.scene.find("S").unwrap();
         assert_eq!(w.scene[s].script().unwrap().props, vec![("speed".to_string(), Value::Int(9))]);
+    }
+
+    #[test]
+    fn environment_address_round_trips_and_is_not_a_spawn_id() {
+        let set = Command::SetProperty { node: NodeId::environment(), path: "sun.intensity".into(), value: Value::Float(2.0) };
+        assert_eq!(round_trip(&set), set);
+        let del = Command::Delete { node: NodeId::environment() };
+        assert_eq!(round_trip(&del), del);
+        let e = command_from_json(&serde_json::from_str(r#"{"op":"spawn","node":{"id":"@environment"}}"#).unwrap(), &none).unwrap_err();
+        assert_eq!(e.code, "invalid_node_id");
+        let e = command_from_json(&serde_json::from_str(r#"{"op":"delete","node":"@other"}"#).unwrap(), &none).unwrap_err();
+        assert_eq!(e.code, "invalid_node_id");
+        let mut w = spark_core::World::new();
+        let j = r#"{"op":"set","node":"@environment","path":"sun.intensity","value":2.5}"#;
+        w.apply(&command_from_json(&serde_json::from_str(j).unwrap(), &none).unwrap()).unwrap();
+        assert_eq!(w.scene.sun.intensity, 2.5);
     }
 
     #[test]

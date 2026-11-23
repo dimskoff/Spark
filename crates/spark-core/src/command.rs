@@ -30,10 +30,11 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use spark_reflect::{ReflectEnum, ReflectError, Value, did_you_mean, split_path};
+use spark_reflect::{Reflect, ReflectEnum, ReflectError, Value, did_you_mean, split_path};
 
 use crate::assets::MeshId;
 use crate::camera::CameraNode;
+use crate::doc::Environment;
 use crate::material::Material;
 use crate::mesh::Aabb;
 use crate::mesh_source::MeshSource;
@@ -55,7 +56,9 @@ pub enum Command {
     /// Deletes a node and its children.
     Delete { node: NodeId },
     /// `path` = `"transform.position"`, `"body.mass"`, `"material.color"`, `"name"`, `"visible"`. The path of a whole
-    /// component (`"body"`) replaces it.
+    /// component (`"body"`) replaces it. `node` may be [`NodeId::ENVIRONMENT`] (`"@environment"`): the path is then one
+    /// of the scene environment (`"sun.intensity"`, `"fog.color"`, `"ambient"`, `"sky"`, ...). Every other command
+    /// rejects that address.
     SetProperty { node: NodeId, path: String, value: Value },
     /// Moves a node under another one (`None` = to the root), keeping its local transform. Cycles are rejected.
     /// `index` is the position among the new parent's children once the node is removed from its old place.
@@ -280,6 +283,8 @@ pub enum ComponentState {
     Camera(Option<CameraNode>),
     Script(Option<ScriptComponent>),
     Mesh(Option<MeshState>),
+    /// The scene environment, restored through the node address [`NodeId::ENVIRONMENT`] (it is not a node component).
+    Environment(Environment),
 }
 
 impl ComponentState {
@@ -293,6 +298,7 @@ impl ComponentState {
             ComponentState::Camera(_) => "camera",
             ComponentState::Script(_) => "script",
             ComponentState::Mesh(_) => "mesh",
+            ComponentState::Environment(_) => "environment",
         }
     }
 
@@ -325,6 +331,24 @@ impl World {
 
     fn apply_inner(&mut self, cmd: &Command) -> Result<Applied, CommandError> {
         match cmd {
+            Command::Spawn { parent: Some(p), .. } if p.is_environment() => Err(reserved(p, "Spawn")),
+            Command::Delete { node } if node.is_environment() => Err(reserved(node, "Delete")),
+            Command::Reparent { node, .. } if node.is_environment() => Err(reserved(node, "Reparent")),
+            Command::Reparent { parent: Some(p), .. } if p.is_environment() => Err(reserved(p, "Reparent")),
+            Command::AddComponent { node, .. } if node.is_environment() => Err(reserved(node, "AddComponent")),
+            Command::RemoveComponent { node, .. } if node.is_environment() => Err(reserved(node, "RemoveComponent")),
+            Command::Restore { node, state } if node.is_environment() || matches!(state, ComponentState::Environment(_)) => match state {
+                ComponentState::Environment(e) if node.is_environment() => {
+                    let before = Environment::of(&self.scene);
+                    e.apply_to(&mut self.scene);
+                    Ok(applied(Command::Restore { node: node.clone(), state: ComponentState::Environment(before) }, vec![node.clone()]))
+                }
+                _ => Err(CommandError::Invalid(format!(
+                    "Restore of the environment needs the node '{}' and an environment state",
+                    NodeId::ENVIRONMENT
+                ))),
+            },
+            Command::SetProperty { node, path, value } if node.is_environment() => self.apply_environment_set(node, path, value),
             Command::Spawn { subtree, parent, index } => self.apply_spawn(subtree, parent.as_ref(), *index),
             Command::Delete { node } => self.apply_delete(node),
             Command::SetProperty { node, path, value } => self.apply_set(node, path, value),
@@ -339,6 +363,24 @@ impl World {
             }
             Command::Batch(cmds) => self.apply_batch(cmds),
         }
+    }
+
+    /// `SetProperty` on `@environment`: the path is addressed in [`Environment`] (sun, fog, sky, ambient, background).
+    /// A leaf write is undone by writing the old value back; a whole `sun` / `fog` / `sky` (or the empty path) by
+    /// restoring the exact environment (a whole `sky` drops its cubemap handle, which is not settable).
+    fn apply_environment_set(&mut self, node: &NodeId, path: &str, value: &Value) -> Result<Applied, CommandError> {
+        let before = Environment::of(&self.scene);
+        let (head, rest) = split_path(path);
+        let leaf = !path.is_empty() && (!rest.is_empty() || matches!(head, "ambient" | "background"));
+        let old = if leaf { before.get(path).ok() } else { None };
+        let mut env = before;
+        env.set(path, value.clone())?;
+        env.apply_to(&mut self.scene);
+        let inverse = match old {
+            Some(old) => Command::SetProperty { node: node.clone(), path: path.to_string(), value: old },
+            None => Command::Restore { node: node.clone(), state: ComponentState::Environment(before) },
+        };
+        Ok(applied(inverse, vec![node.clone()]))
     }
 
     fn node_object(&self, node: &NodeId) -> Result<ObjectId, CommandError> {
@@ -643,6 +685,8 @@ impl World {
                 self.scene[oid].script = s;
                 self.script_written(oid, old);
             }
+            // Handled by `apply_inner` (the environment belongs to no object).
+            ComponentState::Environment(_) => unreachable!("an environment state is restored through @environment"),
             ComponentState::Mesh(None) => {
                 let o = &mut self.scene[oid];
                 o.mesh = None;
@@ -721,6 +765,10 @@ impl World {
             kids.insert(at, child);
         }
     }
+}
+
+fn reserved(node: &NodeId, command: &str) -> CommandError {
+    CommandError::Invalid(format!("'{node}' is the scene environment, not a node: only SetProperty (and Restore) accept it, not {command}"))
 }
 
 fn applied(inverse: Command, changed: Vec<NodeId>) -> Applied {

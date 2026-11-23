@@ -43,6 +43,24 @@ impl NodeId {
         if ok { Ok(Self(Arc::from(s))) } else { Err(InvalidNodeId(s.to_string())) }
     }
 
+    /// The reserved address of the scene environment (sun, ambient, background, fog, sky). It is not a node: only
+    /// `SetProperty` accepts it. [`NodeId::new`] never produces it, so no node can have it as an id.
+    pub const ENVIRONMENT: &'static str = "@environment";
+
+    /// The address of the scene environment ([`NodeId::ENVIRONMENT`]).
+    pub fn environment() -> Self {
+        Self(Arc::from(Self::ENVIRONMENT))
+    }
+
+    pub fn is_environment(&self) -> bool {
+        &*self.0 == Self::ENVIRONMENT
+    }
+
+    /// Like [`NodeId::new`] but also accepts `@environment`: for the places where a command names a node.
+    pub fn address(s: &str) -> Result<Self, InvalidNodeId> {
+        if s == Self::ENVIRONMENT { Ok(Self::environment()) } else { Self::new(s) }
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -144,9 +162,11 @@ mod tests {
     fn ids_are_validated() {
         assert!(NodeId::new("a1f3c09e").is_ok());
         assert!(NodeId::new("door_leaf-2").is_ok());
-        for bad in ["", "Upper", "has space", "a/b", &"x".repeat(33)] {
+        for bad in ["", "Upper", "has space", "a/b", &"x".repeat(33), "@environment", "@a"] {
             assert!(NodeId::new(bad).is_err(), "{bad}");
         }
+        assert!(NodeId::address("@environment").unwrap().is_environment());
+        assert!(NodeId::address("@a").is_err());
     }
 
     #[test]
