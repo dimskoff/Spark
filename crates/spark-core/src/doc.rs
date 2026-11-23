@@ -39,14 +39,14 @@ use crate::registry::registry;
 use crate::scene::{Fog, Object, ObjectId, Scene, ScriptComponent, Sky, Sun};
 use crate::world::World;
 
-/// Components ADR 0003 names that are not in the reflection registry: `script` (free-form props, [`ScriptComponent`]).
-/// It is kept as a plain map in a document and written back unchanged; [`instantiate`] attaches it. (`camera` is a
-/// registry component since C-17; `tags` is the plain key `FileNode::tags`.)
+/// Registry components whose file form is a plain map instead of a table of declared fields: `script` (free-form
+/// props, [`ScriptComponent`]). A document keeps it as a plain map and writes it back unchanged; [`instantiate`]
+/// attaches it. (`tags` is the plain key `FileNode::tags`.)
 pub const RESERVED_COMPONENTS: &[&str] = &["script"];
 
-/// Every component name a file may use, in canonical order: the registry's, then [`RESERVED_COMPONENTS`].
+/// Every component name a file may use, in canonical order (the registry's).
 pub fn component_names() -> Vec<&'static str> {
-    registry().components.iter().map(|c| c.name).chain(RESERVED_COMPONENTS.iter().copied()).collect()
+    registry().components.iter().map(|c| c.name).collect()
 }
 
 /// Position of a component in the canonical order (unknown names last).
@@ -495,18 +495,10 @@ pub fn mesh_from_value(v: &Value) -> Result<(MeshSource, Vec<(f32, MeshSource)>)
 /// (`camera`, `script`) are only required to be maps. This is what both reading a file and [`instantiate`] use.
 pub fn normalize_component(name: &str, v: &Value) -> Result<Value, ComponentError> {
     let reg = registry();
+    if name == "script" {
+        return ScriptComponent::from_value(v).map(|s| s.to_value()).map_err(ComponentError::Invalid);
+    }
     let Some(info) = reg.component(name) else {
-        if name == "script" {
-            return ScriptComponent::from_value(v).map(|s| s.to_value()).map_err(ComponentError::Invalid);
-        }
-        if RESERVED_COMPONENTS.contains(&name) {
-            return match v {
-                Value::Map(_) => Ok(v.clone()),
-                other => {
-                    Err(ComponentError::Invalid(ReflectError::WrongType { path: String::new(), expected: "map", got: other.type_name() }))
-                }
-            };
-        }
         return Err(ComponentError::Unknown { name: name.to_string(), suggestions: did_you_mean(name, component_names()) });
     };
     if name == "mesh" {
@@ -561,11 +553,9 @@ pub fn capture(world: &mut World) -> SceneFile {
                     node.components.push(("mesh".into(), mesh_to_value(&ms.mesh.source, &lod)));
                 }
             } else if let Some(v) = (c.get)(&obj) {
-                node.components.push((c.name.to_string(), round_angles(c.info(), strip_transient(c.info(), v, true))));
+                let v = if RESERVED_COMPONENTS.contains(&c.name) { v } else { round_angles(c.info(), strip_transient(c.info(), v, true)) };
+                node.components.push((c.name.to_string(), v));
             }
-        }
-        if let Some(s) = obj.script() {
-            node.components.push(("script".into(), s.to_value()));
         }
         node.tags = obj.tags.clone();
         file.nodes.push(node);
@@ -695,15 +685,11 @@ fn node_doc(n: &FileNode, warnings: &mut Vec<String>) -> Result<NodeDoc, Instant
     let mut o = Object::empty();
     let reg = registry();
     for (name, v) in &n.components {
+        if name == "script" {
+            d.script = Some(ScriptComponent::from_value(v).map_err(|e| fail(name, ComponentError::Invalid(e)))?);
+            continue;
+        }
         let Some(info) = reg.component(name) else {
-            if name == "script" {
-                d.script = Some(ScriptComponent::from_value(v).map_err(|e| fail(name, ComponentError::Invalid(e)))?);
-                continue;
-            }
-            if RESERVED_COMPONENTS.contains(&name.as_str()) {
-                warnings.push(format!("node '{}': component '{name}' is not supported yet and was ignored", n.id));
-                continue;
-            }
             return Err(fail(name, ComponentError::Unknown { name: name.clone(), suggestions: did_you_mean(name, component_names()) }));
         };
         if name == "mesh" {

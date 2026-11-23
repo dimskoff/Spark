@@ -70,10 +70,10 @@ pub(crate) fn split_override_key(k: &str) -> Result<OverrideKey<'_>, String> {
 pub(crate) fn override_target(k: &OverrideKey<'_>) -> Target {
     if k.component == "node" {
         Target::Node
-    } else if registry().component(k.component).is_some() {
-        Target::Registry
     } else if RESERVED_COMPONENTS.contains(&k.component) {
         Target::Reserved
+    } else if registry().component(k.component).is_some() {
+        Target::Registry
     } else {
         Target::Unknown
     }

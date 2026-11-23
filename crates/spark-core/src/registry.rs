@@ -1,7 +1,8 @@
 //! The component registry over [`Object`] (ADR 0004, ADR 0005).
 //!
 //! An object is a node (name, visibility, hierarchy) plus a closed set of components: `transform`, `mesh`,
-//! `material`, `body`, `light` and `camera` (`script` and `tags` are free-form: see [`FieldDecision::Free`]).
+//! `material`, `body`, `light`, `camera` and `script` (`script.props` is a free-form map; `tags` is a plain list: see
+//! [`FieldDecision::Free`]).
 //! [`registry()`] lists them with their field
 //! metadata ([`TypeInfo`]) and four accessors each, so that scripts, the inspector, scene files and commands all read
 //! and write an object the same way, with the same validation:
@@ -25,14 +26,14 @@
 //!
 //! Adding a field to `Object` needs a decision here: see [`OBJECT_FIELDS`] and the exhaustive test next to it.
 
-use spark_reflect::{Reflect, ReflectError, TypeInfo, Value, did_you_mean, split_path};
+use spark_reflect::{FieldFlags, FieldInfo, FieldType, Reflect, ReflectError, TypeInfo, Value, did_you_mean, split_path};
 
 use crate::assets::MeshId;
 use crate::camera::CameraNode;
 use crate::material::Material;
 use crate::mesh::Aabb;
 use crate::physics::Body;
-use crate::scene::{Light, Object, Transform};
+use crate::scene::{Light, Object, ScriptComponent, Transform};
 
 /// Which Luau object the `lua` names of a component's fields belong to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,6 +97,7 @@ pub fn registry() -> &'static Registry {
             component::<Body>(),
             component::<Light>(),
             component::<CameraNode>(),
+            component::<ScriptComponent>(),
         ],
     };
     &REGISTRY
@@ -232,10 +234,8 @@ pub enum FieldDecision {
     Node,
     /// Part of the named component.
     Component(&'static str),
-    /// A component outside the reflection registry because its data is free-form (`script`: the props are whatever
-    /// the script declares) or a plain list (`tags`, a key of the node in files). `script` is carried by documents as
-    /// a plain map ([`crate::doc::RESERVED_COMPONENTS`]) and attached with [`crate::Scene::set_script`]; `tags` is
-    /// `FileNode::tags` and the path `"tags"` of [`Object::get_prop`] / `set_prop` and of commands.
+    /// A plain list outside the reflection registry (`tags`, a key of the node in files): `FileNode::tags` and the
+    /// path `"tags"` of [`Object::get_prop`] / `set_prop` and of commands.
     Free(&'static str),
     /// The hierarchy (`parent`, `children`): changed with `Scene::set_parent`, later by the `Reparent` command.
     Hierarchy,
@@ -258,7 +258,7 @@ pub const OBJECT_FIELDS: &[(&str, FieldDecision)] = &[
     ("node_id", FieldDecision::Runtime),
     ("body", FieldDecision::Component("body")),
     ("light", FieldDecision::Component("light")),
-    ("script", FieldDecision::Free("script")),
+    ("script", FieldDecision::Component("script")),
     ("camera", FieldDecision::Component("camera")),
     ("tags", FieldDecision::Free("tags")),
     ("parent", FieldDecision::Hierarchy),
@@ -482,6 +482,163 @@ impl Component for CameraNode {
     }
     fn create() -> Option<Self> {
         Some(Self::default())
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// The `script` component: `path` plus free-form `props`
+
+fn script_props_info() -> &'static TypeInfo {
+    static INFO: TypeInfo = TypeInfo {
+        name: "ScriptProps",
+        doc: "Values of the props the script declares, by name. The registry accepts any name; the script host checks them against the script.",
+        fields: &[],
+    };
+    &INFO
+}
+
+fn script_info() -> &'static TypeInfo {
+    static FIELDS: [FieldInfo; 2] = [
+        FieldInfo {
+            name: "path",
+            ty: FieldType::Str,
+            doc: "Game-relative path of the script module (src/door.luau). Changing it restarts the script.",
+            default: || Value::Str(String::new()),
+            range: None,
+            step: None,
+            unit: None,
+            flags: FieldFlags::NONE,
+            lua: None,
+        },
+        FieldInfo {
+            name: "props",
+            ty: FieldType::Struct(script_props_info),
+            doc: "Initial values of the script's props, by name: `script.props.speed`. A change reaches a running script at its next frame.",
+            default: || Value::Map(Vec::new()),
+            range: None,
+            step: None,
+            unit: None,
+            flags: FieldFlags::NONE,
+            lua: None,
+        },
+    ];
+    static INFO: TypeInfo =
+        TypeInfo { name: "ScriptComponent", doc: "A Luau script attached to the object, with its prop values.", fields: &FIELDS };
+    &INFO
+}
+
+fn check_prop(path: &str, v: &Value) -> Result<(), ReflectError> {
+    let finite = |a: &[f32]| if a.iter().all(|x| x.is_finite()) { Ok(()) } else { Err(ReflectError::NotFinite { path: path.to_string() }) };
+    match v {
+        Value::Float(f) if !f.is_finite() => Err(ReflectError::NotFinite { path: path.to_string() }),
+        Value::Vec2(a) => finite(a),
+        Value::Vec3(a) => finite(a),
+        Value::Vec4(a) | Value::Color(a) => finite(a),
+        Value::List(items) => items.iter().enumerate().try_for_each(|(i, x)| check_prop(&format!("{path}[{i}]"), x)),
+        Value::Map(pairs) | Value::Enum { fields: pairs, .. } => pairs.iter().try_for_each(|(k, x)| check_prop(&format!("{path}.{k}"), x)),
+        _ => Ok(()),
+    }
+}
+
+fn script_path_value(v: &Value) -> Result<String, ReflectError> {
+    match v {
+        Value::Str(s) if s.trim().is_empty() => {
+            Err(ReflectError::WrongType { path: "path".into(), expected: "a file path", got: "empty string" })
+        }
+        Value::Str(s) => Ok(s.clone()),
+        other => Err(ReflectError::WrongType { path: "path".into(), expected: "string", got: other.type_name() }),
+    }
+}
+
+/// `script` is reflected by hand: `props` is a free-form map, so `script.props.<name>` addresses any name (the script
+/// host validates names and types against what the script declares).
+impl Reflect for ScriptComponent {
+    fn type_info() -> &'static TypeInfo {
+        script_info()
+    }
+    fn to_value(&self) -> Value {
+        ScriptComponent::to_value(self)
+    }
+    fn from_value(v: &Value) -> Result<Self, ReflectError> {
+        let s = ScriptComponent::from_value(v)?;
+        script_path_value(&Value::Str(s.path.clone()))?;
+        s.props.iter().try_for_each(|(k, x)| check_prop(&format!("props.{k}"), x))?;
+        Ok(s)
+    }
+    fn get(&self, path: &str) -> Result<Value, ReflectError> {
+        if path.is_empty() {
+            return Ok(ScriptComponent::to_value(self));
+        }
+        let (head, rest) = split_path(path);
+        match (head, rest) {
+            ("path", "") => Ok(Value::Str(self.path.clone())),
+            ("props", "") => Ok(Value::Map(self.props.clone())),
+            ("props", name) => self.props.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()).ok_or(ReflectError::UnknownField {
+                ty: "script",
+                path: path.to_string(),
+                suggestions: Vec::new(),
+            }),
+            _ => Err(unknown_script_field(path)),
+        }
+    }
+    fn set(&mut self, path: &str, v: Value) -> Result<(), ReflectError> {
+        if path.is_empty() {
+            *self = <Self as Reflect>::from_value(&v)?;
+            return Ok(());
+        }
+        let (head, rest) = split_path(path);
+        match (head, rest) {
+            ("path", "") => self.path = script_path_value(&v)?,
+            ("props", "") => {
+                let Value::Map(pairs) = v else {
+                    return Err(ReflectError::WrongType { path: "props".into(), expected: "map", got: v.type_name() });
+                };
+                pairs.iter().try_for_each(|(k, x)| check_prop(&format!("props.{k}"), x))?;
+                self.props = pairs;
+            }
+            ("props", name) => {
+                check_prop(path, &v)?;
+                match (self.props.iter().position(|(k, _)| k == name), v) {
+                    (Some(i), Value::None) => {
+                        self.props.remove(i);
+                    }
+                    (None, Value::None) => {}
+                    (Some(i), v) => self.props[i].1 = v,
+                    (None, v) => self.props.push((name.to_string(), v)),
+                }
+            }
+            _ => return Err(unknown_script_field(path)),
+        }
+        Ok(())
+    }
+}
+
+fn unknown_script_field(path: &str) -> ReflectError {
+    ReflectError::UnknownField { ty: "script", path: path.to_string(), suggestions: did_you_mean(split_path(path).0, ["path", "props"]) }
+}
+
+impl Component for ScriptComponent {
+    const NAME: &'static str = "script";
+    const REQUIRED: bool = false;
+    // Scripts reach theirs through `obj.script` (the path), `obj:attach_script` and `self.<prop>`.
+    const LUA: LuaScope = LuaScope::None;
+    fn load(o: &Object) -> Option<Self> {
+        o.script.clone()
+    }
+    fn store(self, o: &mut Object) {
+        o.script = Some(self);
+    }
+    fn clear(o: &mut Object) -> bool {
+        o.script.take().is_some()
+    }
+    fn create() -> Option<Self> {
+        None
+    }
+    fn build(v: Option<&Value>) -> Result<Self, ReflectError> {
+        match v {
+            Some(v) => <Self as Reflect>::from_value(v),
+            None => Err(ReflectError::WrongType { path: "path".into(), expected: "string", got: "none" }),
+        }
     }
 }
 

@@ -62,6 +62,7 @@ read the entries below for your old version and the new one, fix the code, then 
 
 ### Tooling
 - Devtools / MCP `scene_apply`: `spawn` nodes carry the `camera` and `tags` components, and `set` works on `camera.fov` and `tags`.
+- The `script` component is in the component registry: commands `add_component`/`remove_component` and `set` on `script.path` and `script.props.<name>` (also in devtools / MCP JSON, undoable); a prop change reaches a running script's `self.<prop>` on the next frame.
 - `spark check --json` reports failures of scripts attached to objects (SPK code, script path, node id).
 - Devtools protocol 4: `EditorCommand::Command` applies a JSON `Command` (spawn, delete, set, reparent, add/remove component, batch) to the running game through `World::apply` and answers with the inverse command, the changed node ids or a structured error (`code`, `message`, `path`, did-you-mean `suggestions`). Scene snapshots carry `node_id`. `SetObject` still works (now a batch of `SetProperty`); games and editors of protocol 2 and 3 still connect. See ADR 0005, C-13.
 - CI runs `cargo fmt --check` and `clippy -D warnings` with no allowed lints; `rustfmt.toml` added.

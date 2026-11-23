@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use spark_core::{
     Body, Command, CommandError, ComponentState, History, Light, MeshData, MeshDoc, MeshSource, MeshState, NodeDoc, NodeId, ObjectId,
-    SceneDoc, Transform, Vec3, World,
+    SceneDoc, ScriptComponent, Transform, Vec3, World,
 };
 use spark_reflect::{Reflect, ReflectEnum, Value};
 
@@ -19,7 +19,7 @@ fn dump(w: &World) -> String {
         let o = &w.scene[oid];
         let _ = writeln!(
             out,
-            "{}{} {:?} vis={} {:?} {:?} body={:?} light={:?} mesh={:?}/{:?} lod={:?} bounds={:?}",
+            "{}{} {:?} vis={} {:?} {:?} body={:?} light={:?} script={:?} mesh={:?}/{:?} lod={:?} bounds={:?}",
             "  ".repeat(depth),
             o.node_id().map_or("-".to_string(), |n| n.to_string()),
             o.name,
@@ -28,6 +28,7 @@ fn dump(w: &World) -> String {
             o.material,
             o.body,
             o.light,
+            o.script(),
             o.mesh,
             o.mesh.map(|m| w.assets.mesh_source(m).clone()),
             o.lod,
@@ -267,6 +268,31 @@ fn component_commands_roundtrip() {
             state: ComponentState::Transform(Transform { position: Vec3::new(4.0, 4.0, 4.0), ..Transform::default() }),
         },
     );
+}
+
+#[test]
+fn script_commands_roundtrip() {
+    let mut w = fixture();
+    let (_, a, _, c) = ids(&w);
+    let script = |p: &str| ScriptComponent { path: p.into(), props: vec![("speed".into(), Value::Int(2))] }.to_value();
+    roundtrip(&mut w, &Command::AddComponent { node: c.clone(), component: "script".into(), value: Some(script("src/a.luau")) });
+    assert!(w.apply(&Command::AddComponent { node: c.clone(), component: "script".into(), value: None }).is_err());
+    w.apply(&Command::AddComponent { node: a.clone(), component: "script".into(), value: Some(script("src/a.luau")) }).unwrap();
+    let ao = w.find_node(&a).unwrap();
+    assert_eq!(w.scene.scripted().len(), 1);
+    // A prop write keeps the script running (same place in the list) and asks the host to refresh it.
+    let epoch = w.scene.script_epoch();
+    roundtrip(&mut w, &set_n(&a, "script.props.speed", Value::Float(9.5))); // existing prop
+    roundtrip(&mut w, &set_n(&a, "script.props.turns", Value::Int(3))); // new prop
+    assert_eq!(w.scene.script_epoch(), epoch);
+    assert_eq!(w.scene.take_script_props_changed(), vec![ao]);
+    assert!(w.scene.take_script_props_changed().is_empty());
+    // A new path restarts it; replacing and removing too.
+    roundtrip(&mut w, &set_n(&a, "script.path", Value::Str("src/b.luau".into())));
+    roundtrip(&mut w, &Command::AddComponent { node: a.clone(), component: "script".into(), value: Some(script("src/c.luau")) });
+    roundtrip(&mut w, &Command::RemoveComponent { node: a.clone(), component: "script".into() });
+    assert_eq!(w.scene.scripted().len(), 1);
+    assert!(w.apply(&set_n(&c, "script.props.x", Value::Float(f64::INFINITY))).is_err());
 }
 
 #[test]

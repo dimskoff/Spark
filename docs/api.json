@@ -6137,6 +6137,34 @@
             "transient": false
           }
         ]
+      },
+      {
+        "name": "script",
+        "doc": "A Luau script attached to the object, with its prop values.",
+        "required": false,
+        "lua_scope": "none",
+        "fields": [
+          {
+            "name": "path",
+            "kind": "string",
+            "luau_type": "string",
+            "doc": "Game-relative path of the script module (src/door.luau). Changing it restarts the script.",
+            "default": "",
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          },
+          {
+            "name": "props",
+            "kind": "struct",
+            "luau_type": "ScriptProps",
+            "doc": "Initial values of the script's props, by name: `script.props.speed`. A change reaches a running script at its next frame.",
+            "default": {},
+            "read_only": false,
+            "hidden": false,
+            "transient": false
+          }
+        ]
       }
     ]
   }

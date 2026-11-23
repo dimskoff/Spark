@@ -68,6 +68,8 @@ struct Instance {
     state: State,
     class: Option<Rc<Class>>,
     this: Option<Table>,
+    /// Names of the props the component overrides (so that a command removing an override can put the default back).
+    overrides: Vec<String>,
 }
 
 /// Which per-frame callback a stage runs.
@@ -505,6 +507,7 @@ fn call_cb(lua: &Lua, st: &SharedObjects, n: usize, cb: &str, f: Function, args:
 /// Cheap when nothing changed: one comparison of the scene's script epoch.
 pub(crate) fn sync(lua: &Lua) -> LuaResult<()> {
     let Some(st) = shared(lua) else { return Ok(()) };
+    apply_prop_changes(lua, &st)?;
     // A `start` may attach more scripts: go on a few rounds, the rest waits for the next frame.
     for _ in 0..16 {
         let epoch = with(lua, |w| Ok(w.scene.script_epoch()))?;
@@ -532,6 +535,49 @@ pub(crate) fn sync(lua: &Lua) -> LuaResult<()> {
             attach(lua, &st, seq, id)?;
         }
         st.borrow_mut().compact();
+    }
+    Ok(())
+}
+
+/// A command (`SetProperty script.props.speed`, ...) changed the props of a script component: the running instance gets
+/// the new values on `self` at this sync point. Only declared props of the right type are copied (a wrong one is
+/// logged and left out; the instance keeps running); a prop whose override was removed (an undo) gets its default back.
+fn apply_prop_changes(lua: &Lua, st: &SharedObjects) -> LuaResult<()> {
+    let changed = with(lua, |w| Ok(w.scene.take_script_props_changed()))?;
+    for id in changed {
+        let Some(script) = with(lua, |w| Ok(w.scene.get(id).and_then(|o| o.script().cloned())))? else { continue };
+        let target = {
+            let s = st.borrow();
+            s.by_object.get(&id).and_then(|&n| {
+                let i = s.instances.get(n)?;
+                (i.state == State::Running && i.id == id && i.path == script.path).then_some(())?;
+                Some((n, i.class.clone()?, i.this.clone()?, i.overrides.clone()))
+            })
+        };
+        let Some((n, class, this, was)) = target else { continue };
+        // An override that went away puts the declared default back.
+        for k in was.iter().filter(|k| !script.props.iter().any(|(p, _)| p == *k)) {
+            if let Some((_, def)) = class.props.iter().find(|(p, _)| p == k) {
+                this.raw_set(k.as_str(), deep_copy(lua, def, 0)?)?;
+            }
+        }
+        st.borrow_mut().instances[n].overrides = script.props.iter().map(|(k, _)| k.clone()).collect();
+        for (k, v) in &script.props {
+            let Some((_, def)) = class.props.iter().find(|(n, _)| n == k) else {
+                log::warn!("script {}: prop '{k}' is not declared by the script; ignored", script.path);
+                continue;
+            };
+            if !compatible(def, v) {
+                log::warn!(
+                    "script {}: prop '{k}' must be {} (like its default), got {}; ignored",
+                    script.path,
+                    lua_kind(def),
+                    v.type_name()
+                );
+                continue;
+            }
+            this.raw_set(k.as_str(), prop_to_lua(lua, v)?)?;
+        }
     }
     Ok(())
 }
@@ -628,7 +674,8 @@ fn attach(lua: &Lua, st: &SharedObjects, seq: u64, id: ObjectId) -> LuaResult<()
     let built = class.and_then(|class| make_this(lua, &members, &class, &path, id, &script).map(|this| (class, this)));
     let n = {
         let mut s = st.borrow_mut();
-        s.instances.push(Instance { seq, id, path, state: State::Running, class: None, this: None });
+        let overrides = script.props.iter().map(|(k, _)| k.clone()).collect();
+        s.instances.push(Instance { seq, id, path, state: State::Running, class: None, this: None, overrides });
         s.instances.len() - 1
     };
     st.borrow_mut().by_object.insert(id, n);

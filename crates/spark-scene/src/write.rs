@@ -163,15 +163,15 @@ impl Writer {
     }
 
     fn component(&mut self, n: &FileNode, name: &str, v: &Value) {
-        let Some(info) = registry().component(name) else {
-            if RESERVED_COMPONENTS.contains(&name) {
-                match v {
-                    Value::Map(p) => self.generic_table(&format!("node.{name}"), p),
-                    _ => self.issue(Some(n), name, "expected a map of values"),
-                }
-            } else {
-                self.issue(Some(n), name, "not a component (see the list in docs/SCENE_FORMAT.md)");
+        if RESERVED_COMPONENTS.contains(&name) {
+            match v {
+                Value::Map(p) => self.generic_table(&format!("node.{name}"), p),
+                _ => self.issue(Some(n), name, "expected a map of values"),
             }
+            return;
+        }
+        let Some(info) = registry().component(name) else {
+            self.issue(Some(n), name, "not a component (see the list in docs/SCENE_FORMAT.md)");
             return;
         };
         if name == "mesh" {

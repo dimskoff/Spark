@@ -4,7 +4,7 @@
 //! crate-private fields.)
 
 use spark_core::registry::{FieldDecision, LuaScope, OBJECT_FIELDS, registry};
-use spark_core::{Body, BodyKind, Color, Light, LightKind, Material, MeshId, Object, Quat, Shape, Transform, Vec3};
+use spark_core::{Body, BodyKind, Color, Light, LightKind, Material, MeshId, Object, Quat, ScriptComponent, Shape, Transform, Vec3};
 use spark_reflect::{FieldFlags, FieldInfo, FieldType, Reflect, ReflectError, Value};
 
 /// Equal, with float tolerance (rotations go through Euler angles).
@@ -27,6 +27,8 @@ fn full_object() -> Object {
     for name in ["body", "light", "camera"] {
         (registry().component(name).unwrap().add)(&mut o, None).unwrap();
     }
+    let script = ScriptComponent { path: "src/s.luau".into(), props: vec![("speed".into(), Value::Int(2))] }.to_value();
+    (registry().component("script").unwrap().add)(&mut o, Some(&script)).unwrap();
     o
 }
 
@@ -56,11 +58,11 @@ fn sample(info: &FieldInfo, ty: &FieldType) -> Option<Value> {
 #[test]
 fn the_registry_lists_the_components() {
     let names: Vec<&str> = registry().components.iter().map(|c| c.name).collect();
-    assert_eq!(names, ["transform", "mesh", "material", "body", "light", "camera"]);
+    assert_eq!(names, ["transform", "mesh", "material", "body", "light", "camera", "script"]);
     let required: Vec<&str> = registry().components.iter().filter(|c| c.required).map(|c| c.name).collect();
     assert_eq!(required, ["transform", "material"]);
     let types: Vec<&str> = registry().components.iter().map(|c| c.info().name).collect();
-    assert_eq!(types, ["Transform", "MeshRef", "Material", "Body", "Light", "CameraNode"]);
+    assert_eq!(types, ["Transform", "MeshRef", "Material", "Body", "Light", "CameraNode", "ScriptComponent"]);
     assert_eq!(registry().node_info().name, "NodeProps");
     assert_eq!(registry().component("light").unwrap().lua, LuaScope::Handle("light"));
     assert_eq!(registry().component("body").unwrap().lua, LuaScope::Object);
@@ -265,7 +267,7 @@ fn the_whole_object_is_a_map_of_the_present_parts() {
     let o = full_object();
     let Ok(Value::Map(pairs)) = o.get_prop("") else { panic!() };
     let keys: Vec<&str> = pairs.iter().map(|(k, _)| k.as_str()).collect();
-    assert_eq!(keys, ["name", "visible", "transform", "mesh", "material", "body", "light", "camera"]);
+    assert_eq!(keys, ["name", "visible", "transform", "mesh", "material", "body", "light", "camera", "script"]);
     let bare = Object::empty();
     let Ok(Value::Map(pairs)) = bare.get_prop("") else { panic!() };
     let keys: Vec<&str> = pairs.iter().map(|(k, _)| k.as_str()).collect();
@@ -313,6 +315,35 @@ fn flat_lua_names_do_not_collide_and_every_field_is_documented() {
     for known in ["name", "visible", "position", "rotation", "scale", "mesh", "lod", "color", "metallic", "mass", "velocity", "shader"] {
         assert!(flat.contains(&known), "`{known}` is missing from the flat names");
     }
+}
+
+#[test]
+fn script_props_are_addressed_by_name() {
+    let mut o = Object::empty();
+    let script = registry().component("script").unwrap();
+    assert!((script.add)(&mut o, None).is_err(), "a script needs a path");
+    assert!((script.add)(&mut o, Some(&ScriptComponent::new("").to_value())).is_err());
+    (script.add)(&mut o, Some(&ScriptComponent::new("src/s.luau").to_value())).unwrap();
+    assert!(o.get_prop("script.props.speed").is_err());
+    o.set_prop("script.props.speed", Value::Float(3.5)).unwrap();
+    o.set_prop("script.props.label", Value::Str("x".into())).unwrap();
+    assert_eq!(o.get_prop("script.props.speed"), Ok(Value::Float(3.5)));
+    o.set_prop("script.props.speed", Value::Int(4)).unwrap();
+    assert_eq!(o.get_prop("script.props.speed"), Ok(Value::Int(4)));
+    assert!(matches!(o.set_prop("script.props.speed", Value::Float(f64::NAN)), Err(ReflectError::NotFinite { .. })));
+    assert_eq!(o.get_prop("script.props.speed"), Ok(Value::Int(4)), "a refused write changes nothing");
+    assert_eq!(
+        o.get_prop("script.props").unwrap(),
+        Value::Map(vec![("speed".into(), Value::Int(4)), ("label".into(), Value::Str("x".into()))])
+    );
+    o.set_prop("script.props.label", Value::None).unwrap();
+    assert_eq!(o.script().unwrap().props, vec![("speed".to_string(), Value::Int(4))]);
+    o.set_prop("script.path", Value::Str("src/t.luau".into())).unwrap();
+    assert_eq!(o.get_prop("script.path"), Ok(Value::Str("src/t.luau".into())));
+    assert!(o.set_prop("script.path", Value::Str(" ".into())).is_err());
+    assert!(o.set_prop("script.pth", Value::Str("a".into())).is_err());
+    assert!((script.remove)(&mut o));
+    assert!(o.set_prop("script.props.speed", Value::Int(1)).is_err());
 }
 
 #[test]

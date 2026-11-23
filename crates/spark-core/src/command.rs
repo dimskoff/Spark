@@ -278,6 +278,7 @@ pub enum ComponentState {
     Body(Option<Body>),
     Light(Option<Light>),
     Camera(Option<CameraNode>),
+    Script(Option<ScriptComponent>),
     Mesh(Option<MeshState>),
 }
 
@@ -290,13 +291,21 @@ impl ComponentState {
             ComponentState::Body(_) => "body",
             ComponentState::Light(_) => "light",
             ComponentState::Camera(_) => "camera",
+            ComponentState::Script(_) => "script",
             ComponentState::Mesh(_) => "mesh",
         }
     }
 
     /// An optional component that is not there.
     pub fn is_absent(&self) -> bool {
-        matches!(self, ComponentState::Body(None) | ComponentState::Light(None) | ComponentState::Camera(None) | ComponentState::Mesh(None))
+        matches!(
+            self,
+            ComponentState::Body(None)
+                | ComponentState::Light(None)
+                | ComponentState::Camera(None)
+                | ComponentState::Script(None)
+                | ComponentState::Mesh(None)
+        )
     }
 }
 
@@ -518,7 +527,11 @@ impl World {
             // handles: those are undone by restoring the captured state.
             let exact = head == "transform" || rest.is_empty();
             let old = if exact { None } else { reg.get_prop(&self.scene[oid], path).ok() };
+            let old_script = self.script_path(oid);
             reg.set_prop(&mut self.scene[oid], path, value.clone())?;
+            if head == "script" {
+                self.script_written(oid, old_script);
+            }
             match old {
                 Some(old) => Command::SetProperty { node: node.clone(), path: path.to_string(), value: old },
                 None => Command::Restore { node: node.clone(), state: before },
@@ -542,8 +555,10 @@ impl World {
             let source = MeshSource::from_value(v).map_err(|e| CommandError::Reflect(e.at("mesh")))?;
             self.apply_state(oid, ComponentState::Mesh(Some(MeshState { mesh: MeshDoc::from_source(source), lod: Vec::new() })))?;
         } else {
+            let old_script = self.script_path(oid);
             (info.add)(&mut self.scene[oid], value).map_err(|e| CommandError::Reflect(e.at(component)))?;
             self.scene.reconcile_camera(oid);
+            self.script_written(oid, old_script);
         }
         let inverse = if before.is_absent() {
             Command::RemoveComponent { node: node.clone(), component: component.to_string() }
@@ -563,9 +578,27 @@ impl World {
         if before.is_absent() {
             return Err(CommandError::NoSuchComponent { node: node.clone(), component: component.to_string() });
         }
+        let old_script = self.script_path(oid);
         (info.remove)(&mut self.scene[oid]);
         self.scene.reconcile_camera(oid);
+        self.script_written(oid, old_script);
         Ok(applied(Command::Restore { node: node.clone(), state: before }, vec![node.clone()]))
+    }
+
+    fn script_path(&self, oid: ObjectId) -> Option<String> {
+        self.scene.get(oid).and_then(|o| o.script()).map(|s| s.path.clone())
+    }
+
+    /// Tells the scene what a write to the `script` component did (`old` = the script path before it): a new or
+    /// removed script changes the list of scripted objects; a changed path restarts the script; the same path with
+    /// other props asks the script host to copy the props into the running instance.
+    fn script_written(&mut self, oid: ObjectId, old: Option<String>) {
+        let new = self.script_path(oid);
+        match (&old, &new) {
+            (Some(a), Some(b)) if a == b => self.scene.mark_script_props_changed(oid),
+            (Some(_), Some(_)) => self.scene.restart_script(oid),
+            _ => self.scene.reconcile_script(oid),
+        }
     }
 
     fn component_info(&self, name: &str) -> Result<&'static crate::registry::ComponentInfo, CommandError> {
@@ -590,6 +623,7 @@ impl World {
             "body" => ComponentState::Body(o.body.clone()),
             "light" => ComponentState::Light(o.light),
             "camera" => ComponentState::Camera(o.camera),
+            "script" => ComponentState::Script(o.script.clone()),
             "mesh" => ComponentState::Mesh(self.mesh_state(o)),
             _ => return None,
         })
@@ -603,6 +637,11 @@ impl World {
             ComponentState::Light(l) => self.scene[oid].light = l,
             ComponentState::Camera(c) => {
                 self.scene.set_camera_node(oid, c);
+            }
+            ComponentState::Script(s) => {
+                let old = self.script_path(oid);
+                self.scene[oid].script = s;
+                self.script_written(oid, old);
             }
             ComponentState::Mesh(None) => {
                 let o = &mut self.scene[oid];

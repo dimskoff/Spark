@@ -533,6 +533,9 @@ pub struct Scene {
     /// Objects with a `camera` component, in the order the components were added (empty in nearly every game: the
     /// camera sync points check this first and return).
     camera_nodes: Vec<ObjectId>,
+    /// Objects whose script props were changed by a command while the script may be running: the script host copies
+    /// the new values into the live instance at its next sync ([`Scene::take_script_props_changed`]).
+    script_props_changed: Vec<ObjectId>,
 }
 
 impl Default for Scene {
@@ -557,6 +560,7 @@ impl Scene {
             script_seq: 0,
             script_epoch: 0,
             camera_nodes: Vec::new(),
+            script_props_changed: Vec::new(),
         }
     }
 
@@ -681,6 +685,39 @@ impl Scene {
             self.register_script(id);
         }
         true
+    }
+
+    /// Makes the list of scripted objects agree with the object (after the component was added or removed through the
+    /// registry). A script that was there and still is keeps its place (and its running instance).
+    pub(crate) fn reconcile_script(&mut self, id: ObjectId) {
+        let has = self.get(id).is_some_and(|o| o.script.is_some());
+        let listed = self.scripted.iter().any(|(_, o)| *o == id);
+        match (has, listed) {
+            (true, false) => self.register_script(id),
+            (false, true) => self.unregister_script(id),
+            _ => {}
+        }
+    }
+
+    /// Starts the script of an object again (a new script as far as the script host is concerned): a changed path.
+    pub(crate) fn restart_script(&mut self, id: ObjectId) {
+        if self.get(id).is_some_and(|o| o.script.is_some()) {
+            self.unregister_script(id);
+            self.register_script(id);
+        }
+    }
+
+    /// Remembers that the props of the object's script changed (see [`Scene::take_script_props_changed`]).
+    pub(crate) fn mark_script_props_changed(&mut self, id: ObjectId) {
+        if !self.script_props_changed.contains(&id) {
+            self.script_props_changed.push(id);
+        }
+    }
+
+    /// The objects whose script props were changed by commands since the last call (the script host applies them to
+    /// the running instances). Empty, and free, in nearly every frame.
+    pub fn take_script_props_changed(&mut self) -> Vec<ObjectId> {
+        std::mem::take(&mut self.script_props_changed)
     }
 
     /// Adds an object. Prefer `World::spawn`, which also sets mesh bounds.

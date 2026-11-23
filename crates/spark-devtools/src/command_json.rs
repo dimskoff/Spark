@@ -176,6 +176,9 @@ fn node_to_json(n: &NodeDoc) -> Json {
     if let Some(c) = &n.camera {
         comps.insert("camera".into(), value_to_json(&spark_reflect::Reflect::to_value(c)));
     }
+    if let Some(s) = &n.script {
+        comps.insert("script".into(), value_to_json(&s.to_value()));
+    }
     for c in registry().components {
         if c.name != "mesh" {
             if let Some(v) = (c.get)(&o) {
@@ -270,6 +273,7 @@ fn node_from_json(j: &Json, at: &str) -> Res<NodeDoc> {
         return Err(JsonError::new("bad_command", &format!("{at}.components"), "expected an object"));
     }
     n.camera = o.camera().copied();
+    n.script = o.script().cloned();
     n.tags = o.tags().to_vec();
     n.transform = o.transform;
     n.material = o.material;
@@ -566,6 +570,16 @@ mod tests {
                 value: Value::List(vec![Value::Str("a".into()), Value::Str("b".into())]),
             },
             Command::AddComponent { node: nid("a1"), component: "camera".into(), value: None },
+            Command::AddComponent {
+                node: nid("a1"),
+                component: "script".into(),
+                value: Some(Value::Map(vec![
+                    ("path".into(), Value::Str("src/door.luau".into())),
+                    ("props".into(), Value::Map(vec![("speed".into(), Value::Int(2))])),
+                ])),
+            },
+            Command::SetProperty { node: nid("a1"), path: "script.props.speed".into(), value: Value::Int(5) },
+            Command::RemoveComponent { node: nid("a1"), component: "script".into() },
             Command::RemoveComponent { node: nid("a1"), component: "light".into() },
             Command::Batch(vec![
                 Command::Delete { node: nid("a1") },
@@ -649,6 +663,14 @@ mod tests {
         assert_eq!(w.scene[id].tags(), ["x"]);
         let bad = command_from_json(&serde_json::from_str(r#"{"op":"spawn","node":{"components":{"tags":[""]}}}"#).unwrap(), &none);
         assert!(bad.is_err());
+        // A script in a spawned node, then a command on its props.
+        let with_script =
+            cmd(r#"{"op":"spawn","node":{"id":"s1","name":"S","components":{"script":{"path":"src/s.luau","props":{"speed":2}}}}}"#);
+        assert_eq!(&round_trip(&with_script), &with_script);
+        w.apply(&with_script).unwrap();
+        w.apply(&cmd(r#"{"op":"set","node":"s1","path":"script.props.speed","value":9}"#)).unwrap();
+        let s = w.scene.find("S").unwrap();
+        assert_eq!(w.scene[s].script().unwrap().props, vec![("speed".to_string(), Value::Int(9))]);
     }
 
     #[test]

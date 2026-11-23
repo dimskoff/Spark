@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use spark_core::doc::{FileKind, FileNode, SceneFile, instantiate};
-use spark_core::{Game, NodeId, ScriptComponent, World, run_frame};
+use spark_core::{Command, Game, NodeId, ScriptComponent, World, run_frame};
 use spark_reflect::Value as Prop;
 use spark_script::ScriptGame;
 
@@ -131,6 +131,35 @@ fn props_from_the_file_override_the_defaults_and_unknown_names_are_errors() {
     assert!(wrong.contains("must be a number") && wrong.contains("string"), "{wrong}");
     // the other objects of the file were not affected
     assert_eq!(r.x("ticker"), 2.0);
+}
+
+#[test]
+fn a_command_changing_a_prop_reaches_the_running_script_next_frame() {
+    let main = main_with("local d = spawn(Mesh.cube(), 'red', { name = 'door' })\n  d:attach_script('src/s.luau')");
+    let script = "local S = {}\nS.props = { speed = 2 }\nfunction S:update(dt) self.x = self.speed end\nreturn S\n";
+    let mut r = Run::new(&main, &[("src/s.luau", script)]);
+    r.frames(2);
+    assert_eq!(r.x("door"), 2.0);
+    let oid = r.world.scene.find("door").unwrap();
+    let node = r.world.node_id(oid).unwrap();
+    let set = |path: &str, v: Prop| Command::SetProperty { node: node.clone(), path: path.into(), value: v };
+    let applied = r.world.apply(&set("script.props.speed", Prop::Int(7))).unwrap();
+    r.frames(1);
+    assert_eq!(r.x("door"), 7.0, "the live instance sees the new value");
+    // Undo goes back the same way; a wrong type or an unknown name is logged and the script keeps running.
+    r.world.apply(&applied.inverse).unwrap();
+    r.frames(1);
+    assert_eq!(r.x("door"), 2.0);
+    r.world.apply(&set("script.props.speed", Prop::Str("fast".into()))).unwrap();
+    r.world.apply(&set("script.props.nope", Prop::Int(1))).unwrap();
+    r.frames(1);
+    assert_eq!(r.x("door"), 2.0);
+    assert!(r.failures().is_empty(), "{:?}", r.failures());
+    // Removing a bad prop and writing a good one afterwards works as usual.
+    r.world.apply(&set("script.props.speed", Prop::Int(3))).unwrap();
+    r.world.apply(&set("script.props.nope", Prop::None)).unwrap();
+    r.frames(1);
+    assert_eq!(r.x("door"), 3.0);
 }
 
 #[test]
