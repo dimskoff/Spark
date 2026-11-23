@@ -1,4 +1,4 @@
-//! `spark check path/to/game [--frames N] [--json]`: finds script errors without a window or GPU.
+﻿//! `spark check path/to/game [--frames N] [--json]`: finds script errors without a window or GPU.
 //!
 //! 1. Compiles every `.luau` file of the game (syntax errors in modules that are not required yet).
 //! 2. Runs `main.luau` headless (physics on, no audio, no renderer) for N frames (default 60):
@@ -24,6 +24,8 @@ pub struct Problem {
     /// Stable error code (`SPK-1xxx`, see "Error codes" in docs/SPARK_API.md).
     pub code: &'static str,
     pub message: String,
+    /// Node id of the object whose attached script failed (object script failures only).
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -49,8 +51,9 @@ impl Report {
             .map(|e| {
                 let line = e.line.map(|l| l.to_string()).unwrap_or_else(|| "null".into());
                 let hint = engine::script::hint(&e.message).map(|h| format!(",\"hint\":{}", json_str(&h))).unwrap_or_default();
+                let node = e.node.as_ref().map(|n| format!(",\"node\":{}", json_str(n))).unwrap_or_default();
                 format!(
-                    "{{\"file\":{},\"line\":{line},\"message\":{},\"code\":\"{}\"{hint}}}",
+                    "{{\"file\":{},\"line\":{line},\"message\":{},\"code\":\"{}\"{hint}{node}}}",
                     json_str(&e.file),
                     json_str(&e.message),
                     e.code
@@ -212,10 +215,26 @@ pub fn check_seeded(path: &Path, frames: u32, seed: u64) -> Report {
         let main_name = main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         report.errors.push(parse_error(e, &main_name));
     }
+    for f in world.script_failures() {
+        report.errors.push(object_failure(f));
+    }
     if !had_error_log {
         let _ = std::fs::remove_file(&error_log);
     }
     report
+}
+
+/// An object script failure as a report error: the script path, the code, the object's node id and the message.
+fn object_failure(f: &engine::ScriptFailure) -> Problem {
+    let text = f.message.strip_prefix(&format!("[{}] ", f.code)).unwrap_or(&f.message);
+    let file = text.strip_prefix("script ").and_then(|r| r.split_once(": error in ")).map(|(p, _)| p).unwrap_or("main.luau");
+    Problem {
+        file: file.replace('\\', "/"),
+        line: None,
+        code: engine::script::classify(text),
+        message: text.to_string(),
+        node: f.node_id.as_ref().map(|n| n.to_string()),
+    }
 }
 
 /// Files below `dir` with one of `exts` (lowercase, no dot), relative to `root`, sorted, without hidden / build folders.
@@ -318,13 +337,13 @@ pub fn parse_lsp_output(text: &str) -> Vec<Problem> {
             .filter_map(|m| line.find(m).map(|i| line[i + m.len()..].trim()))
             .next()
             .unwrap_or(line);
-        out.push(Problem { file, line: Some(number), code: "SPK-1101", message: message.to_string() });
+        out.push(Problem { file, line: Some(number), code: "SPK-1101", message: message.to_string(), node: None });
     }
     out
 }
 
 fn problem(file: &str, line: Option<u32>, message: &str) -> Problem {
-    Problem { file: file.into(), line, code: engine::script::classify(message), message: message.trim().into() }
+    Problem { file: file.into(), line, code: engine::script::classify(message), message: message.trim().into(), node: None }
 }
 
 /// Splits `src/a.luau:12: message` (anywhere in a Luau error / traceback) into file, line, message.
@@ -355,7 +374,7 @@ pub fn parse_error(text: &str, fallback: &str) -> Problem {
             let prefix = text[..start].trim().trim_end_matches(['[', '"', '\'', '(', '@', '<']).trim();
             let message = if prefix.is_empty() || prefix.ends_with("error:") { rest.to_string() } else { format!("{prefix} {rest}") };
             let message = message.trim().to_string();
-            return Problem { file, line, code: engine::script::classify(&message), message };
+            return Problem { file, line, code: engine::script::classify(&message), message, node: None };
         }
         search = at + 5;
     }
@@ -565,6 +584,22 @@ mod tests {
         let r = check(&dir, 5);
         assert_eq!(r.errors[0].code, "SPK-1100", "{:?}", r.errors);
         assert!(r.to_json().contains("\"code\":\"SPK-1100\""));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn object_script_failures_are_errors() {
+        let dir = game(&[
+            ("main.luau", "function start() spawn(Mesh.cube(), 'red', { name = 'bad' }):attach_script('scripts/bad.luau') end\n"),
+            ("scripts/bad.luau", "local B = {}\nfunction B:update(dt) error('boom') end\nreturn B\n"),
+        ]);
+        let r = check(&dir, 5);
+        assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+        let e = &r.errors[0];
+        assert_eq!((e.file.as_str(), e.code), ("scripts/bad.luau", "SPK-1000"), "{e:?}");
+        assert!(e.node.is_some() && e.message.contains("boom"), "{e:?}");
+        let json = r.to_json();
+        assert!(json.contains("\"ok\":false") && json.contains("\"node\":") && json.contains("\"code\":\"SPK-1000\""), "{json}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

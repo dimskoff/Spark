@@ -213,6 +213,7 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
     }
     if timeout {
         r.error = Some(Problem {
+            node: None,
             file: name,
             line: None,
             code: "SPK-1000",
@@ -221,12 +222,17 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
         return r;
     }
     if quit_early && game.test_status() != Some(TaskStatus::Done) {
-        r.error =
-            Some(Problem { file: name, line: None, code: "SPK-1000", message: "the game called quit() before the test finished".into() });
+        r.error = Some(Problem {
+            node: None,
+            file: name,
+            line: None,
+            code: "SPK-1000",
+            message: "the game called quit() before the test finished".into(),
+        });
         return r;
     }
     if game.test_status() == Some(TaskStatus::Cancelled) {
-        r.error = Some(Problem { file: name, line: None, code: "SPK-1000", message: "the test task was cancelled".into() });
+        r.error = Some(Problem { node: None, file: name, line: None, code: "SPK-1000", message: "the test task was cancelled".into() });
         return r;
     }
     // Snapshots.
@@ -240,8 +246,13 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
                 }
                 if opts.update {
                     if let Err(e) = std::fs::write(&path, &text) {
-                        r.error =
-                            Some(Problem { file: rel(dir, &path), line: None, code: "SPK-1000", message: format!("cannot write: {e}") });
+                        r.error = Some(Problem {
+                            node: None,
+                            file: rel(dir, &path),
+                            line: None,
+                            code: "SPK-1000",
+                            message: format!("cannot write: {e}"),
+                        });
                         return r;
                     }
                     r.written.push(snap);
@@ -252,7 +263,13 @@ pub fn run_test(dir: &Path, file: &Path, opts: &Options) -> TestResult {
             Err(_) => {
                 let written = path.parent().map(std::fs::create_dir_all).transpose().and_then(|_| std::fs::write(&path, &text));
                 if let Err(e) = written {
-                    r.error = Some(Problem { file: rel(dir, &path), line: None, code: "SPK-1000", message: format!("cannot write: {e}") });
+                    r.error = Some(Problem {
+                        node: None,
+                        file: rel(dir, &path),
+                        line: None,
+                        code: "SPK-1000",
+                        message: format!("cannot write: {e}"),
+                    });
                     return r;
                 }
                 r.written.push(snap);

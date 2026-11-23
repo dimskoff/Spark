@@ -17,6 +17,20 @@ fn game_dir(arg: Option<&String>) -> PathBuf {
     }
 }
 
+/// `--help` / `-h` anywhere in `args`: prints the usage line and returns the exit code to stop with.
+fn help(args: &[String], usage: &str) -> Option<i32> {
+    args.iter().any(|a| a == "--help" || a == "-h").then(|| {
+        println!("{usage}");
+        EXIT_OK
+    })
+}
+
+const SCREENSHOT_USAGE: &str = "usage: spark screenshot path/to/game [--frames N] [--size WxH] [--out FILE] [--json]";
+const INSPECT_USAGE: &str = "usage: spark inspect path/to/game [--frames N] [--json]";
+const DIFF_USAGE: &str = "usage: spark diff a.png b.png [--tolerance 0.01] [--max-bad 0.02] [--out diff.png] [--json]";
+const GOLDEN_USAGE: &str =
+    "usage: spark golden path/to/game [--golden FILE] [--update] [--frames N] [--size WxH] [--tolerance T] [--max-bad F] [--json]";
+
 fn fail(command: &str, json: bool, code: i32, msg: &str) -> i32 {
     if json {
         print_json(&json!({ "command": command, "ok": false, "exit_code": code, "error": msg }));
@@ -53,6 +67,9 @@ fn render(dir: &Path, frames: u32, size: &str, out: &Path) -> Result<(), String>
 }
 
 pub fn screenshot(mut args: Vec<String>) -> i32 {
+    if let Some(code) = help(&args, SCREENSHOT_USAGE) {
+        return code;
+    }
     let json = take_flag(&mut args, "--json");
     let parse = |args: &mut Vec<String>| -> Result<(u32, String, Option<String>), String> {
         let frames = take_value(args, "--frames")?
@@ -87,6 +104,9 @@ pub fn screenshot(mut args: Vec<String>) -> i32 {
 }
 
 pub fn inspect(mut args: Vec<String>) -> i32 {
+    if let Some(code) = help(&args, INSPECT_USAGE) {
+        return code;
+    }
     let json = take_flag(&mut args, "--json");
     let frames = match take_value(&mut args, "--frames") {
         Ok(v) => v.and_then(|n| n.parse::<u32>().ok()).unwrap_or(60).max(1),
@@ -158,6 +178,9 @@ pub fn compare(a: &RgbaImage, b: &RgbaImage) -> Result<(Diff, RgbaImage), String
 }
 
 pub fn diff(mut args: Vec<String>) -> i32 {
+    if let Some(code) = help(&args, DIFF_USAGE) {
+        return code;
+    }
     let json = take_flag(&mut args, "--json");
     let (tol, max_bad, out) =
         match (take_value(&mut args, "--tolerance"), take_value(&mut args, "--max-bad"), take_value(&mut args, "--out")) {
@@ -167,12 +190,7 @@ pub fn diff(mut args: Vec<String>) -> i32 {
             (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => return fail("diff", json, EXIT_USAGE, &e),
         };
     let [a, b] = args.as_slice() else {
-        return fail(
-            "diff",
-            json,
-            EXIT_USAGE,
-            "usage: spark diff a.png b.png [--tolerance 0.01] [--max-bad 0.02] [--out diff.png] [--json]",
-        );
+        return fail("diff", json, EXIT_USAGE, DIFF_USAGE);
     };
     let load = |p: &String| image::open(p).map(|i| i.to_rgba8()).map_err(|e| format!("cannot read '{p}': {e}"));
     let (ia, ib) = match (load(a), load(b)) {
@@ -205,6 +223,9 @@ pub fn diff(mut args: Vec<String>) -> i32 {
 /// `spark golden path/to/game [--golden FILE] [--update] [--frames N] [--size WxH] [--tolerance T]`: compares a headless render
 /// with `tests/golden.png` (or FILE); on a mismatch writes `screenshots/golden-current.png` and `screenshots/golden-diff.png`.
 pub fn golden(mut args: Vec<String>) -> i32 {
+    if let Some(code) = help(&args, GOLDEN_USAGE) {
+        return code;
+    }
     let json = take_flag(&mut args, "--json");
     let update = take_flag(&mut args, "--update");
     let golden_file = match take_value(&mut args, "--golden") {
@@ -291,6 +312,17 @@ pub fn golden(mut args: Vec<String>) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn help_flags_print_usage_instead_of_running() {
+        for flag in ["--help", "-h"] {
+            let a = vec![flag.to_string()];
+            assert_eq!(screenshot(a.clone()), EXIT_OK);
+            assert_eq!(inspect(a.clone()), EXIT_OK);
+            assert_eq!(diff(a.clone()), EXIT_OK);
+            assert_eq!(golden(a), EXIT_OK);
+        }
+    }
 
     #[test]
     fn compare_images() {

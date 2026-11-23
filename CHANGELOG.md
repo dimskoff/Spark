@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 Spark is in 0.x: every minor version may change the Luau API. After `spark update` run `spark docs .` in your game,
 read the entries below for your old version and the new one, fix the code, then raise `spark = "..."` in `game.toml`.
@@ -34,6 +34,7 @@ read the entries below for your old version and the new one, fix the code, then 
 
 ### Fixes
 - Materials with alpha < 0.3 and blending (alpha / additive) are no longer cut out (the 0.3 cutout applies to opaque materials only).
+- `spark screenshot|inspect|diff|golden --help` print usage instead of running a game.
 - `save`: a failed write no longer loses the "unsaved" mark; the file is written with fsync + atomic rename, a failure while
   playing is logged and retried every 2 s instead of stopping the game; real cycle detection (the old "cycle?" appeared on any
   table nested deeper than 32 levels); a 100k-value limit per `save.set`.
@@ -60,6 +61,7 @@ read the entries below for your old version and the new one, fix the code, then 
 - The infinite-loop message points to `task(function() ... end)` instead of the non-existent `task.spawn`.
 
 ### Tooling
+- `spark check --json` reports failures of scripts attached to objects (SPK code, script path, node id).
 - Devtools protocol 4: `EditorCommand::Command` applies a JSON `Command` (spawn, delete, set, reparent, add/remove component, batch) to the running game through `World::apply` and answers with the inverse command, the changed node ids or a structured error (`code`, `message`, `path`, did-you-mean `suggestions`). Scene snapshots carry `node_id`. `SetObject` still works (now a batch of `SetProperty`); games and editors of protocol 2 and 3 still connect. See ADR 0005, C-13.
 - CI runs `cargo fmt --check` and `clippy -D warnings` with no allowed lints; `rustfmt.toml` added.
 - Every `spark check --json` error has a stable `code` (`SPK-1000`..`SPK-1006`, `SPK-1100` syntax, `SPK-1101` types) and an
