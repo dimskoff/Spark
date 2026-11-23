@@ -173,12 +173,18 @@ fn node_to_json(n: &NodeDoc) -> Json {
     o.body = n.body.clone();
     o.light = n.light;
     let mut comps = Map::new();
+    if let Some(c) = &n.camera {
+        comps.insert("camera".into(), value_to_json(&spark_reflect::Reflect::to_value(c)));
+    }
     for c in registry().components {
         if c.name != "mesh" {
             if let Some(v) = (c.get)(&o) {
                 comps.insert(c.name.to_string(), value_to_json(&v));
             }
         }
+    }
+    if !n.tags.is_empty() {
+        comps.insert("tags".into(), Json::Array(n.tags.iter().cloned().map(Json::String).collect()));
     }
     let mut m = Map::new();
     if let Some(id) = &n.id {
@@ -241,6 +247,12 @@ fn node_from_json(j: &Json, at: &str) -> Res<NodeDoc> {
         let reg = registry();
         for (name, cj) in comps {
             let cat = format!("{at}.components.{name}");
+            if name == "tags" {
+                // Not a registry component, but addressed like one (path `tags`): a list of strings.
+                let v = value_at(cj, &cat)?;
+                registry().set_prop(&mut o, "tags", v).map_err(|e| reflect_err(&cat, e))?;
+                continue;
+            }
             let Some(info) = reg.component(name) else {
                 let hint = spark_reflect::did_you_mean(name, reg.components.iter().map(|c| c.name));
                 let hint = if hint.is_empty() { String::new() } else { format!(" (did you mean {}?)", hint.join(", ")) };
@@ -257,6 +269,8 @@ fn node_from_json(j: &Json, at: &str) -> Res<NodeDoc> {
     } else if m.get("components").is_some_and(|c| !c.is_null()) {
         return Err(JsonError::new("bad_command", &format!("{at}.components"), "expected an object"));
     }
+    n.camera = o.camera().copied();
+    n.tags = o.tags().to_vec();
     n.transform = o.transform;
     n.material = o.material;
     n.body = o.body;
@@ -523,6 +537,8 @@ mod tests {
         crate_node.transform = Transform { position: Vec3::new(1.0, 0.1, -3.5), ..Transform::IDENTITY };
         crate_node.body = Some(Body::default());
         crate_node.light = Some(Light::default());
+        crate_node.camera = Some(Default::default());
+        crate_node.tags = vec!["enemy".into(), "boss".into()];
         crate_node.mesh = Some(MeshState { mesh: MeshDoc::from_source(MeshSource::Cube { size: 2.0 }), lod: Vec::new() });
         let mut child = NodeDoc::named("Child");
         child.visible = false;
@@ -543,6 +559,13 @@ mod tests {
                 component: "mesh".into(),
                 value: Some(Value::Enum { variant: "cylinder".into(), fields: vec![("radius".into(), Value::Float(0.5))] }),
             },
+            Command::SetProperty { node: nid("a1"), path: "camera.fov".into(), value: Value::Float(75.0) },
+            Command::SetProperty {
+                node: nid("a1"),
+                path: "tags".into(),
+                value: Value::List(vec![Value::Str("a".into()), Value::Str("b".into())]),
+            },
+            Command::AddComponent { node: nid("a1"), component: "camera".into(), value: None },
             Command::RemoveComponent { node: nid("a1"), component: "light".into() },
             Command::Batch(vec![
                 Command::Delete { node: nid("a1") },
@@ -608,6 +631,24 @@ mod tests {
         assert!(e.message.contains("missing `value`"));
         let e = bad(r#"{"op":"spawn","node":{"components":{"bodyy":{}}}}"#);
         assert!(e.message.contains("did you mean body"), "{e}");
+    }
+
+    #[test]
+    fn spawn_with_camera_and_tags_and_set_them_on_a_world() {
+        let cmd = |s: &str| command_from_json(&serde_json::from_str(s).unwrap(), &none).unwrap();
+        let spawn = cmd(r#"{"op":"spawn","node":{"id":"cam1","name":"Cam","components":{"camera":{"fov":50.0},"tags":["main","cam"]}}}"#);
+        let Command::Spawn { subtree, .. } = &spawn else { panic!() };
+        assert_eq!(subtree.root.camera.as_ref().map(|c| c.fov), Some(50.0));
+        assert_eq!(subtree.root.tags, ["main", "cam"]);
+        let mut w = spark_core::World::new();
+        w.apply(&spawn).unwrap();
+        w.apply(&cmd(r#"{"op":"set","node":"cam1","path":"camera.fov","value":70.0}"#)).unwrap();
+        w.apply(&cmd(r#"{"op":"set","node":"cam1","path":"tags","value":["x"]}"#)).unwrap();
+        let id = w.scene.find("Cam").unwrap();
+        assert_eq!(w.scene[id].camera().map(|c| c.fov), Some(70.0));
+        assert_eq!(w.scene[id].tags(), ["x"]);
+        let bad = command_from_json(&serde_json::from_str(r#"{"op":"spawn","node":{"components":{"tags":[""]}}}"#).unwrap(), &none);
+        assert!(bad.is_err());
     }
 
     #[test]
