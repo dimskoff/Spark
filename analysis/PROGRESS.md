@@ -71,6 +71,8 @@ ID задач (B1, S2, L1, J1 …) совпадают с ID в файлах ра
 
 | C-tail-1..3 | `--help` у golden/screenshot/inspect/diff; camera/tags в JSON devtools; сбои скриптов объектов в `check --json` (поле `node`) | ✅ | `8881a2a` + коммит devtools (2026-11-23) | 485 тестов, 0 упало |
 
+| C-tail-4 | `script` в реестре: команды `script.path`, `script.props.<имя>`, add/remove, undo, JSON devtools; живой экземпляр видит новые props на следующем кадре | ✅ | `201cf34` | 488 тестов, 0 упало. Смена `path` перезапускает скрипт. Заметка «Script registry note» в ADR 0005 |
+
 **Этап C закрыт** (2026-11-22): 482 теста, 0 упало, 6 пропущены; 11 примеров `check` ok; golden 08-scenes совпадает.
 
 Хвосты этапа C (маленькие PR, см. [HANDOFF.md](HANDOFF.md)): `script` в реестре и props обратно в сцену, `on_reload` для скриптов объектов, сбои объектов в `check --json`, camera/tags в JSON devtools, `@environment` для команд, сохранение ассетов при рестарте `main.luau`, скриншот через devtools, `spark golden --help` (C-tail-1), проверка `spark.d.luau` в luau-lsp.

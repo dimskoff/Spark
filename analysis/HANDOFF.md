@@ -23,10 +23,9 @@ cargo build -p spark-cli; Get-ChildItem examples -Recurse -Filter main.luau | % 
 ## Что делать дальше (по порядку)
 1. **Открыть PR** `overhaul/phase-0-1` → `main` (CI запускается только на PR/`main`): проверит cargo-deny (A9) и golden (B-8). Потом сделать golden блокирующими.
 2. **Хвосты этапа C** (каждый — маленький PR):
-   - `script` в реестре (команды `SetProperty script.props.x`), запись props обратно, `on_reload` для скриптов объектов, сбои объектов в `spark check --json`, отметка узла в редакторе (C-16).
-   - camera/tags в JSON-форме узла devtools, `@environment` для команд (C-17).
+   - ✅ 2026-11-23 сделаны: `script` в реестре (`201cf34`), сбои объектов в `check --json`, camera/tags в JSON devtools, `--help` у golden/screenshot/inspect/diff (`8881a2a`). Итог 488 тестов.
+   - Осталось: запись `self.x` из скрипта обратно в сцену, `on_reload` для скриптов объектов, отметка сбойного узла в редакторе (C-16); `@environment` для команд (C-17).
    - Сохранять ассеты при рестарте из-за `main.luau`; скриншот живой игры через devtools (C-18, ADR 0006).
-   - `spark golden --help` принимает `--help` за путь (C-tail-1).
    - luau-lsp: один раз проверить, что `docs/spark.d.luau` открывается без ошибок (C-10).
 3. **Этап D — редактор сцен MVP** ([11-roadmap.md](11-roadmap.md)): иерархия, инспектор из реестра (`spark_core::registry`), гизмо, undo через `spark_core::History`, сохранение через `spark_scene::save_scene`, live-правки через devtools протокол 4 (`EditorCommand::Command`). Фундамент для всего этого уже есть.
 4. **Этап E — Renderer 2.0** (может идти параллельно с D): см. [04-graphics.md](04-graphics.md).
