@@ -138,12 +138,10 @@ mod tests {
 
     #[test]
     fn internal_size_scale_clamped() {
-        let mut r = RenderSettings::default();
-        r.scale = 0.01; // below minimum 0.05
+        let r = RenderSettings { scale: 0.01, ..Default::default() }; // below minimum 0.05
         let (w, h) = r.internal_size(1280, 720);
         assert!(w >= 1 && h >= 1); // clamped, not zero
     }
-
 
     #[test]
     fn pass_size_default_is_screen() {
@@ -260,16 +258,7 @@ pub struct ColorGrading {
 
 impl Default for ColorGrading {
     fn default() -> Self {
-        Self {
-            exposure: 1.0,
-            contrast: 1.0,
-            saturation: 1.0,
-            temperature: 0.0,
-            tint: 0.0,
-            lift: [0.0; 3],
-            gamma: [1.0; 3],
-            gain: [1.0; 3],
-        }
+        Self { exposure: 1.0, contrast: 1.0, saturation: 1.0, temperature: 0.0, tint: 0.0, lift: [0.0; 3], gamma: [1.0; 3], gain: [1.0; 3] }
     }
 }
 
@@ -375,12 +364,7 @@ impl PostProcessing {
         if let Some(b) = &self.bloom {
             out.push((
                 PostFxKind::Bloom,
-                vec![
-                    ("threshold", vec![b.threshold]),
-                    ("knee", vec![b.knee]),
-                    ("strength", vec![b.strength]),
-                    ("radius", vec![b.radius]),
-                ],
+                vec![("threshold", vec![b.threshold]), ("knee", vec![b.knee]), ("strength", vec![b.strength]), ("radius", vec![b.radius])],
             ));
         }
         if let Some(c) = &self.color_grading {

@@ -1,0 +1,5 @@
+error: unknown unit `furlongs`; valid: m, s, kg, rad, deg, m/s, rad/s, Hz, %
+ --> tests/ui/unknown_unit.rs:6:22
+  |
+6 |     #[reflect(unit = "furlongs")]
+  |                      ^^^^^^^^^^

@@ -33,7 +33,7 @@ impl Game for Hello {
         for (i, color) in colors.into_iter().enumerate() {
             let id = world.spawn(cube, Material::color(color));
             world.scene[id].name = format!("cube{i}");
-            world.scene[id].position = vec3(i as f32 * 1.8 - 3.6, 0.0, 0.0);
+            world.scene[id].transform.position = vec3(i as f32 * 1.8 - 3.6, 0.0, 0.0);
             world.scene.place_on(id, ground).unwrap();
             self.cubes.push(id);
         }
@@ -54,7 +54,8 @@ impl Game for Hello {
             world.render = RenderSettings::default();
         }
         if world.input.pressed(Key::Num2) {
-            world.render = RenderSettings { height: Some(180), upscale: TextureFilter::Nearest, filter: TextureFilter::Nearest, ..Default::default() };
+            world.render =
+                RenderSettings { height: Some(180), upscale: TextureFilter::Nearest, filter: TextureFilter::Nearest, ..Default::default() };
         }
         if world.input.pressed(Key::Num3) {
             let shader = self.grayscale.expect("loaded in start");

@@ -203,9 +203,10 @@ pub fn editor_ui(ui: &mut egui::Ui, doc: &mut Document, font_size: f32) -> Edito
                     font_size.to_bits().hash(&mut h);
                     let key = h.finish();
                     if let Some((k, galley)) = highlight.as_ref()
-                        && *k == key {
-                            return galley.clone();
-                        }
+                        && *k == key
+                    {
+                        return galley.clone();
+                    }
                     let galley = ui.fonts_mut(|f| f.layout_job(layout_job(src, lang, &font)));
                     *highlight = Some((key, galley.clone()));
                     galley

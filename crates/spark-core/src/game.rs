@@ -8,7 +8,7 @@ use crate::world::World;
 ///    each one followed by a physics step (collisions land in `world.physics.events`)
 /// 3. `update` once (variable `dt`)
 /// 4. animations advance (models spawned from glTF files are posed and skinned)
-/// 5. `late_update` once (cameras, things that follow other things)
+/// 5. `late_update` once (cameras, things that follow other things); a scene with an active camera node renders from\n///    that node (the render camera is synced from it after `update` and `late_update`)
 /// 6. `draw` once (2D drawing on `world.canvas`; the canvas is cleared at the start of every frame)
 /// 7. queued sounds are sent to the audio backend
 /// 8. render
@@ -60,8 +60,11 @@ pub fn run_frame<G: Game + ?Sized>(game: &mut G, world: &mut World, real_dt: f32
     let dt = world.time.dt;
     world.ui.begin(&world.canvas, &world.input);
     game.update(world, dt);
+    // A camera node that a script moved (obj.position = ...) moves the render camera (no camera node: one check).
+    world.scene.sync_camera_from_node();
     crate::animation::update(world, dt);
     game.late_update(world, dt);
+    world.scene.sync_camera_from_node();
     game.draw(world);
     world.ui.end();
     world.input.end_frame();

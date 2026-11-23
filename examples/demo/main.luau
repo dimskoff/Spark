@@ -36,18 +36,6 @@ end
 local LOOKS = { "plain", "toon + outlines", "pixel 180p + dither", "half resolution" }
 local crate_colors = { "#c8873a", "#b5762e", "#d89a4a" }
 
--- Physics + sound: impacts play a pop, louder for harder hits (max one per object every 0.1 s).
-local last_hit = {}
-local function add_hit_sound(obj)
-    obj:on("collision", function(other, info)
-        local now = time.elapsed
-        if info.speed > 1 and now - (last_hit[obj] or -1) > 0.1 then
-            last_hit[obj] = now
-            sound.play("sounds/hit.wav", { volume = math.min(info.speed / 8, 1), pitch = 0.8 + math.random() * 0.4 })
-        end
-    end)
-end
-
 local function drop_crates(n)
     for i = 1, n do
         local crate = spawn(Mesh.cube(0.7), crate_colors[i % 3 + 1], {
@@ -55,7 +43,6 @@ local function drop_crates(n)
             rotation = vec3(math.random(), math.random(), math.random()),
             body = { mass = 2, bounciness = 0.2 },
         })
-        add_hit_sound(crate)
         after(30, function()
             crate:destroy()
         end, crate)
@@ -68,8 +55,6 @@ local function shoot()
         body = { shape = "sphere", radius = 0.25, mass = 3, bounciness = 0.5, ccd = true },
     })
     ball.velocity = camera:forward() * 25
-    add_hit_sound(ball)
-    sound.play("sounds/spawn.wav", { volume = 0.4 })
     after(10, function()
         ball:destroy()
     end, ball)

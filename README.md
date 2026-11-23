@@ -174,11 +174,10 @@ function update(dt)
 end
 ```
 
-Examples in this repo:
+Examples in this repo (see [examples/README.md](examples/README.md); agents: `spark api search <word>`, `spark mcp`, `spark doctor`):
 
 ```
 target/release/spark examples/demo        # 3D: physics, custom shaders, sound
-target/release/spark examples/starfall    # 2D game made only with draw.* (keyboard, mouse or gamepad)
 cargo run -p hello                        # the same idea in pure Rust
 ```
 
@@ -214,7 +213,7 @@ spark --version
 (before 1.0) prints a warning with what to do.
 
 Flags for every game: `--headless`, `--frames N`, `--screenshot PATH`, `--screenshot-every N`, `--dump-scene`,
-`--dump-scene-json PATH`, `--input FILE`, `--timeout S`, `--size WxH`, `--fixed-dt S`, `--max-fps N`, `--mute`,
+`--dump-scene-json PATH`, `--input FILE`, `--timeout S`, `--size WxH`, `--fixed-dt S`, `--max-fps N`, `--mute`, `--seed N`,
 `--no-vsync`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--devtools ADDR` (set by Spark Editor),
 `--help`.
 In a window: F1 = debug overlay, F12 = screenshot, F11 / Alt+Enter = fullscreen. Environment: `RUST_LOG=debug`, `WGPU_BACKEND=dx12|vulkan|metal|gl`.
@@ -249,6 +248,8 @@ are built and tested by CI on every commit (headless tests), but have seen less 
 games; changes to the engine's own files must stay open under the MPL. Your game code and assets remain yours.
 
 Bundled font: Noto Sans, [SIL Open Font License](crates/spark-core/assets/fonts/OFL.txt).
+
+Third-party notices are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md), shipped with releases and with every `spark build` output; `spark licenses` and `game --licenses` print them. Asset origins: [ASSETS.md](ASSETS.md).
 
 ---
 

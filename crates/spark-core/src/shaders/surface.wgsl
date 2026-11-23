@@ -276,9 +276,12 @@ fn apply_fog(rgb: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
     return mix(rgb, frame.fog_color.rgb, clamp((d - frame.fog.x) / max(frame.fog.y - frame.fog.x, 0.001), 0.0, 1.0));
 }
 
+// Set per pipeline: 0.3 for opaque surfaces, ~0 for alpha / additive blending.
+override SPARK_ALPHA_CUTOFF: f32 = 0.3;
+
 fn default_fragment(f: Fragment) -> vec4<f32> {
     let base = surface_color(f.uv);
-    if (base.a < 0.3) {
+    if (base.a < SPARK_ALPHA_CUTOFF) {
         discard;
     }
     let n = surface_normal(f.world_pos, f.normal, f.uv);

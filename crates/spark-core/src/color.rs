@@ -54,11 +54,7 @@ impl Color {
 
     /// `Color::hex(0xff8800)`
     pub const fn hex(value: u32) -> Self {
-        Self::rgb(
-            ((value >> 16) & 0xff) as f32 / 255.0,
-            ((value >> 8) & 0xff) as f32 / 255.0,
-            (value & 0xff) as f32 / 255.0,
-        )
+        Self::rgb(((value >> 16) & 0xff) as f32 / 255.0, ((value >> 8) & 0xff) as f32 / 255.0, (value & 0xff) as f32 / 255.0)
     }
 
     /// Parses `"#rgb"`, `"#rrggbb"`, `"#rrggbbaa"` or a color name like `"red"`.

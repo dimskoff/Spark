@@ -1,0 +1,5 @@
+error: unknown asset kind `video`; valid: mesh, texture, sound, script, prefab, model, shader, cubemap
+ --> tests/ui/unknown_asset_kind.rs:6:23
+  |
+6 |     #[reflect(asset = "video")]
+  |                       ^^^^^^^

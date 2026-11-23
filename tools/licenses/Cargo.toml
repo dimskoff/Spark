@@ -1,0 +1,13 @@
+[package]
+name = "licenses"
+description = "Generates THIRD_PARTY_LICENSES.md from `cargo metadata` (cargo run -p licenses)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde_json.workspace = true

@@ -9,3 +9,4 @@ spark-crash.log
 Thumbs.db
 .vscode/
 .idea/
+*.zip

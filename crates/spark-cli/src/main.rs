@@ -8,18 +8,28 @@
 //! `spark update [version]` - replace this spark executable with a GitHub release (Windows, Linux, macOS).
 //! `spark check path/to/game [--frames N] [--json]` - find script errors headless, without a window or GPU.
 //! `spark test path/to/game [NAME...] [--update] [--json]` - scenario tests in `tests/` (see `test.rs`).
+//! `spark migrate [--check] [--json] <path>...` - bring `.scene` / `.prefab` files to the current format (see `migrate.rs`).
 //!
 //! `spark build path/to/game` - a player build: ONE executable (this binary, no console window) with
 //! every game file packed inside, plus a .zip. When such an executable starts it runs its packed game.
 #![cfg_attr(all(feature = "gui", windows), windows_subsystem = "windows")]
+#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
 
+mod api_cmd;
 mod check;
 mod dist;
+mod doctor;
 mod editor;
+#[allow(unsafe_code)] // the only unsafe code of this crate: Win32 resource calls (see icon.rs)
 mod icon;
+mod mcp;
+mod mcp_scene;
+mod migrate;
 mod new;
 mod test;
 mod update;
+mod util;
+mod visual;
 
 use spark_project::manifest;
 
@@ -29,6 +39,9 @@ use engine::script::{ScriptGame, default_save_path};
 use engine::{App, HELP, ImageData};
 
 use manifest::Manifest;
+
+/// Third-party license notices (one copy, embedded by the `spark` crate). Printed by `spark licenses` and written next to every `spark build` output.
+pub use engine::THIRD_PARTY_LICENSES;
 
 const USAGE: &str = "Usage:
   spark path/to/game [flags]              run a game (folder with main.luau, or the .luau file)
@@ -41,6 +54,16 @@ const USAGE: &str = "Usage:
                            [--types]      also type-check with luau-lsp + docs/spark.d.luau (when luau-lsp is installed)
   spark test path/to/game [NAME...]       run scenario tests (tests/*.luau) headless; snapshots in tests/snapshots/
                           [--update]      accept changed snapshots   [--json]   [--max-time SECONDS]
+  spark api search <words>|show <name>|list   look the Luau API up [--json]
+  spark doctor [path/to/game]             check this machine (GPU, editor, luau-lsp) and the game's docs [--json]
+  spark screenshot path/to/game           render a PNG headless [--frames N] [--size WxH] [--out FILE] [--json]
+  spark inspect path/to/game              dump the scene (objects, positions, bounds) [--frames N] [--json]
+  spark golden path/to/game               compare a render with tests/golden.png [--update] [--tolerance T] [--json]
+  spark diff a.png b.png                  compare two images [--tolerance T] [--out diff.png] [--json]
+  spark migrate <path>...                 bring .scene / .prefab files (or a folder of them) to the current format
+                [--check]                 write nothing; exit 1 when a file needs migration   [--json]
+  spark mcp                               Model Context Protocol server on stdio (for AI agents)
+  spark licenses                          print the third-party license notices (also shipped as THIRD_PARTY_LICENSES.txt with every build)
   spark update [version]                  download the latest (or given) Spark release from GitHub
   spark --version
   spark build path/to/game [--out DIR]    make a player build: one executable with everything inside (+ .zip / .tar.gz)
@@ -55,7 +78,19 @@ fn main() {
         return;
     }
     let raw: Vec<String> = std::env::args().skip(1).collect();
+    let rest: Vec<String> = raw.iter().skip(1).cloned().collect();
     match raw.first().map(String::as_str) {
+        Some("--help" | "-h" | "help") => {
+            println!("{USAGE}\n\n{HELP}");
+            return;
+        }
+        Some(cmd @ ("build" | "new" | "docs" | "update")) if rest.iter().any(|a| a == "--json") => {
+            // These print human text; with --json the text is wrapped in one JSON object.
+            let mut args = rest.clone();
+            util::take_flag(&mut args, "--json");
+            let path = args.iter().find(|a| !a.starts_with("--")).cloned();
+            std::process::exit(util::envelope(cmd, &args, serde_json::json!({ "path": path })));
+        }
         Some("build") => std::process::exit(dist::run(&raw[1..])),
         Some("editor") => std::process::exit(editor::run(&raw[1..])),
         Some("new") => std::process::exit(new::run(&raw[1..])),
@@ -63,6 +98,18 @@ fn main() {
         Some("check") => std::process::exit(check::run(&raw[1..])),
         Some("test") => std::process::exit(test::run(&raw[1..])),
         Some("update") => std::process::exit(update::run(&raw[1..])),
+        Some("api") => std::process::exit(api_cmd::run(rest)),
+        Some("doctor") => std::process::exit(doctor::run(rest)),
+        Some("licenses") => {
+            print!("{THIRD_PARTY_LICENSES}");
+            return;
+        }
+        Some("migrate") => std::process::exit(migrate::run(rest)),
+        Some("mcp") => std::process::exit(mcp::run(rest)),
+        Some("screenshot") => std::process::exit(visual::screenshot(rest)),
+        Some("inspect") => std::process::exit(visual::inspect(rest)),
+        Some("diff") => std::process::exit(visual::diff(rest)),
+        Some("golden") => std::process::exit(visual::golden(rest)),
         Some("--version" | "-V") => {
             println!("spark {}", engine::VERSION);
             return;
@@ -132,6 +179,17 @@ fn run(app: App, path: PathBuf, dir: PathBuf, packed: bool) {
             Err(e) => eprintln!("spark: game.toml icon: {e}"),
         }
     }
-    let save = if headless { None } else { default_save_path(manifest.save_name.as_deref().unwrap_or(&title)) };
-    app.run(ScriptGame::new(path).strict(headless).hot_reload(!headless && !packed).save_path(save));
+    let game_name = manifest.save_name.as_deref().unwrap_or(&title).to_string();
+    let save = if headless { None } else { default_save_path(&game_name) };
+    // Crash reports (`spark-crash.log`) and packed games' `error.log` go to <user data>/SparkGames/<game>/logs.
+    engine::paths::set_game_name(&game_name);
+    let seed = app.args().effective_seed();
+    app.run(
+        ScriptGame::new(path)
+            .strict(headless)
+            .hot_reload(!headless && !packed)
+            .save_path(save)
+            .seed(seed)
+            .log_dir(engine::paths::log_dir(&game_name)),
+    );
 }

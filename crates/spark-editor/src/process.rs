@@ -83,8 +83,14 @@ enum Captured {
 impl Job {
     /// Starts `exe args...` in `cwd`.
     pub fn spawn(kind: JobKind, exe: &Path, args: &[String], cwd: &Path) -> Result<Self, String> {
+        Self::spawn_with_env(kind, exe, args, cwd, &[])
+    }
+
+    /// Like [`Job::spawn`] with extra environment variables (secrets go here, not into argv).
+    pub fn spawn_with_env(kind: JobKind, exe: &Path, args: &[String], cwd: &Path, envs: &[(&str, &str)]) -> Result<Self, String> {
         let mut cmd = Command::new(exe);
         cmd.args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.envs(envs.iter().copied());
         // Colors / timestamps off: the console parses the plain env_logger format.
         cmd.env("RUST_LOG_STYLE", "never");
         #[cfg(windows)]
@@ -101,14 +107,7 @@ impl Job {
         if let Some(err) = child.stderr.take() {
             pipe(err, Stream::Stderr, tx);
         }
-        Ok(Self {
-            kind,
-            state: JobState::Running,
-            child,
-            output: rx,
-            stdout: String::new(),
-            keep_stdout: kind == JobKind::Check,
-        })
+        Ok(Self { kind, state: JobState::Running, child, output: rx, stdout: String::new(), keep_stdout: kind == JobKind::Check })
     }
 
     pub fn pid(&self) -> u32 {
@@ -135,10 +134,11 @@ impl Job {
         }
         let mut finished = None;
         if self.state == JobState::Running
-            && let Ok(Some(status)) = self.child.try_wait() {
-                self.state = JobState::Exited(exit_code(status));
-                finished = Some(self.state.clone());
-            }
+            && let Ok(Some(status)) = self.child.try_wait()
+        {
+            self.state = JobState::Exited(exit_code(status));
+            finished = Some(self.state.clone());
+        }
         (lines, finished)
     }
 
@@ -195,27 +195,33 @@ pub fn editor_line(job: JobKind, level: Level, text: impl Into<String>, clock: &
 
 /// Understands env_logger lines (`[INFO ] text`, `[WARN  spark] text`) and Spark error lines.
 pub fn parse_line(job: JobKind, stream: Stream, raw: &str, time: f64) -> LogLine {
-    let _ = stream; // stderr and stdout lines are classified the same way
-    let mut level = Level::Info;
+    // Logger lines carry a tag. An untagged line on stderr is not a log record: a panic, a crash message or raw
+    // output from a native library. It must not look like a plain Info line.
+    let mut level = if stream == Stream::Stderr { Level::Warn } else { Level::Info };
+    let mut tagged = false;
     let mut text = raw;
     if let Some(rest) = raw.strip_prefix('[')
-        && let Some(end) = rest.find(']') {
-            let tag = rest[..end].split_whitespace().next().unwrap_or("");
-            let parsed = match tag {
-                "TRACE" => Some(Level::Trace),
-                "DEBUG" => Some(Level::Debug),
-                "INFO" => Some(Level::Info),
-                "WARN" => Some(Level::Warn),
-                "ERROR" => Some(Level::Error),
-                _ => None,
-            };
-            if let Some(l) = parsed {
-                level = l;
-                text = rest[end + 1..].trim_start();
-            }
+        && let Some(end) = rest.find(']')
+    {
+        let tag = rest[..end].split_whitespace().next().unwrap_or("");
+        let parsed = match tag {
+            "TRACE" => Some(Level::Trace),
+            "DEBUG" => Some(Level::Debug),
+            "INFO" => Some(Level::Info),
+            "WARN" => Some(Level::Warn),
+            "ERROR" => Some(Level::Error),
+            _ => None,
+        };
+        if let Some(l) = parsed {
+            level = l;
+            tagged = true;
+            text = rest[end + 1..].trim_start();
         }
+    }
     let lower = text.to_ascii_lowercase();
-    if level < Level::Warn && (lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error")) {
+    let crash = !tagged && (lower.contains("panicked at") || lower.starts_with("fatal") || lower.contains("stack overflow"));
+    let error_line = lower.starts_with("error") || lower.contains(": error:") || lower.starts_with("spark: ") && lower.contains("error");
+    if crash || (level < Level::Warn && error_line) {
         level = Level::Error;
     } else if level < Level::Warn && lower.contains("warning:") {
         level = Level::Warn;
@@ -309,9 +315,24 @@ mod tests {
     }
 
     #[test]
+    fn untagged_stderr_is_not_info() {
+        let p = parse_line(JobKind::Run, Stream::Stderr, "thread 'main' panicked at src/lib.rs:5:9:", 0.0);
+        assert_eq!(p.level, Level::Error);
+        let w = parse_line(JobKind::Run, Stream::Stderr, "something odd on stderr", 0.0);
+        assert_eq!(w.level, Level::Warn);
+        let i = parse_line(JobKind::Run, Stream::Stdout, "hello", 0.0);
+        assert_eq!(i.level, Level::Info);
+        let t = parse_line(JobKind::Run, Stream::Stderr, "[INFO ] script loaded", 0.0);
+        assert_eq!(t.level, Level::Info);
+    }
+
+    #[test]
     fn finds_locations() {
         assert_eq!(find_location("error in \"main.luau:3: x\"").unwrap().file, "main.luau");
-        assert_eq!(find_location("./assets/shaders/water.wgsl:40:7 bad").unwrap(), Location { file: "assets/shaders/water.wgsl".into(), line: 40 });
+        assert_eq!(
+            find_location("./assets/shaders/water.wgsl:40:7 bad").unwrap(),
+            Location { file: "assets/shaders/water.wgsl".into(), line: 40 }
+        );
         assert_eq!(find_location("main.luau: no line"), None);
     }
 

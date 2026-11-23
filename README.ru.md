@@ -178,7 +178,6 @@ end
 
 ```
 target/release/spark examples/demo        # 3D: физика, свои шейдеры, звук
-target/release/spark examples/starfall    # 2D-игра только на draw.* (клавиатура, мышь или геймпад)
 cargo run -p hello                        # то же самое на чистом Rust
 ```
 
@@ -213,7 +212,7 @@ spark --version
 (до 1.0) движок предупредит и подскажет, что делать.
 
 Флаги любой игры: `--headless`, `--frames N`, `--screenshot PATH`, `--screenshot-every N`, `--dump-scene`,
-`--dump-scene-json PATH`, `--input FILE`, `--timeout S`, `--size WxH`, `--fixed-dt S`, `--max-fps N`, `--mute`,
+`--dump-scene-json PATH`, `--input FILE`, `--timeout S`, `--size WxH`, `--fixed-dt S`, `--max-fps N`, `--mute`, `--seed N`,
 `--no-vsync`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--devtools ADDR` (ставит Spark Editor),
 `--help`.
 В окне: F1 — отладочный оверлей, F12 — скриншот, F11 / Alt+Enter — полный экран. Переменные окружения: `RUST_LOG=debug`, `WGPU_BACKEND=dx12|vulkan|metal|gl`.
@@ -250,6 +249,8 @@ spark --version
 игры; изменения в файлах самого движка должны оставаться открытыми под MPL. Код и ассеты твоей игры остаются твоими.
 
 Встроенный шрифт: Noto Sans, [SIL Open Font License](crates/spark-core/assets/fonts/OFL.txt).
+
+Уведомления о сторонних лицензиях лежат в [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md); они поставляются с релизами и с каждым результатом `spark build`; `spark licenses` и `игра --licenses` выводят их. Происхождение ассетов: [ASSETS.md](ASSETS.md).
 
 ---
 

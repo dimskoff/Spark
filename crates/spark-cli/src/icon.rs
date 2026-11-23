@@ -22,7 +22,8 @@ pub fn load(path: &Path) -> Result<RgbaImage, String> {
 
 /// PNG bytes of the icon scaled to `size` x `size`.
 fn png_at(img: &RgbaImage, size: u32) -> Result<Vec<u8>, String> {
-    let scaled = if img.width() == size { img.clone() } else { image::imageops::resize(img, size, size, image::imageops::FilterType::Lanczos3) };
+    let scaled =
+        if img.width() == size { img.clone() } else { image::imageops::resize(img, size, size, image::imageops::FilterType::Lanczos3) };
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new(&mut out)
         .write_image(scaled.as_raw(), size, size, image::ExtendedColorType::Rgba8)
@@ -54,8 +55,8 @@ pub fn set_exe_icon(exe: &[u8], img: &RgbaImage) -> Result<Vec<u8>, String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::System::LibraryLoader::{BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW};
 
-    const RT_ICON: usize = 3;
-    const RT_GROUP_ICON: usize = 14;
+    const RT_ICON: u16 = 3;
+    const RT_GROUP_ICON: u16 = 14;
     let pngs = ICO_SIZES.iter().map(|&s| png_at(img, s)).collect::<Result<Vec<_>, _>>()?;
     // GRPICONDIR + GRPICONDIRENTRY per image (ids 1..n)
     let mut group = Vec::new();
@@ -71,9 +72,19 @@ pub fn set_exe_icon(exe: &[u8], img: &RgbaImage) -> Result<Vec<u8>, String> {
         group.extend_from_slice(&((i + 1) as u16).to_le_bytes());
     }
 
-    let tmp = std::env::temp_dir().join(format!("spark-build-icon-{}.exe", std::process::id()));
-    std::fs::write(&tmp, exe).map_err(|e| format!("cannot write '{}': {e}", tmp.display()))?;
+    let (tmp, mut file) = create_temp_exe()?;
+    if let Err(e) = std::io::Write::write_all(&mut file, exe).and_then(|()| file.sync_all()) {
+        drop(file);
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("cannot write '{}': {e}", tmp.display()));
+    }
+    // the resource API opens the file by name and needs it closed
+    drop(file);
     let wide: Vec<u16> = tmp.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: `wide` is a NUL-terminated UTF-16 path that outlives the calls. `h` is checked for null and is used
+    // only between BeginUpdateResourceW and the one EndUpdateResourceW that releases it. The resource type / name
+    // arguments are integer ids encoded as MAKEINTRESOURCE pointers (never dereferenced: see `make_int_resource`),
+    // and every data pointer is valid for the `len` bytes passed with it (`pngs` and `group` live until the end).
     let result = unsafe {
         let h = BeginUpdateResourceW(wide.as_ptr(), 0);
         if h.is_null() {
@@ -81,9 +92,17 @@ pub fn set_exe_icon(exe: &[u8], img: &RgbaImage) -> Result<Vec<u8>, String> {
         } else {
             let mut ok = true;
             for (i, png) in pngs.iter().enumerate() {
-                ok &= UpdateResourceW(h, RT_ICON as *const u16, (i + 1) as *const u16, 0, png.as_ptr().cast(), png.len() as u32) != 0;
+                ok &= UpdateResourceW(
+                    h,
+                    make_int_resource(RT_ICON),
+                    make_int_resource((i + 1) as u16),
+                    0,
+                    png.as_ptr().cast(),
+                    png.len() as u32,
+                ) != 0;
             }
-            ok &= UpdateResourceW(h, RT_GROUP_ICON as *const u16, std::ptr::dangling::<u16>(), 0, group.as_ptr().cast(), group.len() as u32) != 0;
+            ok &= UpdateResourceW(h, make_int_resource(RT_GROUP_ICON), make_int_resource(2), 0, group.as_ptr().cast(), group.len() as u32)
+                != 0;
             if !ok {
                 EndUpdateResourceW(h, 1);
                 Err("UpdateResource failed".to_string())
@@ -99,6 +118,32 @@ pub fn set_exe_icon(exe: &[u8], img: &RgbaImage) -> Result<Vec<u8>, String> {
     out
 }
 
+/// `MAKEINTRESOURCEW(id)`: a small integer id passed where the Win32 resource API expects a name pointer.
+/// The pointer has no provenance and is never dereferenced (the API checks the high word for 0).
+#[cfg(windows)]
+fn make_int_resource(id: u16) -> *const u16 {
+    std::ptr::without_provenance(usize::from(id))
+}
+
+/// Creates a new, unique, empty file in the temp folder (`create_new`: never opens an existing file or a planted
+/// symlink). The name mixes pid, time and a per-process random value, so it cannot be guessed in advance.
+#[cfg(windows)]
+fn create_temp_exe() -> Result<(std::path::PathBuf, std::fs::File), String> {
+    use std::hash::{BuildHasher, Hasher};
+    for _ in 0..16 {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u128(nanos);
+        let tmp = std::env::temp_dir().join(format!("spark-build-icon-{}-{nanos:x}-{:016x}.exe", std::process::id(), h.finish()));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+            Ok(file) => return Ok((tmp, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("cannot create '{}': {e}", tmp.display())),
+        }
+    }
+    Err("cannot create a temporary file for the icon".to_string())
+}
+
 #[cfg(not(windows))]
 pub fn set_exe_icon(exe: &[u8], _img: &RgbaImage) -> Result<Vec<u8>, String> {
     Ok(exe.to_vec())
@@ -107,6 +152,18 @@ pub fn set_exe_icon(exe: &[u8], _img: &RgbaImage) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn temp_files_are_unique_and_new() {
+        let (a, fa) = create_temp_exe().unwrap();
+        let (b, fb) = create_temp_exe().unwrap();
+        assert_ne!(a, b);
+        drop((fa, fb));
+        let _ = std::fs::remove_file(a);
+        let _ = std::fs::remove_file(b);
+        assert_eq!(make_int_resource(2) as usize, 2);
+    }
 
     #[test]
     fn icns_layout() {

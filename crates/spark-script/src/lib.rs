@@ -12,6 +12,7 @@
 //!
 //! Bigger games split into modules (`require("./src/player")`, see `modules.rs`).
 //! The game reloads automatically when any of its files is saved.
+#![forbid(unsafe_code)]
 
 mod api;
 mod audio;
@@ -22,16 +23,20 @@ mod draw;
 pub mod error_screen;
 mod flow;
 mod light;
-mod ui_api;
 mod model;
 mod modules;
+mod names;
+mod object_scripts;
 mod physics;
+mod reflect_bind;
 mod runtime;
 mod save;
+mod scene_api;
 mod shader;
 pub mod testing;
 mod tween;
 mod types;
+mod ui_api;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -42,17 +47,16 @@ use std::time::{Duration, Instant, SystemTime};
 use mlua::{ErrorContext, Function, Lua, MultiValue, Value};
 use spark_core::{Game, World};
 
+pub use names::{classify, clean_error, hint};
+pub use object_scripts::OBJECT_CALLBACKS;
 pub use runtime::TaskStatus;
 pub use save::default_save_path;
+#[doc(hidden)]
+pub use types::object_member_names;
 
 use convert::Shared;
 use runtime::SharedRuntime;
 
-/// Runs a Luau script as a [`Game`].
-///
-/// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
-/// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
-/// -> render. `start()` runs once as a task (may `wait`).
 thread_local! {
     /// Time the running callback spent loading assets (models, textures, cube maps): it does not count towards the
     /// "script ran too long" limit, big files may take seconds to decode.
@@ -67,6 +71,11 @@ pub(crate) fn untimed<R>(f: impl FnOnce() -> R) -> R {
     r
 }
 
+/// Runs a Luau script as a [`Game`].
+///
+/// Frame order: input events -> (collision events -> `fixed_update(dt)` -> physics step) xN ->
+/// collision events -> `update(dt)` -> timers & tasks -> `emit_later` events -> `late_update(dt)` -> `render()` (2D drawing)
+/// -> render. `start()` runs once as a task (may `wait`).
 pub struct ScriptGame {
     path: PathBuf,
     shared: Rc<RefCell<World>>,
@@ -95,6 +104,27 @@ pub struct ScriptGame {
     /// What the error screen shows (built once per error).
     error_view: Option<error_screen::ErrorView>,
     shader_view: Option<error_screen::ErrorView>,
+    /// A hot-reloaded module that did not load (the old version keeps running).
+    module_error: Option<String>,
+    module_view: Option<error_screen::ErrorView>,
+    /// How many single-module hot reloads ran, and how long the last one took (see `ScriptGame::module_reloads`).
+    module_reloads: u32,
+    last_module_reload: Option<Duration>,
+    /// `math.random` seed applied on every (re)load.
+    seed: Option<u64>,
+    log_dir: Option<PathBuf>,
+    /// Scripts attached to objects (see `object_scripts.rs`); replaced on every (re)load.
+    objects: object_scripts::SharedObjects,
+}
+
+/// The seed as Luau's `math.randomseed` takes it (a 32-bit integer): `low ^ high` of the 64 bits.
+fn luau_seed(seed: u64) -> i32 {
+    ((seed as u32) ^ ((seed >> 32) as u32)) as i32
+}
+
+/// What the error screen says about the log file: its path, or `error.log` when nothing could be written.
+fn log_hint(written: Option<&Path>) -> String {
+    written.map(|p| p.display().to_string()).unwrap_or_else(|| "error.log (could not be written)".into())
 }
 
 struct TestRun {
@@ -126,7 +156,20 @@ impl ScriptGame {
             test: None,
             error_view: None,
             shader_view: None,
+            module_error: None,
+            module_view: None,
+            module_reloads: 0,
+            last_module_reload: None,
+            seed: None,
+            log_dir: None,
+            objects: Rc::new(RefCell::new(object_scripts::ObjectScripts::new(Rc::default(), Duration::from_secs(5), false))),
         }
+    }
+
+    /// Whether any object has a script (or had one that still needs its `on_destroy`): two empty-list checks, the
+    /// whole cost of object scripts for a game that has none.
+    fn objects_active(&self, world: &World) -> bool {
+        !world.scene.scripted().is_empty() || self.objects.borrow().has_instances()
     }
 
     fn root(&self) -> PathBuf {
@@ -185,6 +228,21 @@ impl ScriptGame {
         self
     }
 
+    /// Seeds Luau's `math.random` every time the script (re)starts, so a run is reproducible (`--seed N`).
+    /// `None` = leave it random. The seed is folded to 32 bits (`low ^ high`, Luau's generator takes a 32-bit
+    /// integer), so seeds below 2^32 are used as they are.
+    pub fn seed(mut self, seed: Option<u64>) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Per-user logs folder (see `spark_core::paths::log_dir`): where `error.log` goes for packed games, and the
+    /// fallback when the game folder is not writable. Default: none (dev runs write next to the script only).
+    pub fn log_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.log_dir = dir;
+        self
+    }
+
     /// Last script error, if the script is paused because of one.
     pub fn error(&self) -> Option<&str> {
         self.error.as_deref()
@@ -195,18 +253,20 @@ impl ScriptGame {
     }
 
     fn fail(&mut self, msg: String) {
+        let msg = names::clean_error(&msg);
         log::error!("script error: {msg}");
         if self.strict {
             std::process::exit(1);
         }
         log::warn!("script paused - fix the error and save {} to reload", self.path.display());
-        // Players' builds have no console: keep a copy next to the script (best effort).
-        if let Some(dir) = self.path.parent() {
-            let _ = std::fs::write(dir.join("error.log"), format!("{msg}\n"));
-        }
+        // Players' builds have no console: keep a copy (best effort). Dev runs: next to the script; packed games: in
+        // the per-user logs folder (the packed folder is virtual).
+        let dirs = spark_core::paths::log_candidates(self.path.parent(), spark_core::vfs::is_packed(), self.log_dir.as_deref());
+        let log = spark_core::paths::write_log(&dirs, "error.log", &format!("{msg}\n"));
         let file = self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let hint = format!(
-            "Fix the error and save the file ({file} or a module): the game reloads automatically.   F5 - restart   |   full text: error.log"
+            "Fix the error and save the file ({file} or a module): the game reloads automatically.   F5 - restart   |   full text: {}",
+            log_hint(log.as_deref())
         );
         self.error_view = Some(error_screen::ErrorView::new("Script error", &msg, &self.root(), &hint));
         self.error = Some(msg);
@@ -230,6 +290,8 @@ impl ScriptGame {
     }
 
     fn drop_lua(&mut self) {
+        // Instances hold Lua tables and functions: release them before the state goes away.
+        self.objects.borrow_mut().clear();
         if let Some(old) = self.lua.take() {
             if let Err(e) = save::flush(&old) {
                 log::error!("{e}");
@@ -245,11 +307,14 @@ impl ScriptGame {
         self.drop_lua();
         self.error = None;
         self.error_view = None;
+        self.module_error = None;
+        self.module_view = None;
         self.modified = modified(&self.path);
         self.frame_started = world.time.frame;
         world.reset();
         let root = self.path.parent().map(Path::to_path_buf).unwrap_or_default();
         world.assets.root = root.clone();
+        world.assets.confine = true;
         let source = match spark_core::vfs::read_string(&self.path) {
             Ok(s) => s,
             Err(e) => return self.fail(e),
@@ -258,6 +323,10 @@ impl ScriptGame {
         self.modules = Some(modules.clone());
         let name = self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "main.luau".into());
         let lua = Lua::new();
+        // A runaway script (or a mod) must not take the machine's memory: allocation fails with a Lua error instead.
+        if let Err(e) = lua.set_memory_limit(MEMORY_LIMIT) {
+            log::warn!("cannot set the Luau memory limit: {e}");
+        }
         let deadline = self.deadline.clone();
         let limit = self.timeout;
         lua.set_interrupt(move |_| {
@@ -266,27 +335,45 @@ impl ScriptGame {
                 // later check fails too until the callback returns (`run` then clears it).
                 return Err(mlua::Error::runtime(format!(
                     "script ran for more than {:.1} s without returning (infinite loop?). \
-                     Long work: split it over frames with wait() / task.spawn",
+                     Long work: split it over frames with wait() inside task(function() ... end)",
                     limit.as_secs_f32()
                 )));
             }
             Ok(mlua::VmState::Continue)
         });
         lua.set_app_data(Shared(self.shared.clone()));
+        self.objects = Rc::new(RefCell::new(object_scripts::ObjectScripts::new(self.deadline.clone(), self.timeout, self.strict)));
+        lua.set_app_data(self.objects.clone());
         lua.set_app_data::<SharedRuntime>(Rc::default());
         lua.set_app_data(save::SavePath(self.save_path.clone()));
         self.lua = Some(lua);
+        let test_shared = self.test.as_ref().map(|t| t.shared.clone());
+        let seed = self.seed;
         self.run(world, |lua| {
             api::install(lua)?;
+            if let Some(seed) = seed {
+                lua.globals().get::<mlua::Table>("math")?.get::<Function>("randomseed")?.call::<()>(luau_seed(seed))?;
+            }
             modules::install(lua, &lua.globals(), modules)?;
-            lua.load(source.as_str()).set_name(format!("@{name}")).exec()?;
-            if matches!(lua.globals().get::<Value>("draw")?, Value::Function(_)) {
+            if let Some(shared) = test_shared {
+                testing::install(lua, shared)?;
+            }
+            // Reading a global nobody defined is a typo: fail with a suggestion instead of "attempt to index nil".
+            names::strict_globals(lua)?;
+            // Spark's libraries (and Luau's own: math, string, ...) become read-only; the script gets a
+            // private, writable globals table that falls back to them (docs/dev/adr/0002-luau-hardening.md).
+            sandbox(lua)?;
+            let known: std::collections::HashSet<String> =
+                lua.globals().pairs::<String, Value>().filter_map(|p| p.ok().map(|(k, _)| k)).collect();
+            chunk(lua, source.as_str()).set_name(format!("@{name}")).exec()?;
+            if matches!(lua.globals().raw_get::<Value>("draw")?, Value::Function(_)) {
                 return Err(mlua::Error::runtime(
                     "'draw' is Spark's 2D drawing library (draw.rect, draw.text, ...). \
                      Name your drawing callback 'function render()' instead of 'function draw()'",
                 ));
             }
-            if let Some(start) = lua.globals().get::<Option<Function>>("start")? {
+            names::check_callback_names(lua, &known)?;
+            if let Some(start) = lua.globals().raw_get::<Option<Function>>("start")? {
                 runtime::spawn_task(lua, start, MultiValue::new()).map_err(|e| e.context("in start()"))?;
             }
             Ok(())
@@ -319,11 +406,10 @@ impl ScriptGame {
             Ok(s) => s,
             Err(e) => return self.fail(format!("{}: {e}", t.name)),
         };
-        let (name, shared) = (t.name.clone(), t.shared.clone());
+        let name = t.name.clone();
         let mut status = None;
         self.run(world, |lua| {
-            testing::install(lua, shared)?;
-            let f = lua.load(source.as_str()).set_name(format!("@{name}")).into_function()?;
+            let f = chunk(lua, source.as_str()).set_name(format!("@{name}")).into_function()?;
             status = Some(runtime::spawn_task(lua, f, MultiValue::new()).map_err(|e| e.context("in test"))?.status);
             Ok(())
         });
@@ -333,26 +419,84 @@ impl ScriptGame {
         }
     }
 
-    /// Hot reload: the script (restarts the game) or single shaders (the game keeps running).
-    fn poll_files(&mut self, world: &mut World) {
-        if !self.hot_reload || self.last_check.elapsed() < Duration::from_millis(300) {
+    /// How many times a single module was hot-reloaded without restarting the game, and the time the last one took
+    /// (from the change being noticed to the game running again; ADR 0006).
+    pub fn module_reloads(&self) -> (u32, Option<Duration>) {
+        (self.module_reloads, self.last_module_reload)
+    }
+
+    /// Hot reload of changed modules (ADR 0006): the files are run again and their tables updated in place, the
+    /// scripts on objects are refreshed; the world, the objects and every loaded asset stay. Falls back to a restart
+    /// when a module cannot be swapped (it returns a function, not a table).
+    fn reload_modules(&mut self, world: &mut World, changed: Vec<PathBuf>) {
+        let started = Instant::now();
+        let root = self.root();
+        let rels: Vec<String> = changed.iter().map(|p| p.strip_prefix(&root).unwrap_or(p).to_string_lossy().replace('\\', "/")).collect();
+        let mut restart: Option<String> = None;
+        let mut problems: Vec<String> = Vec::new();
+        self.run(world, |lua| {
+            for (p, rel) in changed.iter().zip(&rels) {
+                match modules::reload(lua, p) {
+                    Ok(modules::Reload::InPlace) => {}
+                    Ok(modules::Reload::NeedsRestart(why)) => {
+                        restart = Some(why);
+                        return Ok(());
+                    }
+                    Err(e) => problems.push(format!("{rel}: {}", names::clean_error(&e.to_string()))),
+                }
+            }
+            object_scripts::refresh(lua, &rels, &mut problems)
+        });
+        if self.error.is_some() {
             return;
         }
-        self.last_check = Instant::now();
-        let m = modified(&self.path);
-        let changed_module = self.modules.as_ref().and_then(|ms| {
-            ms.borrow().files.iter().find(|(p, t)| t.is_some() && modified(p) != *t).map(|(p, _)| p.clone())
-        });
-        if (m.is_some() && m != self.modified) || changed_module.is_some() {
-            log::info!("reloading {}", changed_module.as_deref().unwrap_or(&self.path).display());
+        if let Some(why) = restart {
+            log::info!("restarting: {why}");
             self.shader_mtimes.clear();
             self.shader_error = None;
             self.shader_view = None;
             self.load(world);
             return;
         }
-        let files: Vec<(PathBuf, spark_core::ShaderId)> =
-            world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
+        self.last_module_reload = Some(started.elapsed());
+        self.module_reloads += 1;
+        if problems.is_empty() {
+            log::info!("module reloaded: {} ({:.1} ms)", rels.join(", "), started.elapsed().as_secs_f64() * 1000.0);
+            self.module_error = None;
+            self.module_view = None;
+        } else {
+            let msg = problems.join("\n");
+            log::error!("module not reloaded, the previous version keeps running: {msg}");
+            let hint = "Fix the module and save it: it reloads automatically (the previous version keeps running).";
+            self.module_view = Some(error_screen::ErrorView::new("Module error", &msg, &self.root(), hint));
+            self.module_error = Some(msg);
+        }
+    }
+
+    /// Hot reload: the script (restarts the game), single modules and shaders (the game keeps running).
+    fn poll_files(&mut self, world: &mut World) {
+        if !self.hot_reload || self.last_check.elapsed() < POLL_EVERY {
+            return;
+        }
+        self.last_check = Instant::now();
+        let m = modified(&self.path);
+        let changed = self.modules.as_ref().map(modules::changed).unwrap_or_default();
+        let main_changed = m.is_some() && m != self.modified;
+        if main_changed || (!changed.is_empty() && self.error.is_some()) {
+            log::info!("reloading {}", if main_changed { &self.path } else { &changed[0] }.display());
+            self.shader_mtimes.clear();
+            self.shader_error = None;
+            self.shader_view = None;
+            self.module_error = None;
+            self.module_view = None;
+            self.load(world);
+            return;
+        }
+        if !changed.is_empty() {
+            self.reload_modules(world, changed);
+            return;
+        }
+        let files: Vec<(PathBuf, spark_core::ShaderId)> = world.assets.shader_files().map(|(p, id)| (p.to_path_buf(), id)).collect();
         for (path, id) in files {
             let m = modified(&path);
             match self.shader_mtimes.get(&path) {
@@ -361,9 +505,8 @@ impl ScriptGame {
                 }
                 Some(old) if *old != m => {
                     self.shader_mtimes.insert(path.clone(), m);
-                    let result = spark_core::vfs::read_string(&path).and_then(|code| {
-                        world.assets.shader_mut(id).ok_or_else(|| "shader was unloaded".to_string())?.recompile(&code)
-                    });
+                    let result = spark_core::vfs::read_string(&path)
+                        .and_then(|code| world.assets.shader_mut(id).ok_or_else(|| "shader was unloaded".to_string())?.recompile(&code));
                     match result {
                         Ok(()) => {
                             log::info!("shader reloaded: {}", path.display());
@@ -412,12 +555,86 @@ fn modified(path: &Path) -> Option<SystemTime> {
     spark_core::vfs::modified(path)
 }
 
+/// How often the watched files are checked for changes (a few `stat` calls: cheap).
+const POLL_EVERY: Duration = Duration::from_millis(50);
+
+/// Most memory one game's Luau state may use: past it an allocation is a Lua error ("not enough memory"), not an OOM kill.
+const MEMORY_LIMIT: usize = 1 << 30;
+
 /// `main.luau` longer than this (and no modules) gets a one-time hint to split it.
 const BIG_MAIN: usize = 800;
 static BIG_HINT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// `lua.sandbox(true)` plus `_G` pointing at the script's own globals (so `_G.score = 1` and
+/// `rawget(_G, "score")` keep working instead of hitting the read-only base table).
+fn sandbox(lua: &Lua) -> mlua::Result<()> {
+    // The sandbox turns on Luau's "safe environment": `sound.volume` in a chunk is resolved ONCE, when the
+    // chunk loads, and the value is baked into the bytecode. That is right for `math.sin` and wrong for
+    // globals whose fields are computed on every read (`time.dt`, `camera.fov`, `screen.height`, `sound.volume`,
+    // ...: userdata and tables with a metatable). The compiler must not import field chains of those.
+    let dynamic: Vec<String> = lua
+        .globals()
+        .pairs::<String, Value>()
+        .filter_map(Result::ok)
+        .filter(|(_, v)| match v {
+            Value::UserData(_) => true,
+            Value::Table(t) => t.metatable().is_some(),
+            _ => false,
+        })
+        .map(|(k, _)| k)
+        .collect();
+    let stat: std::collections::HashSet<String> =
+        lua.globals().pairs::<String, Value>().filter_map(Result::ok).map(|(k, _)| k).filter(|k| !dynamic.contains(k)).collect();
+    lua.set_compiler(mlua::chunk::Compiler::new().set_mutable_globals(dynamic));
+    lua.set_app_data(ChunkNames { stat });
+    lua.sandbox(true)?;
+    let user = lua.globals();
+    user.raw_set("_G", user.clone())
+}
+
+/// Names of the read-only built-ins, for `chunk`.
+struct ChunkNames {
+    /// Plain built-ins (`math`, `Mesh`, `spawn`, ...): their values never change, safe to import at load.
+    stat: std::collections::HashSet<String>,
+}
+
+/// Loads Luau source so that a script's own globals are always read at run time. Luau's sandbox resolves a global
+/// read ("import") once, when a chunk loads, and bakes the value into the bytecode: right for built-ins, silently
+/// stale for globals that change later (`opened = true` in `update`, read by a test chunk or a module). The
+/// compiler never imports a global the chunk itself assigns, so a dead `if false then name = nil ... end` for every
+/// identifier of the chunk that is not a plain built-in is put in front of the code (on the first line, so line
+/// numbers stay). The identifier scan is a conservative over-approximation: locals, fields and words in strings or
+/// comments just become "assigned" too, which costs nothing.
+pub(crate) fn chunk(lua: &Lua, source: &str) -> mlua::chunk::Chunk<'static> {
+    let Some(names) = lua.app_data_ref::<ChunkNames>() else { return lua.load(source.to_string()) };
+    const KEYWORDS: &[&str] = &[
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if", "in", "local", "nil", "not", "or", "repeat",
+        "return", "then", "true", "until", "while", "continue",
+    ];
+    let mut seen = std::collections::HashSet::new();
+    let mut prefix = String::from("if false then ");
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' {
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            let word = &source[start..i];
+            if !names.stat.contains(word) && !KEYWORDS.contains(&word) && seen.insert(word) {
+                prefix.push_str(word);
+                prefix.push_str("=nil ");
+            }
+        } else {
+            i += 1;
+        }
+    }
+    prefix.push_str("end ");
+    lua.load(prefix + source)
+}
 fn call_global(lua: &Lua, name: &str, dt: f32) -> mlua::Result<()> {
-    if let Some(f) = lua.globals().get::<Option<Function>>(name)? {
+    if let Some(f) = lua.globals().raw_get::<Option<Function>>(name)? {
         f.call::<()>(dt)?;
     }
     Ok(())
@@ -430,24 +647,49 @@ impl Game for ScriptGame {
 
     fn fixed_update(&mut self, world: &mut World, dt: f32) {
         self.ensure_frame_started(world);
+        let objects = self.objects_active(world);
         self.run(world, |lua| {
+            if objects {
+                object_scripts::sync(lua)?;
+            }
             physics::dispatch_collisions(lua)?;
-            call_global(lua, "fixed_update", dt)
+            call_global(lua, "fixed_update", dt)?;
+            if objects {
+                object_scripts::run_stage(lua, object_scripts::Stage::Fixed, dt)?;
+            }
+            Ok(())
         });
     }
 
     fn update(&mut self, world: &mut World, dt: f32) {
         self.ensure_frame_started(world);
+        let objects = self.objects_active(world);
         self.run(world, |lua| {
+            if objects {
+                object_scripts::sync(lua)?;
+            }
             physics::dispatch_collisions(lua)?;
             call_global(lua, "update", dt)?;
+            if objects {
+                object_scripts::run_stage(lua, object_scripts::Stage::Update, dt)?;
+            }
             runtime::run_timers(lua)?;
             runtime::flush_deferred(lua)
         });
     }
 
     fn late_update(&mut self, world: &mut World, dt: f32) {
-        self.run(world, |lua| call_global(lua, "late_update", dt));
+        let objects = self.objects_active(world);
+        self.run(world, |lua| {
+            if objects {
+                object_scripts::sync(lua)?;
+            }
+            call_global(lua, "late_update", dt)?;
+            if objects {
+                object_scripts::run_stage(lua, object_scripts::Stage::Late, dt)?;
+            }
+            Ok(())
+        });
     }
 
     fn draw(&mut self, world: &mut World) {
@@ -466,18 +708,23 @@ impl Game for ScriptGame {
             return;
         }
         self.run(world, |lua| {
-            if let Some(f) = lua.globals().get::<Option<Function>>("render")? {
+            if let Some(f) = lua.globals().raw_get::<Option<Function>>("render")? {
                 f.call::<()>(()).map_err(|e| e.context("in render()"))?;
             }
-            save::flush(lua)
+            save::flush_frame(lua);
+            Ok(())
         });
-        if let Some(v) = &self.shader_view {
+        if let Some(v) = self.shader_view.as_ref().or(self.module_view.as_ref()) {
             error_screen::draw(world, v);
+        }
+        let failed = self.objects.borrow().failed();
+        if failed > 0 {
+            error_screen::draw_object_banner(world, failed);
         }
     }
 
     fn error(&self) -> Option<&str> {
-        self.error.as_deref().or(self.shader_error.as_deref())
+        self.error.as_deref().or(self.shader_error.as_deref()).or(self.module_error.as_deref())
     }
 }
 

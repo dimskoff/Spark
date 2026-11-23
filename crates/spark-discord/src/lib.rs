@@ -9,6 +9,7 @@
 //! spark_discord::connect("123456789012345678");
 //! spark_discord::set(spark_discord::Presence { details: Some("In the menu".into()), ..Default::default() });
 //! ```
+#![forbid(unsafe_code)]
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Mutex, OnceLock};

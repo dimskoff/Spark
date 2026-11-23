@@ -3,10 +3,7 @@
 use std::collections::HashMap;
 
 use spark_core::material::BlendMode;
-use spark_core::{
-    Mat4,
-    ShaderKind, TextureFilter, Vec3, World,
-};
+use spark_core::{Mat4, ShaderKind, TextureFilter, Vec3, World};
 
 use crate::consts::*;
 use crate::culling::*;
@@ -261,7 +258,14 @@ impl Renderer {
         order.sort_by(|&a, &b| {
             let (a, b) = (&cands[a as usize], &cands[b as usize]);
             match (transparent(a), transparent(b)) {
-                (false, false) => (a.variant, a.shader, a.texture, a.normal_map, a.orm_map, a.mesh).cmp(&(b.variant, b.shader, b.texture, b.normal_map, b.orm_map, b.mesh)),
+                (false, false) => (a.variant, a.shader, a.texture, a.normal_map, a.orm_map, a.mesh).cmp(&(
+                    b.variant,
+                    b.shader,
+                    b.texture,
+                    b.normal_map,
+                    b.orm_map,
+                    b.mesh,
+                )),
                 (true, true) => b.depth.total_cmp(&a.depth),
                 (ta, tb) => ta.cmp(&tb),
             }
@@ -320,7 +324,11 @@ impl Renderer {
                     && b.mesh == c.mesh
                     && (!light_part || light_owner.last() == Some(&owner))
                     && (shadow_part
-                        || (b.shader == c.shader && b.variant == c.variant && b.texture == c.texture && b.normal_map == c.normal_map && b.orm_map == c.orm_map))
+                        || (b.shader == c.shader
+                            && b.variant == c.variant
+                            && b.texture == c.texture
+                            && b.normal_map == c.normal_map
+                            && b.orm_map == c.orm_map))
             });
             let faces = if light_part { cube_face_mask(c.center - light_render[owner].1, c.radius) } else { 0 };
             if same {
@@ -383,11 +391,15 @@ impl Renderer {
                             },
                             wgpu::BindGroupEntry {
                                 binding: 2,
-                                resource: wgpu::BindingResource::TextureView(b.normal_map.map_or(&self.flat_normal.normal, |n| &self.textures[n].view)),
+                                resource: wgpu::BindingResource::TextureView(
+                                    b.normal_map.map_or(&self.flat_normal.normal, |n| &self.textures[n].view),
+                                ),
                             },
                             wgpu::BindGroupEntry {
                                 binding: 3,
-                                resource: wgpu::BindingResource::TextureView(b.orm_map.map_or(&self.flat_normal.orm, |n| &self.textures[n].view)),
+                                resource: wgpu::BindingResource::TextureView(
+                                    b.orm_map.map_or(&self.flat_normal.orm, |n| &self.textures[n].view),
+                                ),
                             },
                         ],
                     });

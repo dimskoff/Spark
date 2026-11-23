@@ -48,66 +48,158 @@ type Align =
 
 type BodyType = "dynamic" | "static" | "kinematic"
 
+type BlendMode = "auto" | "opaque" | "alpha" | "additive"
+
+-- @generated components begin
 type BodySpec = {
+    -- How the body moves.
+    -- Default "dynamic".
     type: BodyType?,
+    -- Collision shape in the object's local space.
+    -- Default "auto".
     shape: ("auto" | "box" | "sphere" | "capsule" | "cylinder")?,
+    -- Full size (width, height, depth).
+    -- Default vec3(1, 1, 1).
+    -- Used by "box".
     size: vector?,
+    -- Radius.
+    -- Greater than 0. Default 0.5.
+    -- Used by "sphere", "capsule", "cylinder".
     radius: number?,
+    -- Total height including the caps.
+    -- Greater than 0. Default 2.
+    -- Used by "capsule", "cylinder".
     height: number?,
+    -- Total mass in kg. Assigning `nil` lets the physics engine compute it from the volume (density 1).
+    -- Greater than 0.
     mass: number?,
+    -- Surface friction (0 = ice).
+    -- At least 0. Default 0.5.
     friction: number?,
+    -- 0 = no bounce, 1 = perfectly elastic.
+    -- Default 0.
     bounciness: number?,
+    -- Sensors detect overlaps (collision events) but don't push anything.
+    -- Default false.
     sensor: boolean?,
+    -- Keeps the body upright (characters).
+    -- Default false.
     lock_rotation: boolean?,
+    -- Multiplier of the world gravity for this body (0 = floats, negative = rises).
+    -- Default 1.
     gravity_scale: number?,
+    -- Slows the linear velocity down over time.
+    -- Default 0.
     damping: number?,
+    -- Slows the rotation down over time.
+    -- Default 0.05.
     angular_damping: number?,
+    -- Continuous collision detection for fast objects (bullets).
+    -- Default false.
     ccd: boolean?,
+    -- World-space velocity (m/s). Written back by the simulation; set it to change it.
+    -- Unit: m/s. Default vec3(0, 0, 0).
     velocity: vector?,
+    -- World-space angular velocity (rad/s).
+    -- Unit: rad/s. Default vec3(0, 0, 0).
     angular_velocity: vector?,
 }
 
 type LightSpec = {
+    -- Point or spot (Luau: `light.type`, `"point"` / `"spot"`).
+    -- Default "point".
     type: ("point" | "spot")?,
+    -- Light color.
+    -- Default rgba(1, 1, 1, 1).
     color: ColorLike?,
+    -- Brightness multiplier (0 = off). Negative values are clamped to 0.
+    -- At least 0. Default 1.
     intensity: number?,
+    -- Distance in meters where the light has faded out completely. Values below 0.01 are clamped.
+    -- At least 0.01 m. Default 10.
     range: number?,
-    angle: number?,
-    softness: number?,
+    -- Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`).
+    -- Default false.
     shadows: boolean?,
+    -- Full cone angle of a spot light in degrees, 1 to 179 (new spot lights: 45).
+    -- Used by "spot".
+    angle: number?,
+    -- 0..1 = blurry edge.
+    -- Range 0 to 1. Default 0.3.
+    -- Used by "spot".
+    softness: number?,
+    -- Position of the light object.
     position: vector?,
+    -- Rotation of the light object (spot lights shine along -Z).
     rotation: vector?,
+    -- Parent object.
     parent: Object?,
+    -- Name of the light object.
     name: string?,
 }
 
-type BlendMode = "auto" | "opaque" | "alpha" | "additive"
-
 type SpawnProps = {
+    -- Name shown in the hierarchy and used by `find(name)`.
     name: string?,
-    position: vector?,
-    rotation: vector?,
-    scale: (number | vector)?,
+    -- Drawn (children inherit it being off).
+    -- Default true.
     visible: boolean?,
-    parent: Object?,
+    -- Position in meters.
+    -- Unit: m. Default vec3(0, 0, 0).
+    position: vector?,
+    -- Rotation as Euler angles in radians: (pitch, yaw, roll) = rotation around X, Y, Z, applied Y, then X, then Z. Relative to the parent.
+    rotation: vector?,
+    -- Scale per axis (1 = original size).
+    -- Default vec3(1, 1, 1).
+    scale: (number | vector)?,
+    -- Base color (multiplied with the texture).
+    -- Default rgba(1, 1, 1, 1).
     color: ColorLike?,
-    body: (BodyType | boolean | BodySpec)?,
-    light: LightSpec?,
-    shader: Shader?,
+    -- Free per-material numbers for custom shaders (`object.data` in WGSL).
+    -- Default vec4(0, 0, 0, 0).
     data: { number }?,
+    -- Blending with the background (see `BlendMode`).
+    -- Default "auto".
     blend: BlendMode?,
+    -- Draw back faces too (leaves, flags, planes seen from below).
+    -- Default false.
     double_sided: boolean?,
+    -- Casts a shadow from the sun (`RenderSettings::shadows`).
+    -- Default true.
     cast_shadow: boolean?,
+    -- Physically based shading (Cook-Torrance GGX with `metallic` / `roughness`) instead of the
+    -- classic diffuse look. Turned on by `Material::pbr`, `with_metallic`, `with_roughness`.
+    -- Default false.
     pbr: boolean?,
+    -- 0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on. Out-of-range values are clamped
+    -- (like `Material::with_metallic`, which also turns `pbr` on; writing the field alone does not).
+    -- Range 0 to 1. Default 0.
     metallic: number?,
+    -- 0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on. Out-of-range values are clamped
+    -- (like `Material::with_roughness`, which also turns `pbr` on; writing the field alone does not).
+    -- Range 0 to 1. Default 0.5.
     roughness: number?,
+    -- Light the surface emits by itself, added after lighting (black = none). Works in every mode.
+    -- Default rgba(0, 0, 0, 1).
     emissive: ColorLike?,
+    -- Parent object; position, rotation and scale are then relative to it.
+    parent: Object?,
+    -- Adds a rigid body: a type name, `true` (dynamic) or a spec table.
+    body: (BodyType | boolean | BodySpec)?,
+    -- Adds a point or spot light.
+    light: LightSpec?,
+    -- Custom surface shader.
+    shader: Shader?,
+    -- Normal map: a texture or an image path; `false` removes it.
     normal_map: (Texture | string | false)?,
+    -- Occlusion / roughness / metallic map: a texture or an image path; `false` removes it.
     orm_map: (Texture | string | false)?,
     -- spawn(model, { node = "name" }): only that node of a model (and its children), moved to the origin in X / Z
     node: string?,
+    -- Level-of-detail meshes: `{ distance, mesh }` pairs.
     lod: { LodLevel }?,
 }
+-- @generated components end
 
 -- `{distance, mesh}`: from `distance` meters away the object draws `mesh`.
 type LodLevel = { number | Mesh }
@@ -256,49 +348,119 @@ declare extern type Bus with
 end
 
 declare extern type LightRef with
+    -- @generated components begin
+    -- Point or spot (Luau: `light.type`, `"point"` / `"spot"`).
     type: "point" | "spot"
+    -- Light color.
     color: Color
+    -- Brightness multiplier (0 = off). Negative values are clamped to 0.
+    -- At least 0.
     intensity: number
+    -- Distance in meters where the light has faded out completely. Values below 0.01 are clamped.
+    -- At least 0.01 m.
     range: number
-    angle: number
-    softness: number
+    -- Casts shadows (a cube shadow map, see `RenderSettings::light_shadows`).
     shadows: boolean
+    -- Full cone angle of a spot light in degrees, 1 to 179 (new spot lights: 45).
+    -- Used by "spot".
+    angle: number
+    -- 0..1 = blurry edge.
+    -- Range 0 to 1.
+    -- Used by "spot".
+    softness: number
+    -- @generated components end
 end
 
 declare extern type Object with
     id: number
-    name: string
-    position: vector
+    -- shortcuts for position.x / .y / .z
     x: number
     y: number
     z: number
-    rotation: vector
-    scale: vector
-    visible: boolean
-    blend: BlendMode
-    double_sided: boolean
-    cast_shadow: boolean
-    pbr: boolean
-    metallic: number
-    roughness: number
-    emissive: Color
-    normal_map: Texture?
-    orm_map: Texture?
-    lod: { LodLevel }
-    color: Color
     material: Material?
-    mesh: Mesh?
     parent: Object?
     light: LightRef?
-    shader: Shader?
-    data: { number }
-    -- physics (see "Physics")
+    -- path of the attached object script (nil = none); assigning a path attaches it, nil detaches it
+    script: string?
+    -- labels for finding objects (see `find_all_tagged`): reading returns a new list, assigning replaces the tags (nil = none)
+    tags: { string }
+    -- physics (see "Physics"): `nil` / false removes the body; the scalars (mass, velocity, ...) are generated below
     body: BodyType?
-    velocity: vector
-    angular_velocity: vector
+
+    -- fields generated from the component registry (transform, material, mesh, body)
+
+    -- @generated components begin
+    -- Name shown in the hierarchy and used by `find(name)`.
+    name: string
+    -- Drawn (children inherit it being off).
+    -- Default true.
+    visible: boolean
+    -- Position in meters.
+    -- Unit: m. Default vec3(0, 0, 0).
+    position: vector
+    -- Rotation as Euler angles in radians: (pitch, yaw, roll) = rotation around X, Y, Z, applied Y, then X, then Z. Relative to the parent.
+    rotation: vector
+    -- Scale per axis (1 = original size).
+    -- Default vec3(1, 1, 1).
+    scale: vector
+    -- The mesh drawn (a runtime handle).
+    -- Default "runtime:mesh/0".
+    mesh: Mesh?
+    -- Level of detail: from each distance on the renderer draws that mesh instead of `mesh`.
+    lod: { LodLevel }
+    -- Base color (multiplied with the texture).
+    -- Default rgba(1, 1, 1, 1).
+    color: Color
+    -- Custom surface shader (`nil` = the engine default).
+    shader: Shader?
+    -- Free per-material numbers for custom shaders (`object.data` in WGSL).
+    -- Default vec4(0, 0, 0, 0).
+    data: { number }
+    -- Blending with the background (see `BlendMode`).
+    -- Default "auto".
+    blend: BlendMode
+    -- Draw back faces too (leaves, flags, planes seen from below).
+    -- Default false.
+    double_sided: boolean
+    -- Casts a shadow from the sun (`RenderSettings::shadows`).
+    -- Default true.
+    cast_shadow: boolean
+    -- Physically based shading (Cook-Torrance GGX with `metallic` / `roughness`) instead of the
+    -- classic diffuse look. Turned on by `Material::pbr`, `with_metallic`, `with_roughness`.
+    -- Default false.
+    pbr: boolean
+    -- 0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on. Out-of-range values are clamped
+    -- (like `Material::with_metallic`, which also turns `pbr` on; writing the field alone does not).
+    -- Range 0 to 1. Default 0.
+    metallic: number
+    -- 0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on. Out-of-range values are clamped
+    -- (like `Material::with_roughness`, which also turns `pbr` on; writing the field alone does not).
+    -- Range 0 to 1. Default 0.5.
+    roughness: number
+    -- Light the surface emits by itself, added after lighting (black = none). Works in every mode.
+    -- Default rgba(0, 0, 0, 1).
+    emissive: Color
+    -- Tangent-space normal map (OpenGL convention: green points along +V). Works with and without `pbr`.
+    normal_map: Texture?
+    -- Packed surface data (used when `pbr` is on): R = ambient occlusion, G = roughness, B = metallic; each is
+    -- multiplied with `roughness` / `metallic`. Like the normal map it holds data, not colors.
+    orm_map: Texture?
+    -- Total mass in kg. Assigning `nil` lets the physics engine compute it from the volume (density 1).
+    -- Greater than 0.
     mass: number
-    gravity_scale: number
+    -- Sensors detect overlaps (collision events) but don't push anything.
+    -- Default false.
     sensor: boolean
+    -- Multiplier of the world gravity for this body (0 = floats, negative = rises).
+    -- Default 1.
+    gravity_scale: number
+    -- World-space velocity (m/s). Written back by the simulation; set it to change it.
+    -- Unit: m/s. Default vec3(0, 0, 0).
+    velocity: vector
+    -- World-space angular velocity (rad/s).
+    -- Unit: rad/s. Default vec3(0, 0, 0).
+    angular_velocity: vector
+    -- @generated components end
 
     function rotate_x(self, angle: number): ()
     function rotate_y(self, angle: number): ()
@@ -316,9 +478,18 @@ declare extern type Object with
     function size(self): vector
     function distance_to(self, other: Object | vector): number
     function exists(self): boolean
+    function has_tag(self, tag: string): boolean
+    -- Adds a tag (nothing happens when it is already there). Tags are non-empty strings of at most 64 bytes.
+    function add_tag(self, tag: string): ()
+    -- Returns whether the object had the tag.
+    function remove_tag(self, tag: string): boolean
     function destroy(self): ()
     function find(self, name: string): Object?
     function paint(self, material: Material | ColorLike): ()
+
+    -- object scripts (see "Object scripts"): `props` override the defaults the script declares
+    function attach_script(self, path: string, props: { [string]: any }?): ()
+    function detach_script(self): ()
 
     -- events and timers owned by the object
     function on(self, name: string, fn: (...any) -> any, opts: ListenerOptions?): Listener
@@ -431,9 +602,25 @@ declare function group(props: SpawnProps?): Object
 declare function light(spec: LightSpec): Object
 declare function find(name: string): Object?
 declare function find_all(name: string): { Object }
+declare function find_all_tagged(tag: string): { Object }
 declare function destroy(obj: Object): ()
 declare function dump_scene(): string
 
+-- Levels and prefabs (`.scene` / `.prefab` files, see docs/SCENE_FORMAT.md). `spawn("prefabs/door.prefab", props)` makes
+-- an instance of a prefab: the second argument is the props table.
+type SceneLoadOptions = { replace: boolean? }
+declare scene: {
+    -- Creates the objects of a `.scene` and returns its root objects. `replace = true` deletes the current objects first
+    -- and applies the file's sun / ambient / background / fog / sky; the default adds to the scene.
+    load: (path: string, opts: SceneLoadOptions?) -> { Object },
+    -- Writes every object and the environment to a `.scene` (not in a packed game). Returns warnings about changes to
+    -- prefab instances that a file cannot hold (empty when there are none); anything else that cannot be saved is an error.
+    save: (path: string) -> { string },
+}
+
+-- The scene's camera. A loaded scene can contain an object with a `camera` component (`[node.camera]`); then this camera
+-- follows the first active one and writing to it (`camera.position = ...`, `camera.fov = ...`) moves/changes that object,
+-- so `scene.save` writes the new values. Without a camera object it is the free camera it always was.
 declare camera: Camera
 declare function sun(direction: vector, color: ColorLike?, intensity: number?): ()
 declare function ambient(color: ColorLike): ()
@@ -635,6 +822,12 @@ declare test: {
     fail: (msg: string?) -> (),
     step: (name: string) -> (),
     snapshot: (name: string, state: any?) -> (),
+    -- every text drawn this frame (draw.text and ui), in draw order; shadow copies are listed once
+    texts: () -> { string },
+    -- true when s is part of any drawn text (reads the last finished frame: call test.frames(1) after a state change)
+    sees: (s: string) -> boolean,
+    expect_text: (s: string, msg: string?) -> (),
+    wait_text: (s: string, timeout: number?) -> (),
 }
 
 -- ===================================================================== saving, window, misc

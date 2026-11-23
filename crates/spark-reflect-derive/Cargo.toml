@@ -1,0 +1,23 @@
+[package]
+name = "spark-reflect-derive"
+description = "Derive macros for spark-reflect: #[derive(Reflect)] and #[derive(ReflectEnum)]."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { workspace = true }
+quote = { workspace = true }
+proc-macro2 = { workspace = true }
+
+[dev-dependencies]
+# Dev-dependency cycle (spark-reflect -> derive -> spark-reflect) is allowed by cargo: the UI tests need the runtime crate.
+spark-reflect = { workspace = true }
+trybuild = { workspace = true }

@@ -140,7 +140,10 @@ test.hold("d", 1)
 test.expect(camera.position.x > start_x + 3, "the camera should follow the player to the right")
 "##;
 
-const GITIGNORE: &str ="dist/\nscreenshots/\nerror.log\n";
+/// Claude Code reads CLAUDE.md; the rules live in AGENTS.md.
+const CLAUDE: &str = "# CLAUDE.md\n\nRead `AGENTS.md` first: it has the layout, the check / test loop and the conventions for this game.\nThe API is in `docs/API_REFERENCE.md` (signatures) and `docs/SPARK_API.md` (guide); `spark api search <word>` finds a name.\nWorking loop: write, `spark check . --json`, `spark test . --json`, look at `spark screenshot .`, fix.\n";
+
+const GITIGNORE: &str = "dist/\nscreenshots/\nerror.log\n";
 
 const AGENTS: &str = r##"# AGENTS.md - working on this game
 
@@ -152,6 +155,8 @@ There is no scene editor - the scene, logic, UI and assets are all described in 
 
 - `docs/SPARK_API.md` - the complete Luau API of the engine version this game was made with.
   Use only what is listed there: unknown functions, options and keys raise errors that name the allowed ones.
+- `docs/API_REFERENCE.md` - every function, table and class with its signature (generated from `docs/spark.d.luau`).
+  Look a name up from the terminal: `spark api search <word>` (`--json`).
 - `docs/SPARK_SHADERS.md` - custom WGSL surface and post-process shaders.
 - `docs/spark.d.luau` - type definitions of the same API (luau-lsp). Editors with luau-lsp show wrong
   names / arguments as you type (`.vscode/settings.json` and `.luaurc` are set up for it).
@@ -177,6 +182,10 @@ spark . --headless --frames 60 --dump-scene            # every object: position,
 
 `spark check` and a headless run exit with code 1 on the first script error and print `file:line`, the message and a hint.
 Fix every error before moving on. `print(...)` goes to the log.
+
+Every command has `--json` (stable fields, exit codes: 0 ok, 1 the game or a test failed, 2 bad usage or environment).
+`spark doctor` checks the setup, `spark inspect .` dumps the scene and stats, `spark screenshot .` renders a PNG.
+Numbers must be finite (NaN / infinity are errors); asset paths cannot leave the game folder.
 
 ## Scenario tests (spark test) - the main way to verify gameplay
 
@@ -215,6 +224,9 @@ const DOCS: &[(&str, &str)] = &[
     ("docs/SPARK_API.md", include_str!("../../../docs/SPARK_API.md")),
     ("docs/SPARK_SHADERS.md", include_str!("../../../docs/SPARK_SHADERS.md")),
     ("docs/spark.d.luau", include_str!("../../../docs/spark.d.luau")),
+    ("docs/API_REFERENCE.md", include_str!("../../../docs/API_REFERENCE.md")),
+    ("docs/api.json", include_str!("../../../docs/api.json")),
+    ("llms.txt", include_str!("../../../llms.txt")),
 ];
 
 /// Editor setup for luau-lsp, written only when missing (the user may change them).
@@ -262,7 +274,7 @@ pub fn write_docs(dir: &Path) -> Result<(), String> {
     for (rel, text) in DOCS {
         write_file(&dir.join(rel), text)?;
     }
-    for (rel, text) in [("AGENTS.md", AGENTS)].iter().chain(EDITOR) {
+    for (rel, text) in [("AGENTS.md", AGENTS), ("CLAUDE.md", CLAUDE)].iter().chain(EDITOR) {
         let p = dir.join(rel);
         if !p.exists() {
             write_file(&p, text)?;
@@ -380,11 +392,7 @@ pub fn write_template_kind(dir: &Path, title: &str, kind: Template) -> Result<()
             ("tests/smoke.luau", TEST_2D.into()),
             (".gitignore", GITIGNORE.into()),
         ],
-        Template::Empty => vec![
-            ("main.luau", MAIN_EMPTY.replace("{TITLE}", &t)),
-            ("game.toml", toml),
-            (".gitignore", GITIGNORE.into()),
-        ],
+        Template::Empty => vec![("main.luau", MAIN_EMPTY.replace("{TITLE}", &t)), ("game.toml", toml), (".gitignore", GITIGNORE.into())],
     };
     for (rel, text) in files {
         let p = dir.join(rel);

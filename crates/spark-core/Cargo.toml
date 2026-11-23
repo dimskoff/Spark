@@ -11,6 +11,8 @@ repository.workspace = true
 
 [dependencies]
 glam.workspace = true
+# Component reflection (ADR 0004); `glam` = reflected Vec2/Vec3/Vec4/Quat fields.
+spark-reflect = { workspace = true, features = ["glam"] }
 bytemuck.workspace = true
 log.workspace = true
 image.workspace = true

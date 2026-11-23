@@ -1,0 +1,38 @@
+# A door: a frame and a leaf. Instances in a scene can change the leaf's color, position, ...
+[prefab]
+format_version = 1
+name = "Door"
+
+[[node]]
+id = "root"
+name = "Door"
+
+[[node]]
+id = "frame"
+parent = "root"
+name = "Frame"
+
+[node.transform]
+position = [0, 1, 0]
+
+[node.mesh]
+primitive = "box"
+size = [1.6, 2, 0.2]
+
+[node.material]
+color = "#4b4b52"
+
+[[node]]
+id = "leaf"
+parent = "root"
+name = "Leaf"
+
+[node.transform]
+position = [0, 1, 0.12]
+
+[node.mesh]
+primitive = "box"
+size = [1.2, 1.8, 0.1]
+
+[node.material]
+color = "#a67c52"

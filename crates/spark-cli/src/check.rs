@@ -1,4 +1,4 @@
-//! `spark check path/to/game [--frames N] [--json]`: finds script errors without a window or GPU.
+﻿//! `spark check path/to/game [--frames N] [--json]`: finds script errors without a window or GPU.
 //!
 //! 1. Compiles every `.luau` file of the game (syntax errors in modules that are not required yet).
 //! 2. Runs `main.luau` headless (physics on, no audio, no renderer) for N frames (default 60):
@@ -13,7 +13,7 @@ use engine::{Game, World, run_frame};
 
 use crate::manifest::Manifest;
 
-const USAGE: &str = "usage: spark check path/to/game [--frames N] [--json] [--types]";
+const USAGE: &str = "usage: spark check path/to/game [--frames N] [--seed N] [--json] [--types]   (--seed: math.random seed, default 0)";
 /// Folders whose `.luau` files are not part of the game.
 const SKIP_DIRS: &[&str] = &["dist", "target", "node_modules", "screenshots"];
 
@@ -21,7 +21,11 @@ const SKIP_DIRS: &[&str] = &["dist", "target", "node_modules", "screenshots"];
 pub struct Problem {
     pub file: String,
     pub line: Option<u32>,
+    /// Stable error code (`SPK-1xxx`, see "Error codes" in docs/SPARK_API.md).
+    pub code: &'static str,
     pub message: String,
+    /// Node id of the object whose attached script failed (object script failures only).
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -46,7 +50,14 @@ impl Report {
             .iter()
             .map(|e| {
                 let line = e.line.map(|l| l.to_string()).unwrap_or_else(|| "null".into());
-                format!("{{\"file\":{},\"line\":{line},\"message\":{}}}", json_str(&e.file), json_str(&e.message))
+                let hint = engine::script::hint(&e.message).map(|h| format!(",\"hint\":{}", json_str(&h))).unwrap_or_default();
+                let node = e.node.as_ref().map(|n| format!(",\"node\":{}", json_str(n))).unwrap_or_default();
+                format!(
+                    "{{\"file\":{},\"line\":{line},\"message\":{},\"code\":\"{}\"{hint}{node}}}",
+                    json_str(&e.file),
+                    json_str(&e.message),
+                    e.code
+                )
             })
             .collect();
         let notes: Vec<String> = self.notes.iter().map(|n| json_str(n)).collect();
@@ -65,6 +76,7 @@ impl Report {
 pub fn run(args: &[String]) -> i32 {
     let mut game: Option<PathBuf> = None;
     let mut frames = 60u32;
+    let mut seed = 0u64;
     let mut json = false;
     let mut types = false;
     let mut it = args.iter();
@@ -76,6 +88,13 @@ pub fn run(args: &[String]) -> i32 {
                 Some(n) => frames = n,
                 None => {
                     eprintln!("spark check: --frames needs a number, e.g. --frames 120\n{USAGE}");
+                    return 2;
+                }
+            },
+            "--seed" => match it.next().and_then(|n| n.parse().ok()) {
+                Some(n) => seed = n,
+                None => {
+                    eprintln!("spark check: --seed needs a whole number, e.g. --seed 42\n{USAGE}");
                     return 2;
                 }
             },
@@ -91,7 +110,7 @@ pub fn run(args: &[String]) -> i32 {
         }
     }
     let game = game.unwrap_or_else(|| PathBuf::from("."));
-    let mut report = check(&game, frames);
+    let mut report = check_seeded(&game, frames, seed);
     if types {
         check_types(&game, &mut report);
     }
@@ -116,11 +135,18 @@ pub fn run(args: &[String]) -> i32 {
     if report.ok() { 0 } else { 1 }
 }
 
-/// Checks the game at `path` (folder or its main.luau).
+/// Checks the game at `path` (folder or its main.luau) with `math.random` seeded with 0.
+#[cfg(test)]
 pub fn check(path: &Path, frames: u32) -> Report {
+    check_seeded(path, frames, 0)
+}
+
+/// [`check`] with an explicit `math.random` seed.
+pub fn check_seeded(path: &Path, frames: u32, seed: u64) -> Report {
     let mut report = Report::default();
     let main = if path.is_dir() { path.join("main.luau") } else { path.to_path_buf() };
-    let Some(dir) = main.parent().map(|d| if d.as_os_str().is_empty() { Path::new(".") } else { d }).and_then(|d| d.canonicalize().ok()) else {
+    let Some(dir) = main.parent().map(|d| if d.as_os_str().is_empty() { Path::new(".") } else { d }).and_then(|d| d.canonicalize().ok())
+    else {
         report.errors.push(problem(&main.display().to_string(), None, "game folder not found"));
         return report;
     };
@@ -152,7 +178,7 @@ pub fn check(path: &Path, frames: u32) -> Report {
     let lua = mlua::Lua::new();
     for rel in &files {
         let name = rel.to_string_lossy().replace('\\', "/");
-        let source = match std::fs::read_to_string(dir.join(rel)) {
+        let source = match engine::vfs::read_string(&dir.join(rel)) {
             Ok(s) => s,
             Err(e) => {
                 report.errors.push(problem(&name, None, &format!("cannot read: {e}")));
@@ -160,7 +186,9 @@ pub fn check(path: &Path, frames: u32) -> Report {
             }
         };
         if let Err(e) = lua.load(source.as_str()).set_name(format!("@{name}")).into_function() {
-            report.errors.push(parse_error(&e.to_string(), &name));
+            let mut p = parse_error(&e.to_string(), &name);
+            p.code = "SPK-1100";
+            report.errors.push(p);
         }
     }
     // 1b. Assets, whether a script loads them in the first N frames or not: WGSL shaders compile and validate,
@@ -174,7 +202,7 @@ pub fn check(path: &Path, frames: u32) -> Report {
     // 2. Run headless.
     let error_log = dir.join("error.log");
     let had_error_log = error_log.exists();
-    let mut game = ScriptGame::new(main.clone()).hot_reload(false);
+    let mut game = ScriptGame::new(main.clone()).hot_reload(false).seed(Some(seed));
     let mut world = World::new();
     world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
     game.start(&mut world);
@@ -187,10 +215,26 @@ pub fn check(path: &Path, frames: u32) -> Report {
         let main_name = main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         report.errors.push(parse_error(e, &main_name));
     }
+    for f in world.script_failures() {
+        report.errors.push(object_failure(f));
+    }
     if !had_error_log {
         let _ = std::fs::remove_file(&error_log);
     }
     report
+}
+
+/// An object script failure as a report error: the script path, the code, the object's node id and the message.
+fn object_failure(f: &engine::ScriptFailure) -> Problem {
+    let text = f.message.strip_prefix(&format!("[{}] ", f.code)).unwrap_or(&f.message);
+    let file = text.strip_prefix("script ").and_then(|r| r.split_once(": error in ")).map(|(p, _)| p).unwrap_or("main.luau");
+    Problem {
+        file: file.replace('\\', "/"),
+        line: None,
+        code: engine::script::classify(text),
+        message: text.to_string(),
+        node: f.node_id.as_ref().map(|n| n.to_string()),
+    }
 }
 
 /// Files below `dir` with one of `exts` (lowercase, no dot), relative to `root`, sorted, without hidden / build folders.
@@ -255,9 +299,9 @@ fn check_types(path: &Path, report: &mut Report) {
     let output = match output {
         Ok(o) => o,
         Err(_) => {
-            report.notes.push(
-                "--types needs luau-lsp (https://github.com/JohnnyMorganz/luau-lsp/releases) on PATH; skipped the type check".into(),
-            );
+            report
+                .notes
+                .push("--types needs luau-lsp (https://github.com/JohnnyMorganz/luau-lsp/releases) on PATH; skipped the type check".into());
             return;
         }
     };
@@ -293,13 +337,13 @@ pub fn parse_lsp_output(text: &str) -> Vec<Problem> {
             .filter_map(|m| line.find(m).map(|i| line[i + m.len()..].trim()))
             .next()
             .unwrap_or(line);
-        out.push(Problem { file, line: Some(number), message: message.to_string() });
+        out.push(Problem { file, line: Some(number), code: "SPK-1101", message: message.to_string(), node: None });
     }
     out
 }
 
 fn problem(file: &str, line: Option<u32>, message: &str) -> Problem {
-    Problem { file: file.into(), line, message: message.trim().into() }
+    Problem { file: file.into(), line, code: engine::script::classify(message), message: message.trim().into(), node: None }
 }
 
 /// Splits `src/a.luau:12: message` (anywhere in a Luau error / traceback) into file, line, message.
@@ -329,7 +373,8 @@ pub fn parse_error(text: &str, fallback: &str) -> Problem {
             // Keep any context in front of the location ("in start(): ...") and the rest (stack trace, hint).
             let prefix = text[..start].trim().trim_end_matches(['[', '"', '\'', '(', '@', '<']).trim();
             let message = if prefix.is_empty() || prefix.ends_with("error:") { rest.to_string() } else { format!("{prefix} {rest}") };
-            return Problem { file, line, message: message.trim().into() };
+            let message = message.trim().to_string();
+            return Problem { file, line, code: engine::script::classify(&message), message, node: None };
         }
         search = at + 5;
     }
@@ -407,7 +452,10 @@ mod tests {
     #[test]
     fn ok_game_runs_frames() {
         let dir = game(&[
-            ("main.luau", "local M = require(\"./src/m\")\nfunction start() M.build() end\nfunction update(dt) local _ = input.text() .. tostring(input.repeated(\"minus\")) end\n"),
+            (
+                "main.luau",
+                "local M = require(\"./src/m\")\nfunction start() M.build() end\nfunction update(dt) local _ = input.text() .. tostring(input.repeated(\"minus\")) end\n",
+            ),
             ("src/m.luau", "local M = {}\nfunction M.build() spawn(Mesh.cube(), \"red\") end\nreturn M\n"),
         ]);
         let r = check(&dir, 10);
@@ -448,7 +496,8 @@ mod tests {
 
     #[test]
     fn text_input_reaches_scripts() {
-        let dir = game(&[("main.luau", "typed = \"\"\nfunction update(dt) typed ..= input.text() if typed == \"hi\" then quit() end end\n")]);
+        let dir =
+            game(&[("main.luau", "typed = \"\"\nfunction update(dt) typed ..= input.text() if typed == \"hi\" then quit() end end\n")]);
         let mut game = ScriptGame::new(dir.join("main.luau")).hot_reload(false);
         let mut world = World::new();
         game.start(&mut world);
@@ -511,6 +560,47 @@ mod tests {
         assert!(r2.notes.iter().any(|n| n.contains("no `spark =")), "{:?}", r2.notes);
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&dir2);
+    }
+
+    #[test]
+    fn errors_have_codes_and_hints() {
+        let dir = game(&[("main.luau", "function start() end\nfunction update(dt) local x = mth.sin(dt) end\n")]);
+        let r = check(&dir, 5);
+        assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+        assert_eq!(r.errors[0].code, "SPK-1001");
+        assert_eq!(r.errors[0].line, Some(2));
+        let json = r.to_json();
+        assert!(json.contains("\"code\":\"SPK-1001\""), "{json}");
+        assert!(json.contains("\"hint\":\"use 'math'\""), "{json}");
+        assert!(!json.contains("__mlua_") && !json.contains("[C]: in ?"), "{json}");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let dir = game(&[("main.luau", "function Update(dt) end\n")]);
+        let r = check(&dir, 5);
+        assert_eq!((r.errors[0].code, r.errors[0].line), ("SPK-1002", Some(1)), "{:?}", r.errors);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let dir = game(&[("main.luau", "local = 3\n")]);
+        let r = check(&dir, 5);
+        assert_eq!(r.errors[0].code, "SPK-1100", "{:?}", r.errors);
+        assert!(r.to_json().contains("\"code\":\"SPK-1100\""));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn object_script_failures_are_errors() {
+        let dir = game(&[
+            ("main.luau", "function start() spawn(Mesh.cube(), 'red', { name = 'bad' }):attach_script('scripts/bad.luau') end\n"),
+            ("scripts/bad.luau", "local B = {}\nfunction B:update(dt) error('boom') end\nreturn B\n"),
+        ]);
+        let r = check(&dir, 5);
+        assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+        let e = &r.errors[0];
+        assert_eq!((e.file.as_str(), e.code), ("scripts/bad.luau", "SPK-1000"), "{e:?}");
+        assert!(e.node.is_some() && e.message.contains("boom"), "{e:?}");
+        let json = r.to_json();
+        assert!(json.contains("\"ok\":false") && json.contains("\"node\":") && json.contains("\"code\":\"SPK-1000\""), "{json}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

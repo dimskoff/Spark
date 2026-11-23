@@ -1,0 +1,17 @@
+[package]
+name = "spark-scene"
+description = "Spark Engine scene files: `.scene` / `.prefab` (TOML) <-> the scene document, canonical writer, migrations."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+spark-core.workspace = true
+spark-reflect.workspace = true
+# Parser with spans (line numbers in errors) and an order-preserving `Table` for the migrations. No serde derive, no
+# TOML writer: the canonical writer is ours (the format is byte-exact, see docs/SCENE_FORMAT.md).
+toml = { version = "1", default-features = false, features = ["std", "serde", "parse", "preserve_order"] }

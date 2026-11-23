@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText, Stroke, pos2, vec2};
-use spark_devtools::{EditorCommand, GameMessage, Link, ObjectInfo, SceneSnapshot, Server, Stats};
+use spark_devtools::{EditorCommand, GameMessage, Link, ObjectInfo, SceneSnapshot, Server, ServerEvent, Stats};
 
 use super::Action;
 use crate::i18n::{t, tf};
@@ -140,9 +140,11 @@ impl GameSession {
             self.restart = Some(spark.to_path_buf());
             return Ok(vec![editor_line(JobKind::Run, Level::Info, t("game.restarting"), clock)]);
         }
-        let server = Server::bind_local().map_err(|e| format!("devtools: {e}"))?;
+        let server = Server::bind_local_authenticated().map_err(|e| format!("devtools: {e}"))?;
         let args = vec![self.root.display().to_string(), spark_devtools::FLAG.to_string(), server.addr().to_string()];
-        let job = Job::spawn(JobKind::Run, spark, &args, &self.root)?;
+        // The token goes through the environment (argv is visible to every process).
+        let token = server.token().unwrap_or_default().to_string();
+        let job = Job::spawn_with_env(JobKind::Run, spark, &args, &self.root, &[(spark_devtools::TOKEN_ENV, token.as_str())])?;
         let line = editor_line(JobKind::Run, Level::Info, tf("game.started", &[("pid", &job.pid())]), clock);
         self.reset_live_state();
         self.server = Some(server);
@@ -222,33 +224,55 @@ impl GameSession {
         let mut events = Vec::new();
 
         // The game connects back to our server shortly after it starts.
+        // Only a game that presents this run's token gets in; everything else is dropped (see `Server::poll_game`).
         if self.link.is_none()
-            && let Some(server) = &self.server {
-                match server.accept::<EditorCommand, GameMessage>() {
-                    Some(Ok(link)) => {
+            && let Some(server) = &mut self.server
+        {
+            for event in server.poll_game() {
+                match event {
+                    ServerEvent::Connected(link, h) => {
                         link.send(EditorCommand::WatchScene { interval_ms: Some(SCENE_INTERVAL_MS) });
                         if self.overlay {
                             link.send(EditorCommand::Overlay { on: true });
                         }
+                        if !(spark_devtools::MIN_PROTOCOL_VERSION..=spark_devtools::PROTOCOL_VERSION).contains(&h.protocol) {
+                            lines.push(editor_line(
+                                JobKind::Run,
+                                Level::Warn,
+                                tf("game.protocol_mismatch", &[("game", &h.protocol), ("editor", &spark_devtools::PROTOCOL_VERSION)]),
+                                clock,
+                            ));
+                        }
+                        lines.push(editor_line(
+                            JobKind::Run,
+                            Level::Info,
+                            tf("game.connected", &[("engine", &h.engine), ("gpu", &h.gpu)]),
+                            clock,
+                        ));
+                        self.hello = Some(Hello { engine: h.engine, gpu: h.gpu, pid: h.pid });
                         self.link = Some(link);
                         self.server = None;
+                        break;
                     }
-                    Some(Err(e)) => lines.push(editor_line(JobKind::Run, Level::Warn, format!("devtools: {e}"), clock)),
-                    None => {}
+                    ServerEvent::Rejected(msg) => lines.push(editor_line(JobKind::Run, Level::Warn, format!("devtools: {msg}"), clock)),
+                    ServerEvent::GaveUp(msg) => {
+                        lines.push(editor_line(JobKind::Run, Level::Error, format!("devtools: {msg}; stopping the game"), clock));
+                        self.server = None;
+                        if let Some(job) = &mut self.run {
+                            job.kill();
+                        }
+                        break;
+                    }
                 }
             }
+        }
         if let Some(link) = &self.link {
             let messages: Vec<GameMessage> = link.drain().collect();
             let alive = link.is_alive();
             for msg in messages {
                 match msg {
-                    GameMessage::Hello { protocol, engine, pid, gpu } => {
-                        if protocol != spark_devtools::PROTOCOL_VERSION {
-                            lines.push(editor_line(JobKind::Run, Level::Warn, tf("game.protocol_mismatch", &[("game", &protocol), ("editor", &spark_devtools::PROTOCOL_VERSION)]), clock));
-                        }
-                        lines.push(editor_line(JobKind::Run, Level::Info, tf("game.connected", &[("engine", &engine), ("gpu", &gpu)]), clock));
-                        self.hello = Some(Hello { engine, gpu, pid });
-                    }
+                    // Already handled (and authenticated) when the link was accepted.
+                    GameMessage::Hello { .. } => {}
                     GameMessage::Stats(s) => {
                         self.paused = s.paused;
                         if self.frame_ms.len() >= HISTORY {
@@ -259,13 +283,19 @@ impl GameSession {
                     }
                     GameMessage::Scene(scene) => self.scene = Some(scene),
                     GameMessage::Paused { paused } => self.paused = paused,
-                    GameMessage::ScriptError { message } => {
+                    // One object's script failed; the game runs on. The text is in the game's console; the marker on
+                    // the node comes with the inspector work.
+                    GameMessage::ScriptError { message, node_id: Some(node) } => {
+                        log::warn!("object script failed (node {node}): {}", message.unwrap_or_default());
+                    }
+                    GameMessage::ScriptError { message, node_id: None } => {
                         if message != self.script_error {
                             self.script_error = message.clone();
                             events.push(SessionEvent::ScriptError(message));
                         }
                     }
-                    GameMessage::Bye => {}
+                    // Answers to EditorCommand::Command (protocol 4): the editor still edits through SetObject.
+                    GameMessage::CommandResult(_) | GameMessage::Bye => {}
                 }
             }
             if !alive {
@@ -346,7 +376,7 @@ impl GameSession {
             let (color, text) = state_badge(state);
             ui.label(RichText::new(format!("{} {text}", icon::DOT)).color(color).strong());
             if let Some(h) = &self.hello {
-                ui.label(RichText::new(format!("pid {} · {}", h.pid, h.engine)).small().color(theme::TEXT_DIM));
+                ui.label(RichText::new(format!("pid {} В· {}", h.pid, h.engine)).small().color(theme::TEXT_DIM));
             }
         });
         if let Some(h) = &self.hello {
@@ -363,14 +393,23 @@ impl GameSession {
                 actions.push(Action::Run);
             }
             let live = self.link.is_some();
-            let pause_label = if self.paused { format!("{} {}", icon::RUN, t("game.resume")) } else { format!("{} {}", icon::PAUSE, t("game.pause")) };
+            let pause_label =
+                if self.paused { format!("{} {}", icon::RUN, t("game.resume")) } else { format!("{} {}", icon::PAUSE, t("game.pause")) };
             if ui.add_enabled(live, egui::Button::new(pause_label)).clicked() {
                 actions.push(Action::TogglePause);
             }
-            if ui.add_enabled(live, egui::Button::new(format!("{} {}", icon::STEP, t("game.step")))).on_hover_text(t("game.step_hint")).clicked() {
+            if ui
+                .add_enabled(live, egui::Button::new(format!("{} {}", icon::STEP, t("game.step"))))
+                .on_hover_text(t("game.step_hint"))
+                .clicked()
+            {
                 actions.push(Action::Step);
             }
-            if ui.add_enabled(live, egui::Button::new(format!("{} {}", icon::RELOAD, t("game.reload")))).on_hover_text(t("game.reload_hint")).clicked() {
+            if ui
+                .add_enabled(live, egui::Button::new(format!("{} {}", icon::RELOAD, t("game.reload"))))
+                .on_hover_text(t("game.reload_hint"))
+                .clicked()
+            {
                 actions.push(Action::Reload);
             }
             let mut overlay = self.overlay;
@@ -386,9 +425,10 @@ impl GameSession {
                 ui.label(RichText::new(format!("{} {}", icon::ERROR, t("game.script_error"))).color(theme::ERROR).strong());
                 ui.add(egui::Label::new(RichText::new(err).monospace().color(theme::TEXT)).wrap());
                 if let Some(loc) = find_location(err)
-                    && ui.link(tf("console.open_at", &[("file", &loc.file), ("line", &loc.line)])).clicked() {
-                        actions.push(Action::OpenAt(PathBuf::from(&loc.file), loc.line));
-                    }
+                    && ui.link(tf("console.open_at", &[("file", &loc.file), ("line", &loc.line)])).clicked()
+                {
+                    actions.push(Action::OpenAt(PathBuf::from(&loc.file), loc.line));
+                }
             });
         }
 
@@ -396,7 +436,10 @@ impl GameSession {
         let Some(s) = self.stats.as_ref().filter(|_| state != GameState::Stopped) else {
             ui.add_space(12.0);
             ui.vertical_centered(|ui| {
-                ui.label(RichText::new(if state == GameState::Starting { t("game.waiting") } else { t("game.not_running") }).color(theme::TEXT_DIM));
+                ui.label(
+                    RichText::new(if state == GameState::Starting { t("game.waiting") } else { t("game.not_running") })
+                        .color(theme::TEXT_DIM),
+                );
             });
             return;
         };
@@ -407,12 +450,12 @@ impl GameSession {
                 ui.end_row();
             };
             row(ui, t("stats.fps"), format!("{:.0}", s.fps));
-            row(ui, t("stats.frame"), format!("{:.2} ms  ({:.2} – {:.2})", s.frame_ms, s.min_frame_ms, s.max_frame_ms));
+            row(ui, t("stats.frame"), format!("{:.2} ms  ({:.2} вЂ“ {:.2})", s.frame_ms, s.min_frame_ms, s.max_frame_ms));
             row(ui, t("stats.objects"), s.objects.to_string());
             row(ui, t("stats.draw_calls"), format!("{}  ({} {})", s.draw_calls, s.culled, t("stats.culled")));
             row(ui, t("stats.triangles"), group_digits(s.triangles));
-            row(ui, t("stats.resolution"), format!("{} × {}", s.internal_size.0, s.internal_size.1));
-            row(ui, t("stats.time"), format!("{:.1} s · #{}", s.time, s.frame));
+            row(ui, t("stats.resolution"), format!("{} Г— {}", s.internal_size.0, s.internal_size.1));
+            row(ui, t("stats.time"), format!("{:.1} s В· #{}", s.time, s.frame));
         });
         ui.add_space(8.0);
         ui.label(RichText::new(t("stats.graph")).small().color(theme::TEXT_DIM));
@@ -422,21 +465,30 @@ impl GameSession {
     // ---------------------------------------------------------------- Scene panel
 
     pub fn scene_ui(&mut self, ui: &mut egui::Ui) {
-        let Self { scene, scene_filter, selected: selection, .. } = self;
-        let Some(scene) = scene.as_ref() else {
+        let Self { scene, scene_filter, selected: selection, link, .. } = self;
+        let Some(scene) = scene.as_mut() else {
             ui.add_space(12.0);
             ui.vertical_centered(|ui| ui.label(RichText::new(t("scene.empty")).color(theme::TEXT_DIM)));
             return;
         };
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(scene_filter).hint_text(format!("{} {}", icon::SEARCH, t("scene.filter"))).desired_width(180.0));
+            ui.add(
+                egui::TextEdit::singleline(scene_filter).hint_text(format!("{} {}", icon::SEARCH, t("scene.filter"))).desired_width(180.0),
+            );
             ui.label(RichText::new(tf("scene.count", &[("count", &scene.objects.len())])).small().color(theme::TEXT_DIM));
         });
         let c = &scene.camera;
         ui.label(
-            RichText::new(format!("{} {} {}  →  {}  · fov {:.0}°", icon::SCENE, t("scene.camera"), vec3(&c.position), vec3(&c.forward), c.fov))
-                .small()
-                .color(theme::TEXT_DIM),
+            RichText::new(format!(
+                "{} {} {}  в†’  {}  В· fov {:.0}В°",
+                icon::SCENE,
+                t("scene.camera"),
+                vec3(&c.position),
+                vec3(&c.forward),
+                c.fov
+            ))
+            .small()
+            .color(theme::TEXT_DIM),
         );
         ui.separator();
 
@@ -444,30 +496,34 @@ impl GameSession {
         let mut clicked = None;
         let filter = scene_filter.to_lowercase();
         let inspector_height = if selected.is_some() { 190.0 } else { 0.0 };
-        egui::ScrollArea::vertical().id_salt("scene-tree").auto_shrink([false, false]).max_height((ui.available_height() - inspector_height).max(80.0)).show(ui, |ui| {
-            if filter.is_empty() {
-                let mut children: BTreeMap<Option<u32>, Vec<&ObjectInfo>> = BTreeMap::new();
-                let ids: std::collections::HashSet<u32> = scene.objects.iter().map(|o| o.id).collect();
-                for o in &scene.objects {
-                    // Parents that are not in the snapshot: show at the top level.
-                    let parent = o.parent.filter(|p| ids.contains(p));
-                    children.entry(parent).or_default().push(o);
-                }
-                tree(ui, &children, None, selected, &mut clicked, 0);
-            } else {
-                for o in scene.objects.iter().filter(|o| display_name(o).to_lowercase().contains(&filter)) {
-                    if object_row(ui, o, selected == Some(o.id), false).clicked() {
-                        clicked = Some(o.id);
+        egui::ScrollArea::vertical()
+            .id_salt("scene-tree")
+            .auto_shrink([false, false])
+            .max_height((ui.available_height() - inspector_height).max(80.0))
+            .show(ui, |ui| {
+                if filter.is_empty() {
+                    let mut children: BTreeMap<Option<u32>, Vec<&ObjectInfo>> = BTreeMap::new();
+                    let ids: std::collections::HashSet<u32> = scene.objects.iter().map(|o| o.id).collect();
+                    for o in &scene.objects {
+                        // Parents that are not in the snapshot: show at the top level.
+                        let parent = o.parent.filter(|p| ids.contains(p));
+                        children.entry(parent).or_default().push(o);
+                    }
+                    tree(ui, &children, None, selected, &mut clicked, 0);
+                } else {
+                    for o in scene.objects.iter().filter(|o| display_name(o).to_lowercase().contains(&filter)) {
+                        if object_row(ui, o, selected == Some(o.id), false).clicked() {
+                            clicked = Some(o.id);
+                        }
                     }
                 }
-            }
-        });
+            });
         if let Some(id) = clicked {
             *selection = if selected == Some(id) { None } else { Some(id) };
         }
-        if let Some(obj) = selection.and_then(|id| scene.objects.iter().find(|o| o.id == id)) {
+        if let Some(obj) = selection.and_then(|id| scene.objects.iter_mut().find(|o| o.id == id)) {
             ui.separator();
-            inspector(ui, obj);
+            inspector(ui, obj, link.as_ref());
         }
     }
 }
@@ -476,14 +532,16 @@ impl Drop for GameSession {
     /// Closing the project closes its game: politely first, then the hard way.
     fn drop(&mut self) {
         if let (Some(job), Some(link)) = (self.run.as_mut(), self.link.as_ref())
-            && job.is_running() && link.send(EditorCommand::Quit) {
-                let clock = Instant::now();
-                let until = Instant::now() + Duration::from_millis(800);
-                while Instant::now() < until && job.is_running() {
-                    let _ = job.poll(&clock);
-                    std::thread::sleep(Duration::from_millis(20));
-                }
+            && job.is_running()
+            && link.send(EditorCommand::Quit)
+        {
+            let clock = Instant::now();
+            let until = Instant::now() + Duration::from_millis(800);
+            while Instant::now() < until && job.is_running() {
+                let _ = job.poll(&clock);
+                std::thread::sleep(Duration::from_millis(20));
             }
+        }
         // `Job::drop` kills whatever is still running.
     }
 }
@@ -524,7 +582,13 @@ fn frame_graph(ui: &mut egui::Ui, samples: &VecDeque<f32>) {
     for (ms, label) in [(1000.0 / 60.0, "60"), (1000.0 / 30.0, "30")] {
         let yy = y(ms);
         painter.line_segment([pos2(rect.left(), yy), pos2(rect.right(), yy)], Stroke::new(1.0, Color32::from_gray(70)));
-        painter.text(pos2(rect.left() + 3.0, yy - 1.0), egui::Align2::LEFT_BOTTOM, label, egui::FontId::proportional(10.0), Color32::from_gray(110));
+        painter.text(
+            pos2(rect.left() + 3.0, yy - 1.0),
+            egui::Align2::LEFT_BOTTOM,
+            label,
+            egui::FontId::proportional(10.0),
+            Color32::from_gray(110),
+        );
     }
     if samples.is_empty() {
         return;
@@ -533,7 +597,13 @@ fn frame_graph(ui: &mut egui::Ui, samples: &VecDeque<f32>) {
     let start = HISTORY - samples.len();
     for (i, &ms) in samples.iter().enumerate() {
         let x = rect.left() + (start + i) as f32 * w;
-        let color = if ms > 1000.0 / 30.0 { theme::ERROR } else if ms > 1000.0 / 60.0 + 0.5 { theme::WARN } else { theme::OK };
+        let color = if ms > 1000.0 / 30.0 {
+            theme::ERROR
+        } else if ms > 1000.0 / 60.0 + 0.5 {
+            theme::WARN
+        } else {
+            theme::OK
+        };
         painter.rect_filled(egui::Rect::from_min_max(pos2(x, y(ms)), pos2(x + w.max(1.0), rect.bottom())), 0.0, color);
     }
 }
@@ -544,15 +614,15 @@ fn display_name(o: &ObjectInfo) -> String {
 
 fn object_row(ui: &mut egui::Ui, o: &ObjectInfo, selected: bool, has_children: bool) -> egui::Response {
     let kind = if o.light {
-        "💡"
+        "рџ’Ў"
     } else if o.body.is_some() {
-        "⚙"
+        "вљ™"
     } else if o.mesh.is_some() {
         icon::MODEL
     } else if has_children {
         icon::FOLDER
     } else {
-        "○"
+        "в—‹"
     };
     let mut text = RichText::new(format!("{kind} {}", display_name(o)));
     if !o.visible {
@@ -603,30 +673,90 @@ fn vec3(v: &[Option<f32>; 3]) -> String {
     format!("({}, {}, {})", num(v[0]), num(v[1]), num(v[2]))
 }
 
-fn inspector(ui: &mut egui::Ui, o: &ObjectInfo) {
-    ui.label(RichText::new(format!("{}  ·  id {}", display_name(o), o.id)).strong());
+/// An editable x / y / z row. `Some(values)` when the user changed one of them to a finite number.
+/// (`NaN` components of the snapshot show as 0; nothing is sent unless the user edits.)
+fn vec3_edit_row(ui: &mut egui::Ui, label: &str, v: &mut [Option<f32>; 3], speed: f64, enabled: bool) -> Option<[f32; 3]> {
+    ui.label(RichText::new(label).color(theme::TEXT_DIM));
+    let mut vals = [v[0].unwrap_or(0.0), v[1].unwrap_or(0.0), v[2].unwrap_or(0.0)];
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        for x in vals.iter_mut() {
+            changed |= ui.add_enabled(enabled, egui::DragValue::new(x).speed(speed).max_decimals(3)).changed();
+        }
+    });
+    ui.end_row();
+    if changed && vals.iter().all(|x| x.is_finite()) {
+        *v = vals.map(Some);
+        Some(vals)
+    } else {
+        None
+    }
+}
+
+/// Which field of an object an inspector edit changes.
+enum Edit {
+    Position([f32; 3]),
+    Rotation([f32; 3]),
+    Scale([f32; 3]),
+    Visible(bool),
+}
+
+/// The `SetObject` command for one edit (all other fields stay `None` = unchanged).
+fn set_object(id: u32, edit: Edit) -> EditorCommand {
+    let (mut position, mut rotation_deg, mut scale, mut visible) = (None, None, None, None);
+    match edit {
+        Edit::Position(v) => position = Some(v),
+        Edit::Rotation(v) => rotation_deg = Some(v),
+        Edit::Scale(v) => scale = Some(v),
+        Edit::Visible(v) => visible = Some(v),
+    }
+    EditorCommand::SetObject { id, name: None, position, rotation_deg, scale, visible }
+}
+
+/// Inspector of the selected object. Transform and visibility are editable while the game is linked: every edit is
+/// sent as `SetObject` (a runtime change, undone by Reload; no undo yet).
+fn inspector(ui: &mut egui::Ui, o: &mut ObjectInfo, link: Option<&Link<EditorCommand, GameMessage>>) {
+    ui.label(RichText::new(format!("{}  В·  id {}", display_name(o), o.id)).strong());
+    let live = link.is_some_and(Link::is_alive);
+    let id = o.id;
+    let mut cmd: Option<EditorCommand> = None;
     egui::Grid::new("inspector").num_columns(2).spacing([12.0, 3.0]).show(ui, |ui| {
         let row = |ui: &mut egui::Ui, k: &str, v: String| {
             ui.label(RichText::new(k).color(theme::TEXT_DIM));
             ui.label(RichText::new(v).monospace());
             ui.end_row();
         };
-        row(ui, t("scene.position"), vec3(&o.position));
+        if let Some(p) = vec3_edit_row(ui, t("scene.position"), &mut o.position, 0.05, live) {
+            cmd = Some(set_object(id, Edit::Position(p)));
+        }
         row(ui, t("scene.world_position"), vec3(&o.world_position));
-        row(ui, t("scene.rotation"), vec3(&o.rotation_deg));
-        row(ui, t("scene.scale"), vec3(&o.scale));
-        row(ui, t("scene.visible"), if o.visible { t("common.yes") } else { t("common.no") }.to_string());
+        if let Some(r) = vec3_edit_row(ui, t("scene.rotation"), &mut o.rotation_deg, 0.5, live) {
+            cmd = Some(set_object(id, Edit::Rotation(r)));
+        }
+        if let Some(s) = vec3_edit_row(ui, t("scene.scale"), &mut o.scale, 0.01, live) {
+            cmd = Some(set_object(id, Edit::Scale(s)));
+        }
+        ui.label(RichText::new(t("scene.visible")).color(theme::TEXT_DIM));
+        let mut visible = o.visible;
+        if ui.add_enabled(live, egui::Checkbox::without_text(&mut visible)).changed() {
+            o.visible = visible;
+            cmd = Some(set_object(id, Edit::Visible(visible)));
+        }
+        ui.end_row();
         if let Some(m) = o.mesh {
             row(ui, t("scene.mesh"), format!("#{m}"));
         }
         if let Some([min, max]) = &o.bounds {
-            row(ui, t("scene.bounds"), format!("{} … {}", vec3(min), vec3(max)));
+            row(ui, t("scene.bounds"), format!("{} вЂ¦ {}", vec3(min), vec3(max)));
         }
         if let Some(b) = &o.body {
-            row(ui, t("scene.body"), format!("{} · v = {}", b.kind, vec3(&b.velocity)));
+            row(ui, t("scene.body"), format!("{} В· v = {}", b.kind, vec3(&b.velocity)));
         }
         if let Some(p) = o.parent {
             row(ui, t("scene.parent"), format!("#{p}"));
         }
     });
+    if let (Some(cmd), Some(link)) = (cmd, link) {
+        link.send(cmd);
+    }
 }

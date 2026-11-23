@@ -15,6 +15,9 @@ use engine::vfs::{PackWriter, strip_pack};
 
 use crate::manifest::Manifest;
 
+/// Third-party license notices written next to the executable (the licenses require shipping them with the binary).
+const NOTICE_FILE: &str = "THIRD_PARTY_LICENSES.txt";
+
 /// Never copied into a build.
 const SKIP_DIRS: &[&str] = &["tools", "dist", "screenshots", "target", ".git", ".vscode", ".idea"];
 const SKIP_EXT: &[&str] = &["log", "tmp", "bak", "blend", "blend1", "psd", "kra", "xcf"];
@@ -88,20 +91,27 @@ fn build(args: &[String]) -> Result<(), String> {
     }
 
     let mut files = Vec::new();
-    collect(&dir, &dir, &m, &mut files)?;
+    let mut links = Vec::new();
+    collect(&dir, &dir, &m, &mut files, &mut links)?;
+    for l in &links {
+        eprintln!("spark build: warning: '{}' is a symbolic link; links are not followed and it is NOT in the build", l.display());
+    }
 
     // What gets zipped (relative to out_root).
     let mut shipped = if loose {
         let target = out_root.join(&name);
         // Linux / macOS: a previous one-file build has exactly this name.
         if target.is_file() {
-            std::fs::remove_file(&target).map_err(|e| format!("cannot replace '{}': {e} (is the game still running?)", target.display()))?;
+            std::fs::remove_file(&target)
+                .map_err(|e| format!("cannot replace '{}': {e} (is the game still running?)", target.display()))?;
         }
         if target.exists() {
-            std::fs::remove_dir_all(&target).map_err(|e| format!("cannot clear '{}': {e} (is the game still running?)", target.display()))?;
+            std::fs::remove_dir_all(&target)
+                .map_err(|e| format!("cannot clear '{}': {e} (is the game still running?)", target.display()))?;
         }
         std::fs::create_dir_all(&target).map_err(|e| format!("cannot create '{}': {e}", target.display()))?;
         write_exe(&target.join(&exe_name), &exe)?;
+        write_file(&target.join(NOTICE_FILE), crate::THIRD_PARTY_LICENSES.as_bytes())?;
         let mut bytes = 0u64;
         for rel in &files {
             let dest = target.join(rel);
@@ -127,6 +137,7 @@ fn build(args: &[String]) -> Result<(), String> {
             std::fs::remove_dir_all(&path).map_err(|e| format!("cannot replace '{}': {e} (is the game still running?)", path.display()))?;
         }
         write_exe(&path, &full)?;
+        write_file(&out_root.join(NOTICE_FILE), crate::THIRD_PARTY_LICENSES.as_bytes())?;
         println!(
             "spark build: {} -> {} ({count} files, {:.1} MB packed into {:.1} MB, engine {:.1} MB)",
             dir.display(),
@@ -162,7 +173,13 @@ fn build(args: &[String]) -> Result<(), String> {
         } else {
             cmd.arg("-a").arg("-c").arg("-f");
         }
-        let status = cmd.arg(&archive).arg(&shipped).current_dir(&out_root).status();
+        // `--`: a game / file name starting with '-' must never be read as a tar option
+        cmd.arg(&archive).arg("--").arg(&shipped);
+        if !loose {
+            // The loose layout already has the notice inside its folder.
+            cmd.arg(NOTICE_FILE);
+        }
+        let status = cmd.current_dir(&out_root).status();
         match status {
             Ok(s) if s.success() && archive_path.is_file() => {
                 let size = std::fs::metadata(&archive_path).map(|m| m.len()).unwrap_or(0);
@@ -186,7 +203,14 @@ fn write_exe(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// `<name>.app/Contents/{Info.plist, MacOS/<name>}` around the built executable (or loose folder).
-fn make_app_bundle(out_root: &Path, name: &str, shipped: &Path, title: &str, loose: bool, icon: Option<&image::RgbaImage>) -> Result<PathBuf, String> {
+fn make_app_bundle(
+    out_root: &Path,
+    name: &str,
+    shipped: &Path,
+    title: &str,
+    loose: bool,
+    icon: Option<&image::RgbaImage>,
+) -> Result<PathBuf, String> {
     let bundle = out_root.join(format!("{name}.app"));
     if bundle.exists() {
         std::fs::remove_dir_all(&bundle).map_err(|e| format!("cannot clear '{}': {e}", bundle.display()))?;
@@ -253,10 +277,8 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 /// A safe file name from a title (keeps Unicode letters).
 fn file_name(title: &str) -> String {
-    let s: String = title
-        .chars()
-        .map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '(' | ')') { c } else { '_' })
-        .collect();
+    let s: String =
+        title.chars().map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '(' | ')') { c } else { '_' }).collect();
     let s = s.trim().trim_matches('.').to_string();
     if s.is_empty() { "game".into() } else { s }
 }
@@ -283,19 +305,32 @@ fn skipped(rel: &Path, is_dir: bool, m: &Manifest) -> bool {
 }
 
 /// Game files to ship (relative paths), minus development leftovers.
-fn collect(root: &Path, dir: &Path, m: &Manifest, out: &mut Vec<PathBuf>) -> Result<(), String> {
+///
+/// Symbolic links (and Windows junctions) are never followed: a link could point outside the game folder (and pack
+/// files like `~/.ssh/id_rsa` into a build that is then shared) or loop back into it. They are left out and listed in
+/// `links` so the caller can warn. Only regular files and real folders are shipped.
+fn collect(root: &Path, dir: &Path, m: &Manifest, out: &mut Vec<PathBuf>, links: &mut Vec<PathBuf>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read '{}': {e}", dir.display()))?;
-    let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-    entries.sort();
-    for path in entries {
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.path());
+    for entry in entries {
+        let path = entry.path();
         let rel = path.strip_prefix(root).unwrap_or(&path).to_path_buf();
-        let is_dir = path.is_dir();
+        // `DirEntry::file_type` does not follow links
+        let Ok(kind) = entry.file_type() else { continue };
+        if kind.is_symlink() {
+            if !skipped(&rel, kind.is_dir(), m) {
+                links.push(rel);
+            }
+            continue;
+        }
+        let is_dir = kind.is_dir();
         if skipped(&rel, is_dir, m) {
             continue;
         }
         if is_dir {
-            collect(root, &path, m, out)?;
-        } else {
+            collect(root, &path, m, out, links)?;
+        } else if kind.is_file() {
             out.push(rel);
         }
     }
@@ -334,6 +369,75 @@ mod tests {
         assert!(skipped(Path::new("notes/a.txt"), false, &m));
         assert!(skipped(Path::new("error.log"), false, &m));
         assert!(!skipped(Path::new("sounds/a.ogg"), false, &m));
+    }
+
+    fn temp_game(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("spark-dist-test-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("assets")).unwrap();
+        std::fs::write(dir.join("main.luau"), "").unwrap();
+        std::fs::write(dir.join("assets/a.txt"), "a").unwrap();
+        dir
+    }
+
+    #[test]
+    fn collect_lists_regular_files() {
+        let dir = temp_game("plain");
+        let (mut files, mut links) = (Vec::new(), Vec::new());
+        collect(&dir, &dir, &Manifest::default(), &mut files, &mut links).unwrap();
+        assert_eq!(files, vec![PathBuf::from("assets").join("a.txt"), PathBuf::from("main.luau")]);
+        assert!(links.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_does_not_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+        let dir = temp_game("links");
+        let outside = temp_game("outside");
+        std::fs::write(outside.join("secret.txt"), "s").unwrap();
+        symlink(outside.join("secret.txt"), dir.join("leak.txt")).unwrap(); // file out of root
+        symlink(&outside, dir.join("outdir")).unwrap(); // folder out of root
+        symlink(&dir, dir.join("assets/loop")).unwrap(); // loop back into the root
+        let (mut files, mut links) = (Vec::new(), Vec::new());
+        collect(&dir, &dir, &Manifest::default(), &mut files, &mut links).unwrap();
+        assert_eq!(files, vec![PathBuf::from("assets/a.txt"), PathBuf::from("main.luau")]);
+        assert_eq!(links.len(), 3, "{links:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    /// Windows: symlink creation needs a privilege (or developer mode); skip quietly when it is missing.
+    #[cfg(windows)]
+    #[test]
+    fn collect_does_not_follow_symlinks() {
+        use std::os::windows::fs::{symlink_dir, symlink_file};
+        let dir = temp_game("links");
+        let outside = temp_game("outside");
+        std::fs::write(outside.join("secret.txt"), "s").unwrap();
+        if symlink_file(outside.join("secret.txt"), dir.join("leak.txt")).is_err() {
+            eprintln!("skipped: cannot create symlinks without privileges");
+            let _ = std::fs::remove_dir_all(&dir);
+            let _ = std::fs::remove_dir_all(&outside);
+            return;
+        }
+        symlink_dir(&outside, dir.join("outdir")).unwrap();
+        symlink_dir(&dir, dir.join("assets").join("loop")).unwrap();
+        let (mut files, mut links) = (Vec::new(), Vec::new());
+        collect(&dir, &dir, &Manifest::default(), &mut files, &mut links).unwrap();
+        assert_eq!(files, vec![PathBuf::from("assets").join("a.txt"), PathBuf::from("main.luau")]);
+        assert_eq!(links.len(), 3, "{links:?}");
+        // remove_dir_all removes links, not their targets
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn notice_is_embedded() {
+        assert!(crate::THIRD_PARTY_LICENSES.contains("Third-party licenses"));
+        assert!(crate::THIRD_PARTY_LICENSES.contains("wgpu"));
+        assert!(NOTICE_FILE.ends_with(".txt"));
     }
 
     #[test]

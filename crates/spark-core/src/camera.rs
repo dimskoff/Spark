@@ -1,19 +1,86 @@
 use glam::{Mat4, Quat, Vec2, Vec3};
+use spark_reflect::Reflect;
 
 use crate::math::look_rotation;
+use crate::reflect::GREATER_THAN_ZERO;
 
 /// Perspective (or orthographic) camera. Looks along its local -Z axis.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Camera {
+    /// World position.
+    #[reflect(unit = "m", lua = "position")]
     pub position: Vec3,
+    /// World rotation, reflected as Euler angles in degrees (pitch, yaw, roll; Y-X-Z order).
+    #[reflect(unit = "deg", lua = "rotation")]
     pub rotation: Quat,
-    /// Vertical field of view in degrees.
+    /// Vertical field of view in degrees (1 to 179).
+    #[reflect(range = 1.0..=179.0, unit = "deg", lua = "fov")]
     pub fov: f32,
+    /// Near clip plane distance; must stay smaller than `far` (checked by the scripting API, not by this range).
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", lua = "near")]
     pub near: f32,
+    /// Far clip plane distance; must stay greater than `near` (checked by the scripting API, not by this range).
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", lua = "far")]
     pub far: f32,
     /// `Some(height)` = orthographic camera showing `height` meters vertically (2.5D, strategy,
     /// editors); `fov` is then ignored.
+    #[reflect(range = 0.001..=f32::MAX, clamp, unit = "m", lua = "ortho")]
     pub ortho: Option<f32>,
+}
+
+/// The `camera` component of an object (ADR 0005, section 5): a camera that sits at the object's place. Position and
+/// rotation are the object's (world) transform, so the component only holds the lens. The scene's one render camera
+/// ([`crate::Scene::camera`], the Luau `camera` global) follows the **active** camera node; see
+/// [`crate::Scene::active_camera_node`].
+///
+/// ```
+/// use spark_core::camera::{Camera, CameraNode};
+///
+/// let node = CameraNode { fov: 90.0, ..CameraNode::default() };
+/// let mut cam = Camera::default();
+/// node.apply_to(&mut cam);
+/// assert_eq!(cam.fov, 90.0);
+/// assert_eq!(CameraNode::of(&cam), CameraNode { active: true, ..node });
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
+pub struct CameraNode {
+    /// Vertical field of view in degrees (1 to 179).
+    #[reflect(range = 1.0..=179.0, unit = "deg")]
+    pub fov: f32,
+    /// Near clip plane distance; must stay smaller than `far`.
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m")]
+    pub near: f32,
+    /// Far clip plane distance; must stay greater than `near`.
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m")]
+    pub far: f32,
+    /// `Some(height)` = orthographic camera showing `height` meters vertically; `fov` is then ignored.
+    #[reflect(range = 0.001..=f32::MAX, clamp, unit = "m")]
+    pub ortho: Option<f32>,
+    /// Whether this camera can be the one the scene renders with. The first active camera node (in the order the
+    /// camera components were added) is used; turn it off to hand over to the next one.
+    pub active: bool,
+}
+
+impl Default for CameraNode {
+    /// The lens of [`Camera::default`], active.
+    fn default() -> Self {
+        Self::of(&Camera::default())
+    }
+}
+
+impl CameraNode {
+    /// The lens of a camera (active).
+    pub fn of(cam: &Camera) -> Self {
+        Self { fov: cam.fov, near: cam.near, far: cam.far, ortho: cam.ortho, active: true }
+    }
+
+    /// Copies the lens into a camera (position and rotation are not touched).
+    pub fn apply_to(&self, cam: &mut Camera) {
+        cam.fov = self.fov;
+        cam.near = self.near;
+        cam.far = self.far;
+        cam.ortho = self.ortho;
+    }
 }
 
 impl Default for Camera {

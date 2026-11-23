@@ -107,12 +107,7 @@ pub fn lang() -> Lang {
 /// The translation of `key` in the current language.
 pub fn t(key: &'static str) -> &'static str {
     let tables = tables();
-    tables
-        .get(lang().index())
-        .and_then(|m| m.get(key))
-        .or_else(|| tables.first().and_then(|m| m.get(key)))
-        .copied()
-        .unwrap_or(key)
+    tables.get(lang().index()).and_then(|m| m.get(key)).or_else(|| tables.first().and_then(|m| m.get(key))).copied().unwrap_or(key)
 }
 
 /// [`t`] with `{name}` placeholders replaced.

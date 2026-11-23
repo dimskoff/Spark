@@ -1,0 +1,5 @@
+error: `lua` must be a valid Luau identifier
+ --> tests/ui/lua_not_identifier.rs:6:21
+  |
+6 |     #[reflect(lua = "not valid")]
+  |                     ^^^^^^^^^^^

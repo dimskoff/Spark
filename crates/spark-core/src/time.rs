@@ -99,8 +99,7 @@ mod tests {
 
     #[test]
     fn scale_and_spiral_cap() {
-        let mut t = Time::default();
-        t.scale = 0.0;
+        let mut t = Time { scale: 0.0, ..Default::default() };
         t.advance(0.5);
         assert_eq!(t.dt, 0.0);
         assert_eq!(t.fixed_steps(), 0);

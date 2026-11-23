@@ -39,7 +39,15 @@ impl Explorer {
     pub fn new(root: &Path, title: &str) -> Self {
         let mut expanded = HashSet::new();
         expanded.insert(root.join("src"));
-        Self { root: root.to_path_buf(), title: title.to_string(), nodes: Vec::new(), expanded, selected: None, needs_scan: true, show_hidden: false }
+        Self {
+            root: root.to_path_buf(),
+            title: title.to_string(),
+            nodes: Vec::new(),
+            expanded,
+            selected: None,
+            needs_scan: true,
+            show_hidden: false,
+        }
     }
 
     /// Something changed on disk: re-scan before the next draw.
@@ -93,19 +101,17 @@ impl Explorer {
         });
         ui.separator();
         let root = self.root.clone();
-        let resp = egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                let nodes = std::mem::take(&mut self.nodes);
-                for n in &nodes {
-                    self.row(ui, n, 0, actions);
-                }
-                self.nodes = nodes;
-                // Empty space below the tree: context menu for the project root.
-                let rest = ui.allocate_response(vec2(ui.available_width(), ui.available_height().max(40.0)), Sense::click());
-                rest.context_menu(|ui| dir_menu(ui, &root, &root, actions));
-            });
+        let resp = egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let nodes = std::mem::take(&mut self.nodes);
+            for n in &nodes {
+                self.row(ui, n, 0, actions);
+            }
+            self.nodes = nodes;
+            // Empty space below the tree: context menu for the project root.
+            let rest = ui.allocate_response(vec2(ui.available_width(), ui.available_height().max(40.0)), Sense::click());
+            rest.context_menu(|ui| dir_menu(ui, &root, &root, actions));
+        });
         let _ = resp;
     }
 

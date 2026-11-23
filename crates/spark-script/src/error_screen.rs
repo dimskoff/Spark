@@ -84,7 +84,8 @@ impl ParsedError {
                     out.line = Some(n);
                     let before = clean(line[..start].trim().trim_end_matches(['[', '"', '\'', '(', '@', '<']));
                     let after = line[end..].trim();
-                    let joined = if before.is_empty() || before.starts_with("[string") { after.to_string() } else { format!("{before} {after}") };
+                    let joined =
+                        if before.is_empty() || before.starts_with("[string") { after.to_string() } else { format!("{before} {after}") };
                     message.push(joined.trim().to_string());
                     continue;
                 }
@@ -103,7 +104,11 @@ impl ParsedError {
                 let Some((_, end, file, n)) = find_location(l) else { continue };
                 let func = l[end..].trim().trim_start_matches("in ").trim();
                 let func = func.strip_prefix("function ").unwrap_or(func).trim_matches(['\'', '<', '>']);
-                let func = if func.starts_with(file.as_str()) || func.is_empty() || func == "?" { "(main chunk)".to_string() } else { func.to_string() };
+                let func = if func.starts_with(file.as_str()) || func.is_empty() || func == "?" {
+                    "(main chunk)".to_string()
+                } else {
+                    func.to_string()
+                };
                 let at = format!("{file}:{n}");
                 if out.stack.last().is_none_or(|(a, _)| *a != at) {
                     out.stack.push((at, func));
@@ -162,6 +167,24 @@ const RED_BAND: Color = Color::rgba(1.0, 0.3, 0.28, 0.16);
 const TEXT: Color = Color::rgb(0.93, 0.92, 0.9);
 const DIM: Color = Color::rgb(0.55, 0.53, 0.52);
 const ACCENT: Color = Color::rgb(0.98, 0.78, 0.45);
+
+/// One red line at the bottom of the screen while object scripts are failed (the game keeps running; the full text is
+/// in the console, `error.log` is for fatal errors only).
+pub fn draw_object_banner(world: &mut World, failed: usize) {
+    let c = &mut world.canvas;
+    let prev = c.layer();
+    c.set_layer(Layer::Ui);
+    let size = c.size();
+    let s = (size.y / 720.0).clamp(0.6, 2.0);
+    let text = format!(
+        "{failed} object script{} failed and {} stopped (see the console)",
+        if failed == 1 { "" } else { "s" },
+        if failed == 1 { "is" } else { "are" }
+    );
+    let p = TextParams { size: 14.0 * s, color: RED, align: Align { x: 0.0, y: 1.0 }, ..Default::default() };
+    c.text(&text, Vec2::new(10.0 * s, size.y - 8.0 * s), &p);
+    c.set_layer(prev);
+}
 
 /// Draws the screen over the (frozen) game.
 pub fn draw(world: &mut World, v: &ErrorView) {

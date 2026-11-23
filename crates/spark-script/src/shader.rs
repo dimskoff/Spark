@@ -62,7 +62,9 @@ fn texture_arg(lua: &Lua, v: &Value, what: &str) -> LuaResult<Option<TextureId>>
             let p = s.to_string_lossy();
             Ok(Some(with(lua, |w| w.assets.load_texture(&p).map_err(rt))?))
         }
-        Value::UserData(ud) => Ok(Some(ud.borrow::<LuaTexture>().map_err(|_| rt(format!("{what}: expected a Texture, an image path or nil")))?.0)),
+        Value::UserData(ud) => {
+            Ok(Some(ud.borrow::<LuaTexture>().map_err(|_| rt(format!("{what}: expected a Texture, an image path or nil")))?.0))
+        }
         _ => Err(rt(format!("{what}: expected a Texture, an image path or nil, got {}", v.type_name()))),
     }
 }
@@ -225,43 +227,99 @@ impl UserData for LuaRender {
                 Value::Nil | Value::Boolean(false) => None,
                 _ => Some(to_num(&v, "graphics.height")?.max(1.0) as u32),
             };
-            with(lua, |w| Ok(w.render.height = h))
+            with(lua, |w| {
+                w.render.height = h;
+                Ok(())
+            })
         });
         f.add_field_method_get("scale", |lua, _| with(lua, |w| Ok(w.render.scale)));
-        f.add_field_method_set("scale", |lua, _, v: f32| with(lua, |w| Ok(w.render.scale = v.clamp(0.05, 2.0))));
+        f.add_field_method_set("scale", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.render.scale = v.clamp(0.05, 2.0);
+                Ok(())
+            })
+        });
         f.add_field_method_get("upscale", |lua, _| with(lua, |w| Ok(filter_name(w.render.upscale))));
         f.add_field_method_set("upscale", |lua, _, v: Value| {
             let f = to_filter(&v, "graphics.upscale")?;
-            with(lua, |w| Ok(w.render.upscale = f))
+            with(lua, |w| {
+                w.render.upscale = f;
+                Ok(())
+            })
         });
         f.add_field_method_get("msaa", |lua, _| with(lua, |w| Ok(w.render.msaa)));
         f.add_field_method_set("msaa", |lua, _, v: Value| {
             let n = match v {
-                Value::Boolean(b) => if b { 4 } else { 1 },
+                Value::Boolean(b) => {
+                    if b {
+                        4
+                    } else {
+                        1
+                    }
+                }
                 _ => to_num(&v, "graphics.msaa")?.clamp(1.0, 8.0) as u32,
             };
-            with(lua, |w| Ok(w.render.msaa = n))
+            with(lua, |w| {
+                w.render.msaa = n;
+                Ok(())
+            })
         });
         f.add_field_method_get("shadows", |lua, _| with(lua, |w| Ok(w.render.shadows)));
-        f.add_field_method_set("shadows", |lua, _, v: bool| with(lua, |w| Ok(w.render.shadows = v)));
+        f.add_field_method_set("shadows", |lua, _, v: bool| {
+            with(lua, |w| {
+                w.render.shadows = v;
+                Ok(())
+            })
+        });
         f.add_field_method_get("shadow_distance", |lua, _| with(lua, |w| Ok(w.render.shadow_distance)));
-        f.add_field_method_set("shadow_distance", |lua, _, v: f32| with(lua, |w| Ok(w.render.shadow_distance = v.max(1.0))));
+        f.add_field_method_set("shadow_distance", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.render.shadow_distance = v.max(1.0);
+                Ok(())
+            })
+        });
         f.add_field_method_get("shadow_size", |lua, _| with(lua, |w| Ok(w.render.shadow_size)));
-        f.add_field_method_set("shadow_size", |lua, _, v: f32| with(lua, |w| Ok(w.render.shadow_size = v.clamp(256.0, 8192.0) as u32)));
+        f.add_field_method_set("shadow_size", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.render.shadow_size = v.clamp(256.0, 8192.0) as u32;
+                Ok(())
+            })
+        });
         f.add_field_method_get("light_shadows", |lua, _| with(lua, |w| Ok(w.render.light_shadows)));
-        f.add_field_method_set("light_shadows", |lua, _, v: f32| {
-            with(lua, |w| Ok(w.render.light_shadows = v.clamp(0.0, spark_core::Light::MAX_SHADOWED as f32) as u32))
+        f.add_field_method_set("light_shadows", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.render.light_shadows = v.clamp(0.0, spark_core::Light::MAX_SHADOWED as f32) as u32;
+                Ok(())
+            })
         });
         f.add_field_method_get("light_shadow_soft", |lua, _| with(lua, |w| Ok(w.render.light_shadow_soft)));
-        f.add_field_method_set("light_shadow_soft", |lua, _, v: bool| with(lua, |w| Ok(w.render.light_shadow_soft = v)));
+        f.add_field_method_set("light_shadow_soft", |lua, _, v: bool| {
+            with(lua, |w| {
+                w.render.light_shadow_soft = v;
+                Ok(())
+            })
+        });
         f.add_field_method_get("light_shadow_size", |lua, _| with(lua, |w| Ok(w.render.light_shadow_size)));
-        f.add_field_method_set("light_shadow_size", |lua, _, v: f32| with(lua, |w| Ok(w.render.light_shadow_size = v.clamp(64.0, 2048.0) as u32)));
+        f.add_field_method_set("light_shadow_size", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.render.light_shadow_size = v.clamp(64.0, 2048.0) as u32;
+                Ok(())
+            })
+        });
         f.add_field_method_get("light_shadow_updates", |lua, _| with(lua, |w| Ok(w.render.light_shadow_updates)));
-        f.add_field_method_set("light_shadow_updates", |lua, _, v: f32| with(lua, |w| Ok(w.render.light_shadow_updates = v.max(0.0) as u32)));
+        f.add_field_method_set("light_shadow_updates", |lua, _, Num(v): Num| {
+            with(lua, |w| {
+                w.render.light_shadow_updates = v.max(0.0) as u32;
+                Ok(())
+            })
+        });
         f.add_field_method_get("filter", |lua, _| with(lua, |w| Ok(filter_name(w.render.filter))));
         f.add_field_method_set("filter", |lua, _, v: Value| {
             let f = to_filter(&v, "graphics.filter")?;
-            with(lua, |w| Ok(w.render.filter = f))
+            with(lua, |w| {
+                w.render.filter = f;
+                Ok(())
+            })
         });
         f.add_field_method_get("shader", |lua, _| with(lua, |w| Ok(w.render.shader.map(LuaShader))));
         f.add_field_method_set("shader", |lua, _, v: Value| {
@@ -272,7 +330,8 @@ impl UserData for LuaRender {
                         return Err(rt(format!("graphics.shader: {} is a post shader; use graphics.post = {{ shader }}", d.name)));
                     }
                 }
-                Ok(w.render.shader = s)
+                w.render.shader = s;
+                Ok(())
             })
         });
         f.add_field_method_get("post", |lua, _| {
@@ -286,7 +345,8 @@ impl UserData for LuaRender {
         f.add_field_method_set("post", |lua, _, v: Value| {
             with(lua, |w| {
                 let p = to_post(w, &v)?;
-                Ok(w.render.post = p)
+                w.render.post = p;
+                Ok(())
             })
         });
         f.add_field_method_get("scene_width", |lua, _| {
@@ -308,12 +368,14 @@ impl UserData for LuaRender {
         use spark_core::render::*;
 
         f.add_field_method_get("tonemap", |lua, _| {
-            with(lua, |w| Ok(match w.render.postfx.tonemap {
-                Tonemap::Off => "off",
-                Tonemap::Aces => "aces",
-                Tonemap::Reinhard => "reinhard",
-                Tonemap::Hejl => "hejl",
-            }))
+            with(lua, |w| {
+                Ok(match w.render.postfx.tonemap {
+                    Tonemap::Off => "off",
+                    Tonemap::Aces => "aces",
+                    Tonemap::Reinhard => "reinhard",
+                    Tonemap::Hejl => "hejl",
+                })
+            })
         });
         f.add_field_method_set("tonemap", |lua, _, v: String| {
             let t = match v.as_str() {
@@ -323,12 +385,18 @@ impl UserData for LuaRender {
                 "hejl" => Tonemap::Hejl,
                 s => return Err(rt(format!("graphics.tonemap: unknown '{s}' (use \"off\", \"aces\", \"reinhard\", \"hejl\")"))),
             };
-            with(lua, |w| Ok(w.render.postfx.tonemap = t))
+            with(lua, |w| {
+                w.render.postfx.tonemap = t;
+                Ok(())
+            })
         });
         f.add_field_method_get("fxaa", |lua, _| with(lua, |w| Ok(w.render.postfx.fxaa)));
         f.add_field_method_set("fxaa", |lua, _, v: Value| {
             let on = to_bool(&v, "graphics.fxaa")?;
-            with(lua, |w| Ok(w.render.postfx.fxaa = on))
+            with(lua, |w| {
+                w.render.postfx.fxaa = on;
+                Ok(())
+            })
         });
 
         macro_rules! fx_field {
@@ -473,13 +541,9 @@ fn fx_to_lua<T: FxSettings>(lua: &Lua, v: &Option<T>) -> LuaResult<Value> {
     Ok(Value::Table(t))
 }
 
-
 pub(crate) fn install(lua: &Lua, g: &Table) -> LuaResult<()> {
     let shader = lua.create_table()?;
-    shader.set(
-        "load",
-        lua.create_function(|lua, path: String| with(lua, |w| w.assets.load_shader(&path).map(LuaShader).map_err(rt)))?,
-    )?;
+    shader.set("load", lua.create_function(|lua, path: String| with(lua, |w| w.assets.load_shader(&path).map(LuaShader).map_err(rt)))?)?;
     shader.set(
         "new",
         lua.create_function(|lua, (code, name): (String, Option<String>)| {

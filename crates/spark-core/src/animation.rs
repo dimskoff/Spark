@@ -128,9 +128,10 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
                 let mut o = Object::empty();
                 o.name = n.name.clone();
                 // kit parts sit side by side in the file: drop the X / Z offsets of the whole chain
-                o.position = if a == 0 || model.nodes[a].parent.is_none() { n.translation } else { Vec3::new(0.0, n.translation.y, 0.0) };
-                o.rotation = n.rotation;
-                o.scale = n.scale;
+                o.transform.position =
+                    if a == 0 || model.nodes[a].parent.is_none() { n.translation } else { Vec3::new(0.0, n.translation.y, 0.0) };
+                o.transform.rotation = n.rotation;
+                o.transform.scale = n.scale;
                 let id = world.scene.add(o);
                 let _ = world.scene.set_parent(id, Some(parent));
                 nodes[a] = id;
@@ -148,9 +149,9 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
         let n = &model.nodes[ni];
         let mut o = Object::empty();
         o.name = n.name.clone();
-        o.position = if only_node == Some(ni) { Vec3::new(0.0, n.translation.y, 0.0) } else { n.translation };
-        o.rotation = n.rotation;
-        o.scale = n.scale;
+        o.transform.position = if only_node == Some(ni) { Vec3::new(0.0, n.translation.y, 0.0) } else { n.translation };
+        o.transform.rotation = n.rotation;
+        o.transform.scale = n.scale;
         let id = world.scene.add(o);
         let _ = world.scene.set_parent(id, Some(parent));
         nodes[ni] = id;
@@ -173,7 +174,8 @@ pub fn spawn_model_node(world: &mut World, model_id: ModelId, material: Option<M
                             Some(m) => m,
                             None => {
                                 let data = world.assets.mesh(p.mesh).cloned().unwrap_or_default();
-                                world.assets.add_mesh(data)
+                                let source = world.assets.mesh_source(p.mesh).clone();
+                                world.assets.add_mesh_with_source(data, source)
                             }
                         }
                     }
@@ -289,13 +291,7 @@ pub fn is_playing(world: &World, root: ObjectId, clip: Option<&str>) -> bool {
 
 /// Playback time (seconds) of the current clip.
 pub fn time(world: &World, root: ObjectId) -> f32 {
-    world
-        .animator
-        .instances
-        .get(&root)
-        .and_then(|i| i.tracks.iter().rev().find(|t| t.target > 0.0))
-        .map(|t| t.time)
-        .unwrap_or(0.0)
+    world.animator.instances.get(&root).and_then(|i| i.tracks.iter().rev().find(|t| t.target > 0.0)).map(|t| t.time).unwrap_or(0.0)
 }
 
 /// Advances all instances, poses their node objects and deforms skinned meshes.
@@ -393,9 +389,9 @@ fn skin_and_pose(world: &mut World, root: ObjectId, first_clip_pose: bool) {
     let model_id = inst.model;
     for (node, (t, r, s)) in pose {
         if let Some(o) = nodes.get(node).and_then(|&id| world.scene.get_mut(id)) {
-            o.position = t;
-            o.rotation = r;
-            o.scale = s;
+            o.transform.position = t;
+            o.transform.rotation = r;
+            o.transform.scale = s;
         }
     }
 

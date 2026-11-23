@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "examples/hello"]
+members = ["crates/*", "examples/hello", "tools/licenses"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,6 +24,10 @@ spark-script = { path = "crates/spark-script" }
 spark-discord = { path = "crates/spark-discord" }
 spark-devtools = { path = "crates/spark-devtools" }
 spark-project = { path = "crates/spark-project" }
+spark-api = { path = "crates/spark-api" }
+spark-reflect = { path = "crates/spark-reflect" }
+spark-reflect-derive = { path = "crates/spark-reflect-derive" }
+spark-scene = { path = "crates/spark-scene" }
 
 glam = { version = "0.34", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }
@@ -39,6 +43,11 @@ kira = "0.12"
 gilrs = "0.11"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Proc-macro stack for spark-reflect-derive (syn 2.x is already in Cargo.lock via serde_derive).
+syn = { version = "2", default-features = false, features = ["derive", "parsing", "proc-macro", "printing", "clone-impls", "full"] }
+quote = "1"
+proc-macro2 = "1"
+trybuild = "1"
 
 # Fast debug builds: our code lightly optimized, dependencies fully optimized.
 [profile.dev]

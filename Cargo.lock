@@ -1710,6 +1710,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glob"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
 name = "glow"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2294,6 +2300,13 @@ checksum = "3c8469b4a23b962c1396b9b451dda50ef5b283e8dd309d69033475fa9b334324"
 dependencies = [
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "licenses"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -4031,14 +4044,26 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "log",
+ "serde_json",
  "spark-audio",
  "spark-core",
  "spark-devtools",
  "spark-physics",
+ "spark-reflect",
  "spark-render",
  "spark-script",
  "spark-window",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "spark-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "spark-core",
+ "spark-reflect",
 ]
 
 [[package]]
@@ -4056,8 +4081,12 @@ version = "0.1.0"
 dependencies = [
  "image",
  "mlua",
+ "serde_json",
  "spark",
+ "spark-api",
+ "spark-devtools",
  "spark-project",
+ "spark-scene",
  "windows-sys 0.61.2",
 ]
 
@@ -4073,6 +4102,7 @@ dependencies = [
  "log",
  "miniz_oxide 0.8.9",
  "naga",
+ "spark-reflect",
 ]
 
 [[package]]
@@ -4082,6 +4112,8 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "spark-core",
+ "spark-reflect",
 ]
 
 [[package]]
@@ -4134,6 +4166,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "spark-reflect"
+version = "0.1.0"
+dependencies = [
+ "glam 0.34.1",
+ "spark-reflect-derive",
+]
+
+[[package]]
+name = "spark-reflect-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "spark-reflect",
+ "syn 2.0.119",
+ "trybuild",
+]
+
+[[package]]
 name = "spark-render"
 version = "0.1.0"
 dependencies = [
@@ -4145,15 +4196,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "spark-scene"
+version = "0.1.0"
+dependencies = [
+ "spark-core",
+ "spark-reflect",
+ "toml",
+]
+
+[[package]]
 name = "spark-script"
 version = "0.1.0"
 dependencies = [
  "log",
  "mlua",
  "serde_json",
+ "spark-api",
  "spark-core",
  "spark-discord",
  "spark-physics",
+ "spark-reflect",
+ "spark-scene",
 ]
 
 [[package]]
@@ -4346,6 +4409,12 @@ checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "target-triple"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3a6bfce3d99adfa72d24750a61f782f3036a81e7f86d8841ee1326deaebd171"
 
 [[package]]
 name = "tempfile"
@@ -4565,6 +4634,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e875ab7068a75b74f419da453927e05527c36f0001b3c7aad3ce443640683487"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "trybuild"
+version = "1.0.119"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c5c9f7b7b1a048dd2bebdb7260b0cc71ec5587b19352fa5c3cd9e1c067103f0"
+dependencies = [
+ "glob",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-triple",
+ "termcolor",
+ "toml",
 ]
 
 [[package]]

@@ -11,8 +11,10 @@ repository.workspace = true
 
 [dependencies]
 spark-core.workspace = true
+spark-scene.workspace = true
 mlua.workspace = true
 log.workspace = true
+spark-reflect.workspace = true
 serde_json = "1"
 spark-discord = { workspace = true, optional = true }
 
@@ -23,3 +25,5 @@ discord = ["dep:spark-discord"]
 
 [dev-dependencies]
 spark-physics.workspace = true
+spark-api.workspace = true
+spark-reflect.workspace = true

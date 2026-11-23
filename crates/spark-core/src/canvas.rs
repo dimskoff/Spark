@@ -321,16 +321,16 @@ impl Canvas {
     }
 
     pub fn translate(&mut self, offset: Vec2) {
-        self.transform = self.transform * Affine2::from_translation(offset);
+        self.transform *= Affine2::from_translation(offset);
     }
 
     /// Radians, clockwise on screen.
     pub fn rotate(&mut self, angle: f32) {
-        self.transform = self.transform * Affine2::from_angle(angle);
+        self.transform *= Affine2::from_angle(angle);
     }
 
     pub fn scale_by(&mut self, s: Vec2) {
-        self.transform = self.transform * Affine2::from_scale(s);
+        self.transform *= Affine2::from_scale(s);
     }
 
     // ---- primitives -----------------------------------------------------------------------
@@ -497,10 +497,13 @@ impl Canvas {
         let size = p.size.max(1.0);
         let (px, k) = self.text_raster(size);
         let lines = wrap_lines(text, p.width, |s| self.line_width(s, p.font, px, k));
-        let lines: Vec<(String, f32)> = lines.into_iter().map(|l| {
-            let w = self.line_width(&l, p.font, px, k);
-            (l, w)
-        }).collect();
+        let lines: Vec<(String, f32)> = lines
+            .into_iter()
+            .map(|l| {
+                let w = self.line_width(&l, p.font, px, k);
+                (l, w)
+            })
+            .collect();
         let m = self.fonts.line_metrics(p.font, px);
         let line_h = m.line_height / k * p.line_height;
         let width = lines.iter().map(|(_, w)| *w).fold(0.0, f32::max);

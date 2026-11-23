@@ -1,0 +1,39 @@
+# cargo-deny configuration (v2 schema). CI runs `cargo deny check licenses bans sources`;
+# RustSec advisories are checked by the separate `cargo audit` job.
+#
+# Every license below is permissive or weak copyleft that allows static linking into a closed or open game.
+# Strong copyleft (GPL, LGPL, AGPL) is NOT allowed. A few crates offer one as an `OR` alternative
+# (r-efi: LGPL-2.1-or-later, self_cell: GPL-2.0-only); we use them under their MIT / Apache-2.0 option.
+
+[graph]
+all-features = false
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "MPL-2.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0", # epaint_default_fonts (egui's default fonts)
+    "CC0-1.0",
+    "BSL-1.0", # clipboard-win
+    # "0BSD" is only offered as an alternative next to MIT / Apache-2.0, so it is not needed.
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

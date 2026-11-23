@@ -1,20 +1,25 @@
 use glam::Vec2;
+use spark_reflect::{Reflect, ReflectEnum};
 
 use crate::assets::TextureId;
 use crate::color::Color;
 use crate::shader::ShaderId;
 
 /// How a material is combined with what is behind it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ReflectEnum)]
 pub enum BlendMode {
     /// `Alpha` when `color.a < 1`, otherwise `Opaque`.
     #[default]
+    #[reflect(name = "auto")]
     Auto,
     /// Solid; pixels with alpha < 0.01 are cut out (foliage, fences).
+    #[reflect(name = "opaque")]
     Opaque,
     /// See-through (glass, water, fading objects). Drawn after opaque objects, back to front.
+    #[reflect(name = "alpha")]
     Alpha,
     /// Adds light (fire, lasers, glow). Drawn with the transparent objects.
+    #[reflect(name = "additive")]
     Additive,
 }
 
@@ -40,38 +45,54 @@ impl BlendMode {
 }
 
 /// How a mesh looks. Lit by the sun + ambient unless `unlit`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Reflect)]
 pub struct Material {
     /// Base color (multiplied with the texture).
+    #[reflect(lua = "color")]
     pub color: Color,
+    /// Base color texture (a runtime handle; no scene-file form until assets have paths).
+    #[reflect(readonly, transient)]
     pub texture: Option<TextureId>,
     /// Texture repeats across the surface (e.g. `(4, 4)` on a ground plane).
     pub tiling: Vec2,
     /// Ignore lighting: shows the exact color (UI, glowing things, sprites).
     pub unlit: bool,
     /// Surface shader (`None` = [`crate::RenderSettings::shader`], else the engine default).
+    #[reflect(readonly, transient, lua = "shader")]
     pub shader: Option<ShaderId>,
     /// Free per-material numbers for custom shaders (`object.data` in WGSL).
+    #[reflect(lua = "data")]
     pub data: [f32; 4],
     /// Blending with the background (see [`BlendMode`]).
+    #[reflect(lua = "blend")]
     pub blend: BlendMode,
     /// Draw back faces too (leaves, flags, planes seen from below).
+    #[reflect(lua = "double_sided")]
     pub double_sided: bool,
     /// Casts a shadow from the sun (`RenderSettings::shadows`).
+    #[reflect(lua = "cast_shadow")]
     pub cast_shadow: bool,
     /// Physically based shading (Cook-Torrance GGX with `metallic` / `roughness`) instead of the
     /// classic diffuse look. Turned on by [`Material::pbr`], `with_metallic`, `with_roughness`.
+    #[reflect(lua = "pbr")]
     pub pbr: bool,
-    /// 0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on.
+    /// 0 = dielectric (plastic, wood, stone), 1 = metal. Used when `pbr` is on. Out-of-range values are clamped
+    /// (like [`Material::with_metallic`], which also turns `pbr` on; writing the field alone does not).
+    #[reflect(range = 0.0..=1.0, clamp, step = 0.01, lua = "metallic")]
     pub metallic: f32,
-    /// 0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on.
+    /// 0 = mirror-smooth, 1 = fully rough. Used when `pbr` is on. Out-of-range values are clamped
+    /// (like [`Material::with_roughness`], which also turns `pbr` on; writing the field alone does not).
+    #[reflect(range = 0.0..=1.0, clamp, step = 0.01, lua = "roughness")]
     pub roughness: f32,
     /// Light the surface emits by itself, added after lighting (black = none). Works in every mode.
+    #[reflect(lua = "emissive")]
     pub emissive: Color,
     /// Tangent-space normal map (OpenGL convention: green points along +V). Works with and without `pbr`.
+    #[reflect(readonly, transient, lua = "normal_map")]
     pub normal_map: Option<TextureId>,
     /// Packed surface data (used when `pbr` is on): R = ambient occlusion, G = roughness, B = metallic; each is
     /// multiplied with `roughness` / `metallic`. Like the normal map it holds data, not colors.
+    #[reflect(readonly, transient, lua = "orm_map")]
     pub orm_map: Option<TextureId>,
 }
 
@@ -232,10 +253,7 @@ mod tests {
 
     #[test]
     fn material_builder_chain() {
-        let m = Material::color(Color::RED)
-            .with_blend(BlendMode::Additive)
-            .with_double_sided(true)
-            .with_tiling(2.0, 3.0);
+        let m = Material::color(Color::RED).with_blend(BlendMode::Additive).with_double_sided(true).with_tiling(2.0, 3.0);
         assert_eq!(m.blend, BlendMode::Additive);
         assert!(m.double_sided);
         assert_eq!(m.tiling, Vec2::new(2.0, 3.0));

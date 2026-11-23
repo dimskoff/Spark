@@ -1,0 +1,41 @@
+[prefab]
+format_version = 1
+name = "Door"
+
+[[node]]
+id = "root"
+name = "Door"
+
+[node.script]
+path = "src/door.luau"
+
+[node.script.props]
+open_angle = 90
+speed = 2
+
+[[node]]
+id = "frame"
+parent = "root"
+name = "Frame"
+
+[node.mesh]
+asset = "assets/door.glb"
+node = "Frame"
+
+[node.body]
+kind = "static"
+
+[[node]]
+id = "leaf"
+parent = "root"
+name = "Leaf"
+
+[node.transform]
+position = [0.5, 1, 0]
+
+[node.mesh]
+asset = "assets/door.glb"
+node = "Leaf"
+
+[node.material]
+color = "#a67c52"

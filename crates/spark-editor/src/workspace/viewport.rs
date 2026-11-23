@@ -26,8 +26,10 @@ const EDIT_DT: f32 = 1.0 / 60.0;
 /// Saved files are applied to the frozen preview after this pause (editors save in bursts).
 const RELOAD_DELAY: Duration = Duration::from_millis(250);
 /// Files that change what the game shows (not error.log, not editor files).
-const GAME_FILES: &[&str] =
-    &["luau", "lua", "toml", "json", "png", "jpg", "jpeg", "ktx2", "hdr", "glb", "gltf", "obj", "wav", "ogg", "mp3", "flac", "wgsl", "ttf", "otf"];
+const GAME_FILES: &[&str] = &[
+    "luau", "lua", "toml", "json", "png", "jpg", "jpeg", "ktx2", "hdr", "glb", "gltf", "obj", "wav", "ogg", "mp3", "flac", "wgsl", "ttf",
+    "otf",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -41,6 +43,23 @@ pub enum Mode {
 pub enum ViewportEvent {
     /// The in-editor game hit a script error (`Some`) or is fine again (`None`).
     Error(Option<String>),
+    /// The game or the engine panicked inside the editor; the game was stopped (text is ready to show).
+    Panicked(String),
+}
+
+/// Longest a script call may run in the viewport before the watchdog raises a script error.
+const SCRIPT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Runs `f`; a panic becomes `Err(message)` instead of unwinding into the editor UI.
+/// (The editor never installs the engine's MessageBox panic hook: that is only done by `App::new`.)
+pub(crate) fn run_guarded<T>(f: impl FnOnce() -> T) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|payload| {
+        payload
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "unknown panic".to_string())
+    })
 }
 
 struct Target {
@@ -64,9 +83,15 @@ enum Grab {
     /// RMB held: fly-camera look; the cursor is kept at `anchor`.
     /// `last`: where the cursor was put back to; `None` until the first motion (that one is skipped:
     /// it may still be the jump of the first warp).
-    Look { anchor: Pos2, last: Option<Pos2> },
+    Look {
+        anchor: Pos2,
+        last: Option<Pos2>,
+    },
     /// The game asked for `input.lock_mouse` (first-person look); kept at the panel center.
-    Game { anchor: Pos2, last: Option<Pos2> },
+    Game {
+        anchor: Pos2,
+        last: Option<Pos2>,
+    },
 }
 
 /// The editor camera.
@@ -128,6 +153,8 @@ pub struct Viewport {
     last_frame: Instant,
     last_error: Option<String>,
     gpu_error: Option<String>,
+    /// The game panicked: no automatic rebuild until Play / Stop / a saved file.
+    crashed: bool,
     events: Vec<ViewportEvent>,
     fps: f32,
     fps_frames: u32,
@@ -154,6 +181,7 @@ impl Viewport {
             last_frame: Instant::now(),
             last_error: None,
             gpu_error: None,
+            crashed: false,
             events: Vec::new(),
             fps: 0.0,
             fps_frames: 0,
@@ -198,9 +226,9 @@ impl Viewport {
 
     /// Files changed on disk: rebuild the frozen preview soon.
     pub fn files_changed(&mut self, changes: &HashSet<PathBuf>) {
-        let relevant = changes.iter().any(|p| {
-            p.extension().and_then(|e| e.to_str()).is_some_and(|e| GAME_FILES.contains(&e.to_ascii_lowercase().as_str()))
-        });
+        let relevant = changes
+            .iter()
+            .any(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| GAME_FILES.contains(&e.to_ascii_lowercase().as_str())));
         if relevant {
             self.stale_since = Some(Instant::now());
         }
@@ -208,6 +236,9 @@ impl Viewport {
 
     pub fn play(&mut self) {
         self.build(true);
+        if self.crashed {
+            return;
+        }
         self.mode = Mode::Play;
         self.focus_next = true;
     }
@@ -244,26 +275,44 @@ impl Viewport {
     }
 
     /// A fresh game (Play: hot reload + sound; Edit: `start` and one frame).
+    /// A panic anywhere in the game / engine is caught (see [`run_guarded`]): the viewport stops, the editor lives.
     fn build(&mut self, play: bool) {
+        self.crashed = false;
         crate::logcap::capture(true);
-        let mut game = ScriptGame::new(self.entry.clone()).hot_reload(play);
-        let mut world = World::new();
-        world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
-        if play && !self.mute
-            && let Some(audio) = engine::audio::KiraBackend::new() {
+        let (entry, mute, size) = (self.entry.clone(), self.mute, self.target.as_ref().map(|t| t.size));
+        let built = run_guarded(move || {
+            // The watchdog turns `while true do end` into a script error instead of a frozen editor.
+            let mut game = ScriptGame::new(entry).hot_reload(play).timeout(Some(SCRIPT_TIMEOUT));
+            let mut world = World::new();
+            world.physics.set_backend(Box::new(engine::physics::RapierBackend::new()));
+            if play
+                && !mute
+                && let Some(audio) = engine::audio::KiraBackend::new()
+            {
                 world.audio.set_backend(Box::new(audio));
             }
-        if let Some(t) = &self.target {
-            world.canvas.set_output_size(t.size.0, t.size.1);
+            if let Some(size) = size {
+                world.canvas.set_output_size(size.0, size.1);
+            }
+            game.start(&mut world);
+            if !play {
+                run_frame(&mut game, &mut world, EDIT_DT);
+            }
+            Session { game, world }
+        });
+        match built {
+            Ok(session) => {
+                if !self.cam.ready {
+                    self.cam = FlyCam::from_camera(&session.world.scene.camera, self.cam.speed);
+                }
+                self.session = Some(session);
+            }
+            Err(message) => {
+                self.session = None;
+                self.on_panic("start", message);
+                return;
+            }
         }
-        game.start(&mut world);
-        if !play {
-            run_frame(&mut game, &mut world, EDIT_DT);
-        }
-        if !self.cam.ready {
-            self.cam = FlyCam::from_camera(&world.scene.camera, self.cam.speed);
-        }
-        self.session = Some(Session { game, world });
         self.stale_since = None;
         self.last_frame = Instant::now();
         self.fps_frames = 0;
@@ -277,8 +326,25 @@ impl Viewport {
             s.world.canvas.set_output_size(t.size.0, t.size.1);
         }
         s.world.debug.record_frame(dt);
-        run_frame(&mut s.game, &mut s.world, dt);
-        self.report_error();
+        match run_guarded(|| run_frame(&mut s.game, &mut s.world, dt)) {
+            Ok(()) => self.report_error(),
+            Err(message) => self.on_panic("frame", message),
+        }
+    }
+
+    /// The game (or the renderer) panicked: drop the game, show why, keep the editor alive. Nothing is rebuilt until
+    /// the user presses Play / Stop or saves a file.
+    fn on_panic(&mut self, stage: &str, message: String) {
+        if let Some(s) = self.session.take() {
+            // The state may be half-updated: dropping it can panic again, which must not escape either.
+            let _ = run_guarded(move || drop(s));
+        }
+        self.crashed = true;
+        self.mode = Mode::Edit;
+        self.stale_since = None;
+        let text = tf("viewport.panicked", &[("stage", &stage), ("message", &message)]);
+        self.last_error = Some(text.clone());
+        self.events.push(ViewportEvent::Panicked(text));
     }
 
     fn report_error(&mut self) {
@@ -332,17 +398,18 @@ impl Viewport {
             cam.position = self.cam.pos;
             cam.rotation = self.cam.rotation();
         }
-        let result = r.render_to_view(&s.world, &target.view, VIEW_FORMAT);
+        let result = run_guarded(|| r.render_to_view(&s.world, &target.view, VIEW_FORMAT));
         s.world.scene.camera = game_camera;
         match result {
-            Ok(_) => self.gpu_error = None,
-            Err(e) => {
+            Ok(Ok(_)) => self.gpu_error = None,
+            Ok(Err(e)) => {
                 if r.is_device_lost() {
                     // The device belongs to egui: nothing to recover here, eframe will fail too.
                     log::error!("viewport: {e}");
                 }
                 self.gpu_error = Some(e);
             }
+            Err(message) => self.on_panic("render", message),
         }
     }
 
@@ -380,7 +447,8 @@ impl Viewport {
         if rect.width() < 2.0 || rect.height() < 2.0 || !self.ensure_gpu(size) {
             return;
         }
-        if self.session.is_none() {
+        // After a crash nothing is rebuilt on its own (that would crash every frame): Play, Stop or a saved file retries.
+        if self.session.is_none() && !self.crashed {
             self.build(false);
         }
         if self.mode == Mode::Edit && self.stale_since.is_some_and(|s| s.elapsed() >= RELOAD_DELAY) {
@@ -404,16 +472,19 @@ impl Viewport {
                 )
             });
         }
-        if self.focused && !focused
-            && let Some(s) = &mut self.session {
-                s.world.input.release_all();
-            }
+        if self.focused
+            && !focused
+            && let Some(s) = &mut self.session
+        {
+            s.world.input.release_all();
+        }
         self.focused = focused;
 
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
-        let pointer_moved = ui.input(|i| i.events.iter().rev().find_map(|e| if let egui::Event::PointerMoved(p) = e { Some(*p) } else { None }));
+        let pointer_moved =
+            ui.input(|i| i.events.iter().rev().find_map(|e| if let egui::Event::PointerMoved(p) = e { Some(*p) } else { None }));
 
         if self.mode == Mode::Play {
             if self.grab != Grab::None && !matches!(self.grab, Grab::Game { .. }) {
@@ -462,7 +533,11 @@ impl Viewport {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if self.mode == Mode::Edit {
-                if ui.add(theme::primary_button(format!("{} {}", icon::RUN, t("viewport.play")))).on_hover_text(format!("{} (Ctrl+P)", t("viewport.play_hint"))).clicked() {
+                if ui
+                    .add(theme::primary_button(format!("{} {}", icon::RUN, t("viewport.play"))))
+                    .on_hover_text(format!("{} (Ctrl+P)", t("viewport.play_hint")))
+                    .clicked()
+                {
                     self.play();
                 }
             } else if ui.button(format!("{} {}", icon::STOP, t("viewport.stop"))).on_hover_text("Ctrl+P").clicked() {
@@ -481,9 +556,10 @@ impl Viewport {
             }
             ui.separator();
             if ui.button("🎥").on_hover_text(t("viewport.camera_reset")).clicked()
-                && let Some(s) = &self.session {
-                    self.cam = FlyCam::from_camera(&s.world.scene.camera, self.cam.speed);
-                }
+                && let Some(s) = &self.session
+            {
+                self.cam = FlyCam::from_camera(&s.world.scene.camera, self.cam.speed);
+            }
             let sound = if self.mute { "🔇" } else { "🔊" };
             if ui.selectable_label(!self.mute, sound).on_hover_text(t("viewport.sound_hint")).clicked() {
                 self.mute = !self.mute;
@@ -587,11 +663,10 @@ impl Viewport {
             sync_modifier(input, i.modifiers.ctrl, SKey::LCtrl, SKey::RCtrl);
             sync_modifier(input, i.modifiers.alt, SKey::LAlt, SKey::RAlt);
         });
-        if !locked
-            && let Some(p) = pointer_moved {
-                let local = (p - rect.min) * ppp;
-                input.mouse_moved(Vec2::new(local.x, local.y));
-            }
+        if !locked && let Some(p) = pointer_moved {
+            let local = (p - rect.min) * ppp;
+            input.mouse_moved(Vec2::new(local.x, local.y));
+        }
         if release_grab {
             // Esc frees the mouse (the game still sees the key, e.g. to open its menu).
             ui.ctx().memory_mut(|m| {
@@ -631,9 +706,10 @@ impl Viewport {
             (true, Grab::Game { .. }) => {
                 let d = self.pinned_motion(ctx, pointer_moved);
                 if d != egui::Vec2::ZERO
-                    && let Some(s) = &mut self.session {
-                        s.world.input.mouse_motion(Vec2::new(d.x, d.y));
-                    }
+                    && let Some(s) = &mut self.session
+                {
+                    s.world.input.mouse_motion(Vec2::new(d.x, d.y));
+                }
             }
             (true, _) => {
                 // Pin at the panel center (the first motion only takes the cursor there).
@@ -664,12 +740,9 @@ impl Viewport {
                 })
                 .sum();
             let k = |key| if i.key_down(key) { 1.0 } else { 0.0 };
-            let keys = Vec3::new(
-                k(egui::Key::D) - k(egui::Key::A),
-                k(egui::Key::E) - k(egui::Key::Q),
-                k(egui::Key::W) - k(egui::Key::S),
-            );
-            let arrows = Vec3::new(k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft), 0.0, k(egui::Key::ArrowUp) - k(egui::Key::ArrowDown));
+            let keys = Vec3::new(k(egui::Key::D) - k(egui::Key::A), k(egui::Key::E) - k(egui::Key::Q), k(egui::Key::W) - k(egui::Key::S));
+            let arrows =
+                Vec3::new(k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft), 0.0, k(egui::Key::ArrowUp) - k(egui::Key::ArrowDown));
             (i.pointer.secondary_down(), i.pointer.button_pressed(egui::PointerButton::Secondary), wheel, (keys, arrows), i.modifiers.shift)
         });
         let hovered = response.hovered() || response.contains_pointer();
@@ -796,9 +869,18 @@ mod tests {
     }
 
     #[test]
+    fn panics_become_errors() {
+        assert_eq!(run_guarded(|| 7), Ok(7));
+        assert_eq!(run_guarded(|| -> u8 { panic!("boom {}", 1) }), Err("boom 1".to_string()));
+        assert_eq!(run_guarded(|| -> u8 { panic!("static") }), Err("static".to_string()));
+        assert_eq!(run_guarded(|| -> u8 { std::panic::panic_any(5_u32) }), Err("unknown panic".to_string()));
+        // still usable afterwards
+        assert_eq!(run_guarded(|| "ok"), Ok("ok"));
+    }
+
+    #[test]
     fn fly_cam_matches_the_game_camera() {
-        let mut c = Camera::default();
-        c.position = Vec3::new(3.0, 4.0, 5.0);
+        let mut c = Camera { position: Vec3::new(3.0, 4.0, 5.0), ..Default::default() };
         c.look_at(Vec3::new(-2.0, 0.0, 1.0));
         let f = FlyCam::from_camera(&c, 6.0);
         assert!(f.forward().distance(c.forward()) < 1e-4, "{} vs {}", f.forward(), c.forward());

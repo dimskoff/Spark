@@ -1,9 +1,6 @@
 //! The post chain: built-in effects, game post shaders, upscale and the 2D "ui" layer.
 
-use spark_core::{
-    Layer, PassSize,
-    ShaderKind, TextureFilter, World,
-};
+use spark_core::{Layer, PassSize, ShaderKind, TextureFilter, World};
 
 use crate::gpu_util::*;
 use crate::renderer::*;
@@ -54,8 +51,8 @@ impl Renderer {
 
         // Intermediate images and per-pass info buffers.
         let max = self.device.limits().max_texture_dimension_2d;
-        for i in 0..n - 1 {
-            let size = (chain[i].1.0.clamp(1, max), chain[i].1.1.clamp(1, max));
+        for (i, link) in chain.iter().enumerate().take(n - 1) {
+            let size = (link.1.0.clamp(1, max), link.1.1.clamp(1, max));
             if self.post_targets.get(i).is_none_or(|t| t.size != size) {
                 let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("spark post target"),

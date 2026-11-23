@@ -1,0 +1,5 @@
+error: `#[derive(Reflect)]` needs a struct with named fields
+ --> tests/ui/tuple_struct.rs:5:9
+  |
+5 | struct A(f32);
+  |         ^^^^^

@@ -28,11 +28,11 @@ fn box_falls_and_lands_on_plane() {
     let mut world = setup();
     let cube = world.add_mesh(MeshData::cube(1.0));
     let id = world.spawn(cube, Material::default());
-    world.scene[id].position = Vec3::new(0.0, 5.0, 0.0);
+    world.scene[id].transform.position = Vec3::new(0.0, 5.0, 0.0);
     world.scene[id].body = Some(Body::dynamic());
 
     let events = run(&mut world, 3.0);
-    let y = world.scene[id].position.y;
+    let y = world.scene[id].transform.position.y;
     assert!((y - 0.5).abs() < 0.05, "cube rests on the plane, y = {y}");
     assert!(events >= 1, "landing produced a collision event");
     let v = world.scene[id].body.as_ref().unwrap().velocity;
@@ -50,17 +50,17 @@ fn teleport_velocity_impulse_and_destroy() {
     let mut world = setup();
     let ball = world.add_mesh(MeshData::sphere(0.5, 12));
     let id = world.spawn(ball, Material::default());
-    world.scene[id].position = Vec3::new(0.0, 0.5, 0.0);
+    world.scene[id].transform.position = Vec3::new(0.0, 0.5, 0.0);
     world.scene[id].body = Some(Body { gravity_scale: 0.0, ..Body::dynamic() });
     run(&mut world, 0.1);
 
-    world.scene[id].position = Vec3::new(3.0, 4.0, 0.0);
+    world.scene[id].transform.position = Vec3::new(3.0, 4.0, 0.0);
     run(&mut world, 1.0 / 60.0);
-    assert!(world.scene[id].position.distance(Vec3::new(3.0, 4.0, 0.0)) < 0.01, "teleported");
+    assert!(world.scene[id].transform.position.distance(Vec3::new(3.0, 4.0, 0.0)) < 0.01, "teleported");
 
     world.scene[id].body.as_mut().unwrap().velocity = Vec3::new(2.0, 0.0, 0.0);
     run(&mut world, 1.0);
-    let x = world.scene[id].position.x;
+    let x = world.scene[id].transform.position.x;
     assert!((x - 5.0).abs() < 0.1, "moved 2 m in 1 s, x = {x}");
 
     world.scene[id].body.as_mut().unwrap().velocity = Vec3::ZERO;
@@ -79,11 +79,11 @@ fn sensor_reports_overlap() {
     let mut world = setup();
     let cube = world.add_mesh(MeshData::cube(1.0));
     let zone = world.spawn(cube, Material::default());
-    world.scene[zone].position = Vec3::new(0.0, 2.0, 0.0);
-    world.scene[zone].scale = Vec3::splat(2.0);
+    world.scene[zone].transform.position = Vec3::new(0.0, 2.0, 0.0);
+    world.scene[zone].transform.scale = Vec3::splat(2.0);
     world.scene[zone].body = Some(Body { sensor: true, ..Body::fixed() });
     let id = world.spawn(cube, Material::default());
-    world.scene[id].position = Vec3::new(0.0, 6.0, 0.0);
+    world.scene[id].transform.position = Vec3::new(0.0, 6.0, 0.0);
     world.scene[id].body = Some(Body::dynamic());
 
     let mut entered = false;
@@ -97,5 +97,5 @@ fn sensor_reports_overlap() {
         }
     }
     assert!(entered && left, "fell through the sensor: entered={entered} left={left}");
-    assert!((world.scene[id].position.y - 0.5).abs() < 0.05);
+    assert!((world.scene[id].transform.position.y - 0.5).abs() < 0.05);
 }

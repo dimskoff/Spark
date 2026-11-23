@@ -91,12 +91,35 @@ impl Node {
     }
 }
 
+/// Limits that keep a malformed or hostile file from exhausting memory or time.
+const MAX_DEPTH: usize = 64;
+const MAX_NODES: usize = 1_000_000;
+/// Elements in one array property.
+const MAX_ARRAY_ELEMS: usize = 64 * 1024 * 1024;
+/// Decoded bytes (8 per element) of all array properties of one file.
+const MAX_ARRAY_BYTES: usize = 1 << 30;
+/// Polygon corners of one mesh.
+const MAX_POLYGON_VERTICES: usize = 16 * 1024 * 1024;
+/// Objects x connections: the scene lookups scan the connection list linearly.
+const MAX_SCENE_WORK: u64 = 5_000_000_000;
+
 struct Reader<'a> {
     d: &'a [u8],
     p: usize,
+    /// Remaining decoded array bytes.
+    budget: usize,
+    nodes: usize,
 }
 
 impl<'a> Reader<'a> {
+    fn new(d: &'a [u8], p: usize) -> Self {
+        Reader { d, p, budget: MAX_ARRAY_BYTES, nodes: 0 }
+    }
+    /// A 32 / 64 bit file offset or count.
+    fn size(&mut self, wide: bool) -> Result<usize, String> {
+        let v = if wide { self.u64()? } else { self.u32()? as u64 };
+        usize::try_from(v).map_err(|_| "value out of range".to_string())
+    }
     fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
         let end = self.p.checked_add(n).filter(|&e| e <= self.d.len()).ok_or("unexpected end of file")?;
         let s = &self.d[self.p..end];
@@ -115,16 +138,20 @@ impl<'a> Reader<'a> {
 }
 
 fn read_node(r: &mut Reader, wide: bool, depth: usize) -> Result<Option<Node>, String> {
-    if depth > 64 {
+    if depth > MAX_DEPTH {
         return Err("nodes are nested too deeply".into());
     }
-    let (end, nprops, plen) = if wide { (r.u64()? as usize, r.u64()? as usize, r.u64()? as usize) } else { (r.u32()? as usize, r.u32()? as usize, r.u32()? as usize) };
+    let (end, nprops, plen) = (r.size(wide)?, r.size(wide)?, r.size(wide)?);
     let name_len = r.u8()? as usize;
     if end == 0 && nprops == 0 && plen == 0 && name_len == 0 {
         return Ok(None);
     }
+    r.nodes += 1;
+    if r.nodes > MAX_NODES {
+        return Err("too many nodes".into());
+    }
     let name = String::from_utf8_lossy(r.take(name_len)?).into_owned();
-    let props_end = r.p + plen;
+    let props_end = r.p.checked_add(plen).ok_or("property block out of range")?;
     let mut props = Vec::with_capacity(nprops.min(1024));
     for _ in 0..nprops {
         let t = r.u8()?;
@@ -153,20 +180,38 @@ fn read_node(r: &mut Reader, wide: bool, depth: usize) -> Result<Option<Node>, S
                     b'b' => 1,
                     _ => 8,
                 };
+                if count > MAX_ARRAY_ELEMS {
+                    return Err(format!("array of {count} elements is too large"));
+                }
+                // Decoded size is charged at 8 bytes per element (the widest in-memory form).
+                let cost = count * 8;
+                if cost > r.budget {
+                    return Err("the file's arrays are too large".into());
+                }
+                r.budget -= cost;
+                let need = count * size;
                 let raw = r.take(clen)?;
-                let data: Vec<u8> = if enc == 1 {
-                    miniz_oxide::inflate::decompress_to_vec_zlib(raw).map_err(|e| format!("bad compressed array: {e:?}"))?
-                } else {
-                    raw.to_vec()
+                let data: std::borrow::Cow<[u8]> = match enc {
+                    // never inflate past the declared size: a zlib bomb stops at `need` bytes
+                    1 => std::borrow::Cow::Owned(
+                        miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(raw, need)
+                            .map_err(|e| format!("bad compressed array: {e:?}"))?,
+                    ),
+                    0 => std::borrow::Cow::Borrowed(raw),
+                    other => return Err(format!("unknown array encoding {other}")),
                 };
-                if data.len() < count * size {
+                if data.len() < need {
                     return Err("array is shorter than its count".into());
                 }
                 match t {
-                    b'f' => Prop::Floats(data.chunks_exact(4).take(count).map(|c| f32::from_le_bytes(c.try_into().unwrap()) as f64).collect()),
+                    b'f' => {
+                        Prop::Floats(data.chunks_exact(4).take(count).map(|c| f32::from_le_bytes(c.try_into().unwrap()) as f64).collect())
+                    }
                     b'd' => Prop::Floats(data.chunks_exact(8).take(count).map(|c| f64::from_le_bytes(c.try_into().unwrap())).collect()),
                     b'l' => Prop::Ints(data.chunks_exact(8).take(count).map(|c| i64::from_le_bytes(c.try_into().unwrap())).collect()),
-                    b'i' => Prop::Ints(data.chunks_exact(4).take(count).map(|c| i32::from_le_bytes(c.try_into().unwrap()) as i64).collect()),
+                    b'i' => {
+                        Prop::Ints(data.chunks_exact(4).take(count).map(|c| i32::from_le_bytes(c.try_into().unwrap()) as i64).collect())
+                    }
                     _ => Prop::Ints(data.iter().take(count).map(|&b| b as i64).collect()),
                 }
             }
@@ -195,7 +240,7 @@ fn parse(bytes: &[u8]) -> Result<(u32, Vec<Node>), String> {
         }
         return Err("not an FBX file".into());
     }
-    let mut r = Reader { d: bytes, p: 23 };
+    let mut r = Reader::new(bytes, 23);
     let version = r.u32()?;
     let wide = version >= 7500;
     let mut roots = Vec::new();
@@ -207,7 +252,6 @@ fn parse(bytes: &[u8]) -> Result<(u32, Vec<Node>), String> {
     }
     Ok((version, roots))
 }
-
 
 // ----------------------------------------------------------------------------- ASCII parser
 
@@ -451,8 +495,21 @@ impl Layer {
         };
         if self.indexed && !self.index.is_empty() { self.index.get(i).copied().unwrap_or(0).max(0) as usize } else { i }
     }
-}
 
+    /// Three consecutive values starting at element `i` (None when out of range).
+    fn vec3_at(&self, i: usize) -> Option<Vec3> {
+        let b = i.checked_mul(3)?;
+        let s = self.values.get(b..b.checked_add(3)?)?;
+        Some(Vec3::new(s[0] as f32, s[1] as f32, s[2] as f32))
+    }
+
+    /// Two consecutive values starting at element `i` (None when out of range).
+    fn vec2_at(&self, i: usize) -> Option<[f32; 2]> {
+        let b = i.checked_mul(2)?;
+        let s = self.values.get(b..b.checked_add(2)?)?;
+        Some([s[0] as f32, s[1] as f32])
+    }
+}
 
 // ----------------------------------------------------------------------------- textures
 
@@ -465,7 +522,10 @@ struct TextureSet {
     has_alpha: bool,
 }
 
-fn dir_files<'a>(dir: &Path, cache: &'a mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> &'a [(String, std::path::PathBuf)] {
+fn dir_files<'a>(
+    dir: &Path,
+    cache: &'a mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> &'a [(String, std::path::PathBuf)] {
     cache.entry(dir.to_path_buf()).or_insert_with(|| {
         let mut out = Vec::new();
         if let Ok(rd) = std::fs::read_dir(dir) {
@@ -486,8 +546,17 @@ fn norm_name(s: &str) -> String {
 
 /// Finds `file` (as written in the FBX, any directory) next to the model: same name ignoring case, spaces vs
 /// underscores and the image extension.
-fn locate_texture(dir: &Path, model: &Path, file: &str, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+fn locate_texture(
+    dir: &Path,
+    model: &Path,
+    file: &str,
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> Option<std::path::PathBuf> {
     let base = file.rsplit(['/', '\\']).next().unwrap_or(file);
+    // C:name.png joined to a folder is drive-relative on Windows: never leave the model's folder.
+    if base.is_empty() || base.contains([':', '\0']) || base == ".." {
+        return None;
+    }
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(base);
     let want = norm_name(stem);
     let model_stem = model.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -500,21 +569,29 @@ fn locate_texture(dir: &Path, model: &Path, file: &str, cache: &mut HashMap<std:
         }
         let files = dir_files(&d, cache);
         let image_ext = |n: &str| matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg"));
-        if let Some((_, p)) = files.iter().find(|(n, _)| image_ext(n) && norm_name(n.rsplit_once('.').map(|(s, _)| s).unwrap_or(n)) == want) {
+        if let Some((_, p)) = files.iter().find(|(n, _)| image_ext(n) && norm_name(n.rsplit_once('.').map(|(s, _)| s).unwrap_or(n)) == want)
+        {
             return Some(p.clone());
         }
     }
     None
 }
 
-const COLOR_SUFFIXES: &[&str] = &["_basecolor", "_base_color", "_albedo", "_diffusemap", "_diffuse", "_color_1k", "_color", "_rgba", "_col", "_d"];
+const COLOR_SUFFIXES: &[&str] =
+    &["_basecolor", "_base_color", "_albedo", "_diffusemap", "_diffuse", "_color_1k", "_color", "_rgba", "_col", "_d"];
 
-fn find_sibling(dir: &Path, prefix: &str, suffixes: &[&str], cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+fn find_sibling(
+    dir: &Path,
+    prefix: &str,
+    suffixes: &[&str],
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> Option<std::path::PathBuf> {
     let files = dir_files(dir, cache);
     for s in suffixes {
         let want = format!("{prefix}{s}");
         if let Some((_, p)) = files.iter().find(|(n, _)| {
-            matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg")) && norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n)) == want
+            matches!(n.rsplit('.').next(), Some("png" | "jpg" | "jpeg"))
+                && norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n)) == want
         }) {
             return Some(p.clone());
         }
@@ -524,9 +601,14 @@ fn find_sibling(dir: &Path, prefix: &str, suffixes: &[&str], cache: &mut HashMap
 
 /// Last resort for generic material names ("bark_mat", "cluster_mat_spring_ex"): a color texture whose name contains
 /// every meaningful word of the material name ("summer" preferred when several seasons match).
-fn find_by_tokens(dir: &Path, mat_name: &str, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>) -> Option<std::path::PathBuf> {
+fn find_by_tokens(
+    dir: &Path,
+    mat_name: &str,
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+) -> Option<std::path::PathBuf> {
     const SKIP: &[&str] = &["mat", "material", "ex", "tex", "default", "lod", "mtl", "shader", "m"];
-    let tokens: Vec<&str> = mat_name.split('_').filter(|w| w.len() > 1 && !SKIP.contains(w) && !w.chars().all(|c| c.is_ascii_digit())).collect();
+    let tokens: Vec<&str> =
+        mat_name.split('_').filter(|w| w.len() > 1 && !SKIP.contains(w) && !w.chars().all(|c| c.is_ascii_digit())).collect();
     if tokens.is_empty() {
         return None;
     }
@@ -539,10 +621,14 @@ fn find_by_tokens(dir: &Path, mat_name: &str, cache: &mut HashMap<std::path::Pat
         let stem = norm_name(n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n));
         // the color suffix is optional here ("Cluster_Bare.png"); the file must share at least one word with the material
         let matched = tokens.iter().filter(|w| stem.contains(**w)).count() as i32;
-        if matched == 0 || stem.ends_with("_opacity") || stem.ends_with("_normal") || stem.ends_with("_ao") || stem.ends_with("_roughness") {
+        if matched == 0 || stem.ends_with("_opacity") || stem.ends_with("_normal") || stem.ends_with("_ao") || stem.ends_with("_roughness")
+        {
             continue;
         }
-        let score = matched * 10 + if COLOR_SUFFIXES.iter().any(|s| stem.ends_with(s)) { 3 } else { 0 } + if stem.contains("summer") { 2 } else { 0 } - (stem.len() as i32 / 64);
+        let score = matched * 10
+            + if COLOR_SUFFIXES.iter().any(|s| stem.ends_with(s)) { 3 } else { 0 }
+            + if stem.contains("summer") { 2 } else { 0 }
+            - (stem.len() as i32 / 64);
         if best.is_none_or(|(s, _)| score > s) {
             best = Some((score, p));
         }
@@ -566,7 +652,11 @@ fn load_plain_texture(path: &Path, assets: &mut Assets, cache: &mut HashMap<std:
 
 /// Base color (with an opacity map merged into alpha), normal map and a packed ORM map found next to the color
 /// texture by name: `<name>_AO`, `<name>_Roughness`, `<name>_Metallic`, `<name>_Opacity` / `_alfa` ...
-fn build_texture_set(color_path: &Path, cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>, assets: &mut Assets) -> TextureSet {
+fn build_texture_set(
+    color_path: &Path,
+    cache: &mut HashMap<std::path::PathBuf, Vec<(String, std::path::PathBuf)>>,
+    assets: &mut Assets,
+) -> TextureSet {
     let mut set = TextureSet::default();
     let Some(mut color) = read_image(color_path) else { return set };
     let dir = color_path.parent().unwrap_or(Path::new("."));
@@ -649,6 +739,9 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
             conns.push(Connection { kind: kind.to_owned(), src, dst, prop: n.text(3).map(str::to_owned) });
         }
     }
+    if (objects.len() as u64).saturating_mul(conns.len() as u64) > MAX_SCENE_WORK {
+        return Err(err(format!("scene is too complex ({} objects, {} connections)", objects.len(), conns.len())));
+    }
     let children_of = |id: i64, ty: &str| -> Vec<&Connection> {
         conns.iter().filter(|c| c.dst == id && objects.get(&c.src).map(|o| o.name == ty).unwrap_or(false)).collect()
     };
@@ -667,7 +760,16 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
         if let Some(gs) = top.iter().find(|n| n.name == "GlobalSettings") {
             let g = |k: &str| gs.property(k).and_then(|v| v.first().copied());
-            log::warn!("{name}: axes up={:?}/{:?} front={:?}/{:?} coord={:?}/{:?} unit={:?}", g("UpAxis"), g("UpAxisSign"), g("FrontAxis"), g("FrontAxisSign"), g("CoordAxis"), g("CoordAxisSign"), g("UnitScaleFactor"));
+            log::warn!(
+                "{name}: axes up={:?}/{:?} front={:?}/{:?} coord={:?}/{:?} unit={:?}",
+                g("UpAxis"),
+                g("UpAxisSign"),
+                g("FrontAxis"),
+                g("FrontAxisSign"),
+                g("CoordAxis"),
+                g("CoordAxisSign"),
+                g("UnitScaleFactor")
+            );
         }
     }
     let meters = (unit * 0.01) as f32;
@@ -697,7 +799,16 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 model_ids.push(id);
                 let tf = Transform::of(o);
                 if std::env::var_os("SPARK_FBX_DEBUG").is_some() && clean_name(o.text(1).unwrap_or("")) == "Bip01" {
-                    log::warn!("{name}: Bip01 props: t={:?} pre={:?} r={:?} post={:?} s={:?} order={} all={:?}", tf.t, tf.pre, tf.r, tf.post, tf.s, tf.order, o.child("Properties70").map(|p| p.all("P").map(|n| n.text(0).unwrap_or("").to_owned()).collect::<Vec<_>>()));
+                    log::warn!(
+                        "{name}: Bip01 props: t={:?} pre={:?} r={:?} post={:?} s={:?} order={} all={:?}",
+                        tf.t,
+                        tf.pre,
+                        tf.r,
+                        tf.post,
+                        tf.s,
+                        tf.order,
+                        o.child("Properties70").map(|p| p.all("P").map(|n| n.text(0).unwrap_or("").to_owned()).collect::<Vec<_>>())
+                    );
                 }
                 model.nodes.push(ModelNode {
                     name: clean_name(o.text(1).unwrap_or("node")),
@@ -714,8 +825,23 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     }
     for &id in &model_ids {
         let ni = node_of[&id];
-        let parent = conns.iter().find(|c| c.src == id && c.kind == "OO" && node_of.contains_key(&c.dst)).map(|c| node_of[&c.dst]).unwrap_or(0);
+        let parent = conns
+            .iter()
+            .find(|c| c.src == id && c.dst != id && c.kind == "OO" && node_of.contains_key(&c.dst))
+            .map(|c| node_of[&c.dst])
+            .unwrap_or(0);
         model.nodes[ni].parent = Some(parent);
+    }
+    // A hostile file can make parents loop (A under B under A): hang such nodes (and absurdly deep chains) off the root.
+    for i in 1..model.nodes.len() {
+        let (mut cur, mut steps) = (i, 0);
+        while cur != 0 && steps <= 256 {
+            cur = model.nodes[cur].parent.unwrap_or(0);
+            steps += 1;
+        }
+        if cur != 0 {
+            model.nodes[i].parent = Some(0);
+        }
     }
     for i in 1..model.nodes.len() {
         if let Some(p) = model.nodes[i].parent {
@@ -725,7 +851,14 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
         for &c in &model.nodes[0].children.clone() {
             let n = &model.nodes[c];
-            log::warn!("{name}: top node {} t={:?} r={:?} s={:?} children={}", n.name, n.translation, n.rotation.to_euler(glam::EulerRot::XYZ), n.scale, n.children.len());
+            log::warn!(
+                "{name}: top node {} t={:?} r={:?} s={:?} children={}",
+                n.name,
+                n.translation,
+                n.rotation.to_euler(glam::EulerRot::XYZ),
+                n.scale,
+                n.children.len()
+            );
         }
     }
 
@@ -736,7 +869,13 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
 
     let texture_file = |tex_id: i64| -> Option<String> {
         let t = objects.get(&tex_id)?;
-        let f = |n: &Node| n.child("RelativeFilename").and_then(|c| c.text(0)).filter(|s| !s.is_empty()).or_else(|| n.child("FileName").and_then(|c| c.text(0)).filter(|s| !s.is_empty())).map(str::to_owned);
+        let f = |n: &Node| {
+            n.child("RelativeFilename")
+                .and_then(|c| c.text(0))
+                .filter(|s| !s.is_empty())
+                .or_else(|| n.child("FileName").and_then(|c| c.text(0)).filter(|s| !s.is_empty()))
+                .map(str::to_owned)
+        };
         f(t).or_else(|| {
             conns.iter().filter(|c| c.dst == tex_id).filter_map(|c| objects.get(&c.src)).find(|o| o.name == "Video").and_then(|v| f(v))
         })
@@ -787,7 +926,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                     m.normal_map = load_plain_texture(&path_found, assets, &mut tex_cache);
                 }
             } else if (lp.contains("diffuse") || lp.contains("base") || lp == "color") && m.texture.is_none() {
-                let set = set_cache.entry(path_found.clone()).or_insert_with(|| build_texture_set(&path_found, &mut dir_cache, assets)).clone();
+                let set =
+                    set_cache.entry(path_found.clone()).or_insert_with(|| build_texture_set(&path_found, &mut dir_cache, assets)).clone();
                 m.texture = set.color;
                 if m.texture.is_some() {
                     m.color = Color::rgba(1.0, 1.0, 1.0, m.color.a);
@@ -816,7 +956,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
             if !mat_name.is_empty() {
                 let mut suffixes: Vec<&str> = vec![""];
                 suffixes.extend_from_slice(COLOR_SUFFIXES);
-                let found = find_sibling(dir, &mat_name, &suffixes, &mut dir_cache).or_else(|| find_by_tokens(dir, &mat_name, &mut dir_cache));
+                let found =
+                    find_sibling(dir, &mat_name, &suffixes, &mut dir_cache).or_else(|| find_by_tokens(dir, &mat_name, &mut dir_cache));
                 if let Some(p) = found {
                     let set = set_cache.entry(p.clone()).or_insert_with(|| build_texture_set(&p, &mut dir_cache, assets)).clone();
                     m.texture = set.color;
@@ -841,10 +982,10 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         bone_node: usize,
         indexes: Vec<i64>,
         weights: Vec<f64>,
-        transform: Mat4,
         link: Mat4,
     }
-    let mut geometry_skin: HashMap<i64, Vec<ClusterInfo>> = HashMap::new();
+    // shared, not cloned: a hostile file can attach one skin to many geometries
+    let mut geometry_skin: HashMap<i64, Vec<std::rc::Rc<ClusterInfo>>> = HashMap::new();
     for (&id, o) in &objects {
         if o.name != "Deformer" || o.text(2) != Some("Skin") {
             continue;
@@ -854,23 +995,16 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
             let Some(cl) = objects.get(&c.src).filter(|n| n.text(2) == Some("Cluster")) else { continue };
             let bone = conns.iter().find(|k| k.dst == c.src && k.kind == "OO" && node_of.contains_key(&k.src)).map(|k| node_of[&k.src]);
             let Some(bone_node) = bone else { continue };
-            list.push(ClusterInfo {
+            list.push(std::rc::Rc::new(ClusterInfo {
                 bone_node,
                 indexes: cl.child("Indexes").map(|n| n.ints()).unwrap_or_default(),
                 weights: cl.child("Weights").map(|n| n.floats()).unwrap_or_default(),
-                transform: cl.child("Transform").and_then(|n| mat_from(&n.floats())).unwrap_or(Mat4::IDENTITY),
                 link: cl.child("TransformLink").and_then(|n| mat_from(&n.floats())).unwrap_or(Mat4::IDENTITY),
-            });
+            }));
         }
         for g in conns.iter().filter(|c| c.src == id && objects.get(&c.dst).map(|o| o.name == "Geometry").unwrap_or(false)) {
             // the same skin deformer is only used by one geometry in practice
-            geometry_skin.entry(g.dst).or_default().extend(list.iter().map(|c| ClusterInfo {
-                bone_node: c.bone_node,
-                indexes: c.indexes.clone(),
-                weights: c.weights.clone(),
-                transform: c.transform,
-                link: c.link,
-            }));
+            geometry_skin.entry(g.dst).or_default().extend(list.iter().cloned());
         }
     }
 
@@ -878,13 +1012,24 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
     let mut skin_of_node: HashMap<usize, usize> = HashMap::new();
     for &mid in &model_ids {
         let ni = node_of[&mid];
-        let Some(geo_conn) = conns.iter().find(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Geometry").unwrap_or(false)) else { continue };
+        let Some(geo_conn) =
+            conns.iter().find(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Geometry").unwrap_or(false))
+        else {
+            continue;
+        };
         let geo = objects[&geo_conn.src];
-        let mats: Vec<i64> = conns.iter().filter(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Material").unwrap_or(false)).map(|c| c.src).collect();
+        let mats: Vec<i64> = conns
+            .iter()
+            .filter(|c| c.dst == mid && c.kind == "OO" && objects.get(&c.src).map(|o| o.name == "Material").unwrap_or(false))
+            .map(|c| c.src)
+            .collect();
         let verts = geo.child("Vertices").map(|n| n.floats()).unwrap_or_default();
         let pvi = geo.child("PolygonVertexIndex").map(|n| n.ints()).unwrap_or_default();
         if verts.len() < 9 || pvi.len() < 3 {
             continue;
+        }
+        if pvi.len() > MAX_POLYGON_VERTICES {
+            return Err(err(format!("mesh has too many polygon vertices ({})", pvi.len())));
         }
         let normals = geo.child("LayerElementNormal").and_then(|n| Layer::read(n, "Normals", "NormalsIndex"));
         let uvs = geo.child("LayerElementUV").and_then(|n| Layer::read(n, "UV", "UVIndex"));
@@ -897,16 +1042,24 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         let mut bake = Mat4::IDENTITY;
         let mut skin_index = None;
         if let Some(cl) = clusters.filter(|c| !c.is_empty()) {
+            if cl.len() > usize::from(u16::MAX) {
+                return Err(err(format!("skin has too many bones ({})", cl.len())));
+            }
             influences = vec![Vec::new(); ncp];
             let mut joints = Vec::new();
             let mut inverse_bind = Vec::new();
             for (ji, c) in cl.iter().enumerate() {
+                if c.indexes.len() != c.weights.len() {
+                    return Err(err(format!("skin cluster {ji} has {} indexes but {} weights", c.indexes.len(), c.weights.len())));
+                }
                 joints.push(c.bone_node);
                 inverse_bind.push(c.link.inverse());
-                for (k, &ix) in c.indexes.iter().enumerate() {
-                    if let (Some(list), Some(&w)) = (influences.get_mut(ix as usize), c.weights.get(k)) {
-                        list.push((ji as u16, w as f32));
-                    }
+                for (&ix, &w) in c.indexes.iter().zip(&c.weights) {
+                    let list = usize::try_from(ix)
+                        .ok()
+                        .and_then(|i| influences.get_mut(i))
+                        .ok_or_else(|| err(format!("skin cluster {ji} refers to control point {ix}, but the mesh has only {ncp}")))?;
+                    list.push((ji as u16, w as f32));
                 }
             }
             // Vertices are skinned from "bind world" space: bring the mesh-local positions there with the mesh node's own
@@ -918,7 +1071,13 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 let mut worst_name = String::new();
                 for c in cl {
                     let global = root_inv * model.node_matrix(c.bone_node);
-                    let d = (global.to_cols_array().iter().zip(c.link.to_cols_array().iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max)) / c.link.col(3).truncate().length().max(1.0);
+                    let d = (global
+                        .to_cols_array()
+                        .iter()
+                        .zip(c.link.to_cols_array().iter())
+                        .map(|(a, b)| (a - b).abs())
+                        .fold(0.0f32, f32::max))
+                        / c.link.col(3).truncate().length().max(1.0);
                     if d > worst {
                         worst = d;
                         worst_name = model.nodes[c.bone_node].name.clone();
@@ -932,10 +1091,22 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         let mut cur = Some(c.bone_node);
                         while let Some(i) = cur {
                             let m = &model.nodes[i];
-                            chain.push(format!("{} t={:?} r={:?} s={:?}", m.name, m.translation, m.rotation.to_euler(glam::EulerRot::XYZ), m.scale));
+                            chain.push(format!(
+                                "{} t={:?} r={:?} s={:?}",
+                                m.name,
+                                m.translation,
+                                m.rotation.to_euler(glam::EulerRot::XYZ),
+                                m.scale
+                            ));
                             cur = m.parent;
                         }
-                        log::warn!("  bone {} link={:?}\n    global={:?}\n    chain: {}", n.name, c.link.to_cols_array(), (root_inv * model.node_matrix(c.bone_node)).to_cols_array(), chain.join(" <- "));
+                        log::warn!(
+                            "  bone {} link={:?}\n    global={:?}\n    chain: {}",
+                            n.name,
+                            c.link.to_cols_array(),
+                            (root_inv * model.node_matrix(c.bone_node)).to_cols_array(),
+                            chain.join(" <- ")
+                        );
                     }
                 }
             }
@@ -959,7 +1130,11 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         let mut poly_index = 0usize;
         for (pv, &raw) in pvi.iter().enumerate() {
             let end = raw < 0;
-            let cp = if end { (!raw) as usize } else { raw as usize };
+            // the last index of a polygon is stored as `!index` (XOR -1)
+            let cp = if end { !raw } else { raw };
+            let cp = usize::try_from(cp).ok().filter(|&c| c < ncp).ok_or_else(|| {
+                err(format!("polygon vertex index {raw} is out of range ({ncp} control points) in mesh '{}'", model.nodes[ni].name))
+            })?;
             poly.push((cp, pv));
             if end {
                 let mi = match &matl {
@@ -976,23 +1151,25 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 } else {
                     mi
                 };
-                let g = groups.entry(mi).or_insert_with(|| Group { vertices: Vec::new(), cps: Vec::new(), indices: Vec::new(), lookup: HashMap::new() });
+                let g = groups.entry(mi).or_insert_with(|| Group {
+                    vertices: Vec::new(),
+                    cps: Vec::new(),
+                    indices: Vec::new(),
+                    lookup: HashMap::new(),
+                });
                 let mut ids = Vec::with_capacity(poly.len());
                 for &(cp, pvi_) in &poly {
                     let ni_ = normals.as_ref().map(|l| l.slot(pvi_, cp, poly_index)).unwrap_or(usize::MAX);
                     let ui_ = uvs.as_ref().map(|l| l.slot(pvi_, cp, poly_index)).unwrap_or(usize::MAX);
                     let key = (cp, ni_, ui_);
                     let id = *g.lookup.entry(key).or_insert_with(|| {
+                        // `cp < ncp` was checked above, so the three coordinates exist
                         let p = Vec3::new(verts[cp * 3] as f32, verts[cp * 3 + 1] as f32, verts[cp * 3 + 2] as f32);
-                        let nrm = match &normals {
-                            Some(l) if l.values.len() >= (ni_ + 1) * 3 => Vec3::new(l.values[ni_ * 3] as f32, l.values[ni_ * 3 + 1] as f32, l.values[ni_ * 3 + 2] as f32),
-                            _ => Vec3::ZERO,
-                        };
-                        let uv = match &uvs {
-                            Some(l) if l.values.len() >= (ui_ + 1) * 2 => [l.values[ui_ * 2] as f32, 1.0 - l.values[ui_ * 2 + 1] as f32],
-                            _ => [0.0, 0.0],
-                        };
-                        let (p, nrm) = if skin_index.is_some() { (bake.transform_point3(p), normal_bake.transform_vector3(nrm)) } else { (p, nrm) };
+                        // an index past the layer's data gives a zero normal / uv (smooth normals fill in later)
+                        let nrm = normals.as_ref().and_then(|l| l.vec3_at(ni_)).unwrap_or(Vec3::ZERO);
+                        let uv = uvs.as_ref().and_then(|l| l.vec2_at(ui_)).map(|[u, v]| [u, 1.0 - v]).unwrap_or([0.0, 0.0]);
+                        let (p, nrm) =
+                            if skin_index.is_some() { (bake.transform_point3(p), normal_bake.transform_vector3(nrm)) } else { (p, nrm) };
                         g.vertices.push(Vertex { position: p.to_array(), normal: nrm.normalize_or_zero().to_array(), uv });
                         g.cps.push(cp);
                         (g.vertices.len() - 1) as u32
@@ -1026,7 +1203,7 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 let mut joints = Vec::with_capacity(g.cps.len());
                 let mut weights = Vec::with_capacity(g.cps.len());
                 for &cp in &g.cps {
-                    let list = &influences[cp];
+                    let list: &[(u16, f32)] = influences.get(cp).map(Vec::as_slice).unwrap_or(&[]);
                     let mut j = [0u16; 4];
                     let mut w = [0f32; 4];
                     for (k, &(ji, wt)) in list.iter().enumerate() {
@@ -1034,7 +1211,11 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         w[k] = wt;
                     }
                     let s: f32 = w.iter().sum();
-                    if s > 0.0 { w = w.map(|x| x / s) } else { w = [1.0, 0.0, 0.0, 0.0] }
+                    if s > 0.0 {
+                        w = w.map(|x| x / s)
+                    } else {
+                        w = [1.0, 0.0, 0.0, 0.0]
+                    }
                     joints.push(j);
                     weights.push(w);
                 }
@@ -1044,7 +1225,15 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
             };
             let material = build_material(mats.get(mi).copied(), assets);
             if std::env::var_os("SPARK_FBX_DEBUG").is_some() {
-                log::warn!("{name}: mesh {} verts={} tex={} normal={} orm={} color={:?}", model.nodes[ni].name, g.vertices.len(), material.texture.is_some(), material.normal_map.is_some(), material.orm_map.is_some(), material.color);
+                log::warn!(
+                    "{name}: mesh {} verts={} tex={} normal={} orm={} color={:?}",
+                    model.nodes[ni].name,
+                    g.vertices.len(),
+                    material.texture.is_some(),
+                    material.normal_map.is_some(),
+                    material.orm_map.is_some(),
+                    material.color
+                );
             }
             let mesh: MeshId = assets.add_mesh(MeshData::new(g.vertices, g.indices));
             prims.push(Primitive { mesh, material, skin });
@@ -1074,7 +1263,9 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
         for layer in layers {
             for cn in children_of(layer, "AnimationCurveNode") {
                 let cn_id = cn.src;
-                let Some(target) = conns.iter().find(|c| c.src == cn_id && c.kind == "OP" && node_of.contains_key(&c.dst)) else { continue };
+                let Some(target) = conns.iter().find(|c| c.src == cn_id && c.kind == "OP" && node_of.contains_key(&c.dst)) else {
+                    continue;
+                };
                 let node = node_of[&target.dst];
                 let prop_name = target.prop.clone().unwrap_or_default();
                 let property = match prop_name.as_str() {
@@ -1093,7 +1284,8 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         Some("d|Z") => 2,
                         _ => continue,
                     };
-                    let times: Vec<f64> = curve.child("KeyTime").map(|n| n.ints().iter().map(|&t| t as f64 / TICKS).collect()).unwrap_or_default();
+                    let times: Vec<f64> =
+                        curve.child("KeyTime").map(|n| n.ints().iter().map(|&t| t as f64 / TICKS).collect()).unwrap_or_default();
                     let vals = curve.child("KeyValueFloat").map(|n| n.floats()).unwrap_or_default();
                     if !times.is_empty() && times.len() == vals.len() {
                         axes[axis] = Some((times, vals));
@@ -1103,9 +1295,10 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                 if times.is_empty() {
                     continue;
                 }
-                times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                times.sort_by(|a, b| a.total_cmp(b));
                 times.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
-                let tf = Transform::of(objects_node.children.iter().find(|o| o.int(0) == Some(target.dst)).unwrap());
+                let Some(target_node) = objects_node.children.iter().find(|o| o.int(0) == Some(target.dst)) else { continue };
+                let tf = Transform::of(target_node);
                 let default = match property {
                     Property::Translation => tf.t,
                     Property::Rotation => tf.r,
@@ -1145,9 +1338,15 @@ pub fn load(path: &Path, bytes: &[u8], assets: &mut Assets) -> Result<ModelData,
                         _ => Vec4::new(v[0] as f32, v[1] as f32, v[2] as f32, 0.0),
                     });
                 }
-                let end = *times.last().unwrap() as f32;
+                let end = times.last().copied().unwrap_or(0.0) as f32;
                 clip.duration = clip.duration.max(end);
-                clip.channels.push(Channel { node, property, interpolation: Interpolation::Linear, times: times.iter().map(|&t| t as f32).collect(), values });
+                clip.channels.push(Channel {
+                    node,
+                    property,
+                    interpolation: Interpolation::Linear,
+                    times: times.iter().map(|&t| t as f32).collect(),
+                    values,
+                });
             }
         }
         if !clip.channels.is_empty() {

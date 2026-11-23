@@ -1,5 +1,6 @@
 # Create a release on GitHub (Releases > Draft a new release, tag v0.1.0): this builds spark on Windows, Linux and
-# macOS and attaches spark-windows-x64.zip, spark-linux-x64.tar.gz and spark-macos-arm64.tar.gz (each holds `spark` and\n# `spark-editor`) plus a .sha256 file per archive to it. The installers verify that checksum.
+# macOS and attaches spark-windows-x64.zip, spark-linux-x64.tar.gz and spark-macos-arm64.tar.gz (each holds `spark` and
+# spark-editor) plus a .sha256 file per archive to it. The installers verify that checksum.
 # The asset names are what install.ps1, install.sh and `spark update` download - keep them in sync.
 # Run it by hand (Actions > Release > Run workflow) to only build the archives as workflow artifacts.
 name: Release
@@ -48,7 +49,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/release/spark.exe, target/release/spark-editor.exe, LICENSE, README.md dist/
+          Copy-Item target/release/spark.exe, target/release/spark-editor.exe, LICENSE, THIRD_PARTY_LICENSES.md, README.md dist/
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.asset }} -Force
 
       - name: Package (tar.gz)
@@ -56,7 +57,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp target/release/spark target/release/spark-editor LICENSE README.md install.sh dist/
+          cp target/release/spark target/release/spark-editor LICENSE THIRD_PARTY_LICENSES.md README.md install.sh dist/
           chmod +x dist/spark dist/spark-editor dist/install.sh
           tar -czf ${{ matrix.asset }} -C dist .
 
@@ -85,3 +86,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" "${{ matrix.asset }}" "${{ matrix.asset }}.sha256" --clobber
+
+  # One SHA256SUMS for the whole release, signed with minisign when the MINISIGN_KEY secret is set
+  # (see docs/dev/RELEASING.md), plus the installers: `spark update` runs the installer of the release, not of `main`.
+  publish-metadata:
+    name: SHA256SUMS, signature, installers
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect checksums
+        run: |
+          mkdir dl && cd dl
+          gh release download "${{ github.event.release.tag_name }}" --repo "${{ github.repository }}" --pattern '*.sha256'
+          cat *.sha256 | sort -k2 > ../SHA256SUMS
+          cat ../SHA256SUMS
+      - name: Sign SHA256SUMS (minisign)
+        if: env.MINISIGN_KEY != ''
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          printf '%s' "$MINISIGN_KEY" > "$RUNNER_TEMP/minisign.key"
+          minisign -S -s "$RUNNER_TEMP/minisign.key" -m SHA256SUMS -x SHA256SUMS.minisig
+          rm -f "$RUNNER_TEMP/minisign.key"
+      - name: Upload
+        run: |
+          files="SHA256SUMS install.sh install.ps1"
+          [ -f SHA256SUMS.minisig ] && files="$files SHA256SUMS.minisig"
+          gh release upload "${{ github.event.release.tag_name }}" $files --clobber

@@ -1,0 +1,5 @@
+error: expected an inclusive range with both bounds, like `0.0..=1.0`
+ --> tests/ui/range_not_a_range.rs:6:23
+  |
+6 |     #[reflect(range = 1.0)]
+  |                       ^^^

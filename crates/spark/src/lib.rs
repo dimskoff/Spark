@@ -17,11 +17,13 @@
 //! ```
 //!
 //! Conventions: Y-up, right-handed, meters, radians, sRGB colors.
+// Unsafe only for the Win32 crash message box (`app::report_fatal`), allowed there.
+#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
 
 mod app;
 mod devtools;
 
-pub use app::{App, HELP, RunArgs};
+pub use app::{App, HELP, RunArgs, THIRD_PARTY_LICENSES};
 pub use spark_core::*;
 pub use spark_render::{FrameStats, GpuInfo, Renderer};
 
@@ -35,8 +37,8 @@ pub use spark_window as window;
 pub mod prelude {
     pub use crate::App;
     pub use spark_core::{
-        Aabb, Assets, Body, BodyKind, Camera, Collision, PlayParams, RayHit, Shape, SoundId, Color, EulerRot, Fog, Game, ImageData, Input, Key, Mat4, Material, MeshData, MeshId,
-        MouseButton, Object, ObjectId, Quat, PassSize, PostPass, RenderSettings, Scene, ShaderData, ShaderId, ShaderKind, Sun, TextureFilter, TextureId, Time, VERSION, Vec2,
-        Vec3, Vec4, World, vec2, vec3, vec4,
+        Aabb, Assets, Body, BodyKind, Camera, Collision, Color, EulerRot, Fog, Game, ImageData, Input, Key, Mat4, Material, MeshData,
+        MeshId, MouseButton, Object, ObjectId, PassSize, PlayParams, PostPass, Quat, RayHit, RenderSettings, Scene, ShaderData, ShaderId,
+        ShaderKind, Shape, SoundId, Sun, TextureFilter, TextureId, Time, VERSION, Vec2, Vec3, Vec4, World, vec2, vec3, vec4,
     };
 }

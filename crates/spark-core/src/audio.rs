@@ -62,18 +62,51 @@ impl Default for PlayParams {
 /// A queued audio operation (`fade` values are in seconds).
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioCommand {
-    Play { id: SoundId, path: PathBuf, params: PlayParams },
-    Stop { id: SoundId, fade: f32 },
-    SetVolume { id: SoundId, volume: f32, fade: f32 },
-    SetPitch { id: SoundId, pitch: f32, fade: f32 },
-    SetPan { id: SoundId, pan: f32 },
-    StopAll { fade: f32 },
-    MasterVolume { volume: f32 },
-    BusVolume { bus: BusId, volume: f32, fade: f32 },
+    Play {
+        id: SoundId,
+        path: PathBuf,
+        params: PlayParams,
+    },
+    Stop {
+        id: SoundId,
+        fade: f32,
+    },
+    SetVolume {
+        id: SoundId,
+        volume: f32,
+        fade: f32,
+    },
+    SetPitch {
+        id: SoundId,
+        pitch: f32,
+        fade: f32,
+    },
+    SetPan {
+        id: SoundId,
+        pan: f32,
+    },
+    StopAll {
+        fade: f32,
+    },
+    MasterVolume {
+        volume: f32,
+    },
+    BusVolume {
+        bus: BusId,
+        volume: f32,
+        fade: f32,
+    },
     /// Stops every sound on the bus.
-    StopBus { bus: BusId, fade: f32 },
+    StopBus {
+        bus: BusId,
+        fade: f32,
+    },
     /// Pauses (`true`) or resumes every sound on the bus.
-    PauseBus { bus: BusId, paused: bool, fade: f32 },
+    PauseBus {
+        bus: BusId,
+        paused: bool,
+        fade: f32,
+    },
     /// Forget every decoded sound (game reload): frees memory, changed files are read again.
     ClearCache,
 }
@@ -139,15 +172,7 @@ impl Audio {
             SoundSource::Point(p) => p,
             SoundSource::Object(_) => Vec3::ZERO,
         };
-        self.spatial.push(Spatial {
-            id,
-            source,
-            last_pos,
-            volume: params.volume,
-            range: range.max(0.01),
-            fresh: true,
-            sent: (-1.0, 0.0),
-        });
+        self.spatial.push(Spatial { id, source, last_pos, volume: params.volume, range: range.max(0.01), fresh: true, sent: (-1.0, 0.0) });
         id
     }
 
@@ -320,6 +345,12 @@ impl Audio {
     }
 }
 
+/// Flushes the audio queue of `world`.
+pub fn flush(world: &mut World) {
+    world.audio.update_spatial(&world.scene);
+    world.audio.flush();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,10 +371,4 @@ mod tests {
         assert!(matches!(a.pending().last(), Some(AudioCommand::Play { params, .. }) if params.bus == Some(music)));
         assert_eq!(a.bus_names(), vec!["music", "sfx"]);
     }
-}
-
-/// Flushes the audio queue of `world`.
-pub fn flush(world: &mut World) {
-    world.audio.update_spatial(&world.scene);
-    world.audio.flush();
 }

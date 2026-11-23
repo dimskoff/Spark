@@ -63,7 +63,9 @@ fn create(args: &[String]) -> Result<PathBuf, String> {
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--template" => kind = Template::parse(it.next().ok_or_else(|| format!("--template needs a value (3d, 2d or empty)\n{USAGE}"))?)?,
+            "--template" => {
+                kind = Template::parse(it.next().ok_or_else(|| format!("--template needs a value (3d, 2d or empty)\n{USAGE}"))?)?
+            }
             f if f.starts_with("--") => return Err(format!("unknown flag '{f}'\n{USAGE}")),
             p if path.is_none() => path = Some(p),
             _ => return Err(USAGE.into()),
@@ -74,11 +76,8 @@ fn create(args: &[String]) -> Result<PathBuf, String> {
     if dir.join("main.luau").exists() {
         return Err(format!("'{}' already has a main.luau", dir.display()));
     }
-    let title = dir
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .filter(|n| !n.is_empty() && n != ".")
-        .unwrap_or_else(|| "My Game".into());
+    let title =
+        dir.file_name().map(|n| n.to_string_lossy().into_owned()).filter(|n| !n.is_empty() && n != ".").unwrap_or_else(|| "My Game".into());
     write_template_kind(&dir, &title, kind)?;
     Ok(dir)
 }
@@ -93,7 +92,20 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("spark-new-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         write_template(&dir, "Test \"Game\"").unwrap();
-        for f in ["main.luau", "game.toml", "src/player.luau", "src/level.luau", "src/hud.luau", "assets/textures/.gitkeep", "AGENTS.md", "docs/SPARK_API.md", "docs/SPARK_SHADERS.md", "docs/spark.d.luau", ".luaurc", ".vscode/settings.json"] {
+        for f in [
+            "main.luau",
+            "game.toml",
+            "src/player.luau",
+            "src/level.luau",
+            "src/hud.luau",
+            "assets/textures/.gitkeep",
+            "AGENTS.md",
+            "docs/SPARK_API.md",
+            "docs/SPARK_SHADERS.md",
+            "docs/spark.d.luau",
+            ".luaurc",
+            ".vscode/settings.json",
+        ] {
             assert!(dir.join(f).is_file(), "{f}");
         }
         let toml = std::fs::read_to_string(dir.join("game.toml")).unwrap();
@@ -153,7 +165,10 @@ mod tests {
             assert!(defs.contains(&format!("\"{}\"", b.name())), "docs/spark.d.luau misses pad button \"{}\"", b.name());
         }
         // Every global table of the API reference is declared.
-        for g in ["input", "time", "camera", "graphics", "physics", "sound", "draw", "screen", "save", "window", "Mesh", "Texture", "Material", "Color", "Model", "Shader", "Font"] {
+        for g in [
+            "input", "time", "camera", "graphics", "physics", "sound", "draw", "screen", "save", "window", "Mesh", "Texture", "Material",
+            "Color", "Model", "Shader", "Font",
+        ] {
             assert!(defs.contains(&format!("declare {g}:")), "docs/spark.d.luau misses `declare {g}:`");
         }
         let api = include_str!("../../../docs/SPARK_API.md");

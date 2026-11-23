@@ -1,0 +1,5 @@
+error: range must be inclusive: write `a..=b`
+ --> tests/ui/exclusive_range.rs:6:23
+  |
+6 |     #[reflect(range = 0.0..1.0)]
+  |                       ^^^

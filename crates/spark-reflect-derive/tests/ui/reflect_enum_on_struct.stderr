@@ -1,0 +1,5 @@
+error: `#[derive(ReflectEnum)]` supports enums; use `#[derive(Reflect)]` for structs
+ --> tests/ui/reflect_enum_on_struct.rs:5:1
+  |
+5 | struct A {
+  | ^^^^^^

@@ -19,7 +19,7 @@ spark --version
 ```
 
 Flags: `--headless`, `--frames N`, `--screenshot PATH`, `--dump-scene`, `--size WxH`, `--fixed-dt S`,
-`--no-vsync`, `--max-fps N`, `--mute`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
+`--no-vsync`, `--max-fps N`, `--mute`, `--seed N`, `--splash` / `--no-splash`, `--fullscreen`, `--windowed`, `--help`.
 Headless testing: `--dump-scene-json PATH|-` (scene as JSON), `--screenshot-every N` (`shot-00060.png`, ...),
 `--timeout S` (fail when the run takes longer), `--input FILE` (scripted input, one event per line):
 
@@ -85,6 +85,37 @@ Splash (opt-in: `splash = true` in game.toml or `--splash`): "POWERED BY SPARK" 
 after the logo has faded in skips the pause), then `start()`. `--no-splash` turns it off for one run.
 In headless mode the first script error exits with code 1 and prints file:line + a stack trace.
 
+### Error codes
+
+Typos fail loudly, with a suggestion. Reading a global nobody assigned (`mth.sin(1)`) is an error
+(`unknown global 'mth' (did you mean 'math'?)`); writing new globals is fine and `rawget(_G, "name")` returns nil.
+A global function that looks like a misspelled callback (`function Update`, `fixedUpdate`, `draw2d`) is an error:
+callbacks are lowercase snake_case (`start`, `update`, `fixed_update`, `late_update`, `render`). `on("colision", fn)` is an
+error when the name is a near miss of a built-in event; any other name is a custom event. Unknown fields on objects
+(`cube.postion = ...`) are errors for reads and writes.
+
+Spark's libraries are read-only: Luau's own (`math`, `string`, `table`, `os`, ...) and Spark's API tables (`Mesh`, `input`, `draw`,
+`ui`, ...). `math.sin = nil`, `Mesh.cube = f` or `setmetatable(string, {})` fail with "cannot modify a built-in library"; make your
+own table instead (`local M = {}`). Your own globals (`function update(dt)`, `score = 0`, `_G.score`) work as usual and are
+shared by `main.luau`, required modules and tasks, but a global can shadow a built-in only in your own game
+(`function draw() end` is still rejected, see the callback names above).
+
+`spark check --json` gives every error a stable `code` (and a `hint` when the message has a "did you mean"):
+
+| Code | Meaning |
+| --- | --- |
+| `SPK-1000` | other runtime error |
+| `SPK-1001` | unknown global (never assigned) |
+| `SPK-1002` | misspelled callback (`Update` instead of `update`) |
+| `SPK-1003` | unknown built-in event (`colision` instead of `collision`) |
+| `SPK-1004` | unknown field on an object |
+| `SPK-1005` | script ran too long (infinite loop; use `wait()` inside `task(function() ... end)`) |
+| `SPK-1006` | destroyed object used (check `obj:exists()`) |
+| `SPK-1007` | write to a built-in library or API table (`math.sin = nil`, `Mesh.cube = f`, `setmetatable(string, {})`) |
+| `SPK-1008` | object script: a prop that is not declared, has the wrong type or is named like an Object member (see "Object scripts") |
+| `SPK-1100` | syntax error |
+| `SPK-1101` | type error from `--types` (luau-lsp) |
+
 ## Conventions
 
 - Y is up, right-handed, 1 unit = 1 meter. Ground is the XZ plane at y = 0.
@@ -147,7 +178,15 @@ function update(dt) player:update(dt) end
   game folder (where main.luau is). `.luau` is added; `require("./src/ui")` also finds `src/ui/init.luau`.
   A bare name (`require("player")`) is an error with a hint.
 - A module runs **once**; its return value is cached and shared by every `require` of the same file.
-- Saving **any** required file reloads the whole game (like saving main.luau).
+- **Hot reload of modules.** Saving `main.luau` restarts the game. Saving a required module reloads only that module
+  (the scene, objects and loaded assets stay): the file runs again and its returned table is updated **in place**, so
+  every `local Player = require(...)` and every object script sees the new functions. Fields that are gone are removed.
+  A module may define `function Player.on_reload(old) ... end`; it runs after the swap with a copy of the table as it
+  was (`old.count`), the place to carry state over. Objects you created with `setmetatable(o, Player)` keep working.
+  Local variables inside the module start fresh. A module that returns a function (not a table) restarts the game. A
+  module that fails to load keeps its old version running and shows a "Module error" banner until you save a fix.
+  Scripts attached to objects keep their `self` state (no `start` / `on_destroy` again); an instance that had failed is
+  recreated with its props and `start` runs.
 - Errors name the module file and line: `src/ui/hud.luau:42: ...`.
 - Cycles (`a` requires `b` requires `a` while loading) are an error that shows the chain
   (`src/a.luau -> src/b.luau -> src/a.luau`): move the shared part into a third module or require inside a function.
@@ -258,6 +297,8 @@ end)
 | `lerp(a, b, t)` | numbers or vectors |
 | Luau built-ins | `math.sin`, `math.clamp`, `math.random`, `math.rad`, `math.pi`, ... |
 
+Random numbers are reproducible with `--seed N` (restarts reseed too). Headless runs, `spark check` and `spark test` use seed 0 unless you pass `--seed`; windowed runs stay random.
+
 ## Meshes, textures, materials, colors
 
 Primitives are centered at the origin (a cube of size 1 spans -0.5..0.5). Same parameters = same shared mesh, so calling `Mesh.cube()` in a loop is cheap.
@@ -273,7 +314,7 @@ Primitives are centered at the origin (a cube of size 1 spans -0.5..0.5). Same p
 | `Mesh.cylinder(radius=0.5, height=1, segments=24)` | |
 | `Mesh.triangles({p1, p2, p3, ...})` | counter-clockwise triangles, flat normals |
 | `Mesh.custom(positions, indices, uvs?, normals?)` | indexed mesh: `positions` = `{vector}`, `indices` = 1-based, 3 per counter-clockwise triangle, `uvs` = flat `{u1, v1, u2, v2, ...}`, `normals` = `{vector}` (smooth normals are computed when omitted). For swept tunnels, terrain, any generated geometry |
-| `Texture.load("img.png")` | PNG/JPEG, path relative to the script folder, cached |
+| `Texture.load("img.png")` | PNG/JPEG, path relative to the game folder, cached |
 | `Texture.checker(a="white", b="gray", cells=8, size=64)` | |
 | `Texture.solid(color)` | |
 | `Material.color(c)` | lit solid color |
@@ -306,6 +347,7 @@ local pivot = group({ name = "pivot" })     -- empty object to parent things to
 - `group(props?)` -> empty Object
 - props: `name, position, rotation, scale (number or vector), visible, parent, color, body` (see Physics)
 - `find(name)` -> first Object with that name or `nil`; `find_all(name)` -> list; `destroy(obj)` (also destroys children)
+- `find_all_tagged(tag)` -> list of the Objects that have the tag (see "Tags")
 
 Object fields (read/write): `name`, `position`, `x`, `y`, `z`, `rotation` (euler vector), `scale`, `visible`,
 `color`, `material`, `mesh`, `parent` (Object or nil). Read-only: `id`.
@@ -326,6 +368,116 @@ Object methods:
 | `obj:distance_to(obj_or_vec)` | |
 | `obj:exists()`, `obj:destroy()` | using a destroyed object raises an error |
 | `a == b`, `tostring(obj)` | |
+| `obj.script`, `obj:attach_script(path, props?)`, `obj:detach_script()` | the object's script, see "Object scripts" |
+| `obj.tags`, `obj:has_tag(t)`, `obj:add_tag(t)`, `obj:remove_tag(t)` | labels, see "Tags" |
+
+## Tags
+
+Tags are free labels on an object, saved in scenes (`tags = ["enemy", "flying"]` on a `[[node]]`) and prefabs.
+
+```lua
+local boss = find("Boss")
+boss:add_tag("enemy")
+for _, e in ipairs(find_all_tagged("enemy")) do e.color = "red" end
+if boss:has_tag("flying") then ... end
+boss.tags = { "enemy", "elite" }     -- replaces; reading `boss.tags` gives a new list (changing it changes nothing)
+```
+
+- `obj.tags` (list of strings, read/write; `nil` = none), `obj:has_tag(t)`, `obj:add_tag(t)` (already there: nothing happens),
+  `obj:remove_tag(t)` -> whether it was there, `find_all_tagged(t)` -> list in scene order.
+- A tag is a non-empty string of at most 64 bytes without control characters; case matters; duplicates are dropped.
+- In a prefab instance the instance's `tags` replace the prefab root's tags; for another node of the prefab write
+  `"leaf/node.tags" = ["a", "b"]` under `[node.overrides]`. `scene.save` writes the difference by itself.
+
+## The camera and camera objects
+
+`camera` is the scene's one render camera. A scene file can also hold an object with a `camera` component
+(`[node.camera]`: `fov`, `near`, `far`, `ortho`, `active`; the position and rotation are the object's transform). When there
+is one, the `camera` global and the object stay in step: loading the scene moves `camera` to the object, and
+`camera.position = ...`, `camera.fov = ...`, `camera:look_at(...)` change the object, so `scene.save` writes them. Moving the
+object itself (`find("Cam").position = ...`) moves `camera` at the end of `update` and of `late_update`. With several camera
+objects the first **active** one (in the order they were created / loaded) is used; `active = false` hands over to the next.
+A scene with no camera object behaves exactly as before. There is no `obj.fov`: scripts use the `camera` global.
+
+## Object scripts
+
+A script can belong to one object instead of living in `main.luau`. The module returns a table with optional
+`props` (declared properties and their defaults) and callbacks; every object that uses it gets its own instance:
+
+```lua
+-- src/door.luau
+local Door = {}
+Door.props = { open_angle = 90, speed = 2 }          -- types come from the defaults
+function Door:start() self.closed = self.rotation end -- self.rotation is the object's rotation
+function Door:update(dt)
+    self.object:rotate_y(self.speed * dt)             -- self.object is the Object
+end
+function Door:on_collision(other, info) end
+function Door:on_destroy() end
+return Door
+
+-- main.luau
+function start()
+    local door = spawn(Mesh.cube(), "brown", { name = "Door" })
+    door:attach_script("src/door.luau", { speed = 4 })   -- or `script = "src/door.luau"` in a .scene file
+end
+```
+
+In a `.scene` / `.prefab` file the same is `[node.script]` with `path = "src/door.luau"` and `[node.script.props]`
+(see `docs/dev/adr/0003-scene-and-prefab-format.md`); loading the scene attaches the scripts.
+
+- **Callbacks** (all optional): `start(self)`, `update(self, dt)`, `fixed_update(self, dt)`, `late_update(self, dt)`,
+  `on_collision(self, other, info)` (when a contact starts; `info` like in `obj:on("collision", ...)`) and `on_destroy(self)`.
+  They run after the global callback of the same name, one object after the other **in the order the scripts were
+  attached** (not slot order), the same on every run. `start` runs once, before the first `update` of the object,
+  at the first frame stage after the script was attached (so `door:attach_script(...)` in `start()` works).
+  `on_destroy` runs when the object is destroyed (`obj:destroy()` / `destroy(obj)`: the object still exists; any other
+  removal: it is already gone, only `self` state is usable) or the script is detached or replaced. A game restart or
+  a save of `main.luau` recreates everything without calling `on_destroy`. Saving only a script file (or any module it
+  requires) keeps the objects and their `self` state and swaps the code (see "Hot reload of modules" below).
+- **`self`**: a table per object. `self.object` is the `Object`. Reading or writing a member of the Object on `self`
+  (`self.position`, `self.visible`, `self:rotate_y(a)`) goes to the object; any other key is your own instance state
+  (`self.closed`). Methods of the module are found on `self` too. `self.object:rotate_y(a)` skips the forwarding and is
+  slightly faster in hot loops.
+- **`props`**: values from the scene file / `attach_script` override the declared defaults and must have the same type
+  (number, string, boolean, vector, table). A name the script does not declare is an error with a "did you mean". A
+  prop name that is also an Object member (`position`, `color`, `visible`, `id`, ...) or `object` is rejected when the
+  script loads. Props are initial values: changing `self.speed` at run time is not written back to the scene.
+- **Errors are isolated**: an error in a callback of one object (including an infinite loop cut by the 5 s limit, or
+  a bad prop) marks only that object failed. It is logged once with the code, the script, the callback, the object name
+  and its node id, shown as a line at the bottom of the screen, and sent to the editor; the game and all other
+  objects keep running, and the failed object's callbacks are skipped until the game restarts. (An error in the global
+  `main.luau` callbacks still stops the game, as before.) Codes: `SPK-1002` misspelled callback in the script,
+  `SPK-1005` too long, `SPK-1008` bad prop, `SPK-1000` other.
+- Misspelled callbacks (`Update`, `on_colision`) and a `render` function in an object script are errors with a hint.
+- `obj.script` is the path (or `nil`); `obj.script = "src/x.luau"` attaches without props, `obj.script = nil` detaches.
+  Attaching again replaces the script (the old one gets `on_destroy`, the new one `start`).
+- Scripts are loaded through `require`: the module is cached per path, saving it reloads the game.
+
+## Scenes and prefabs
+
+A level is a `.scene` file and a reusable group of objects is a `.prefab` file (plain TOML, written by hand, by an agent or
+by the editor; format in `docs/SCENE_FORMAT.md`).
+
+```lua
+local roots = scene.load("levels/arena.scene", { replace = true })   -- the level's root objects
+local door = spawn("prefabs/door.prefab", { position = vec3(4, 0, -2) })
+find("Leaf").color = "red"                                           -- a change to a prefab's object...
+scene.save("levels/arena.scene")                                     -- ...is saved as an override
+```
+
+- `scene.load(path, opts?)` -> list of root Objects. `opts.replace = true` deletes every current object first (if the file
+  cannot be loaded, nothing changes) and applies the file's environment (sun, ambient, background, fog, sky). Without it the
+  objects are added, the environment stays and a node id already in use is renamed. A prefab instance in the file counts as
+  one root.
+- `spawn("x.prefab", props?)` -> the instance's root Object; `props` are the usual spawn props (`position`, `name`, `parent`, ...).
+- `scene.save(path)` -> list of warnings. Writes every object and the environment; a prefab instance is written as
+  `prefab = "..."` plus only what differs from a fresh instance (`[node.overrides]`), so a property set back to the prefab's
+  value disappears from the file. Not available in a packed game (`spark build`); an object that cannot be saved (a mesh from
+  `Mesh.custom`, a texture handle) is an error that names it. The warnings list prefab changes a v1 file cannot hold: a removed
+  or reparented prefab object, a removed component.
+- Paths are relative to the game folder and cannot leave it. A missing or invalid file raises an error with the path (and the
+  line, for a file that does not parse). A prefab cannot contain another prefab yet.
 
 ## 3D models and animation (glTF)
 
@@ -498,7 +650,7 @@ rapier 3D, stepped in `fixed_update` (1/60). Y up, meters, default gravity `(0, 
 ```lua
 local ground = spawn(Mesh.plane(40), "gray", { body = "static" })
 local box = spawn(Mesh.cube(), "orange", { position = vec3(0, 4, 0), body = "dynamic" })
-box:on("collision", function(other, info) if info.speed > 3 then sound.play("sounds/hit.wav") end end)
+box:on("collision", function(other, info) if info.speed > 3 then sound.play("sounds/thud.wav") end end)
 ```
 
 - `body = "dynamic" | "static" | "kinematic" | true` (dynamic), or a table:
@@ -590,7 +742,7 @@ function render()
 end
 ```
 
-Full 2D game: `examples/starfall/main.luau`.
+Full 2D example: `examples/04-draw-2d/main.luau`.
 
 ## UI widgets (ui)
 
@@ -628,7 +780,7 @@ end
 
 - `input.down(key)`, `input.pressed(key)` (this frame), `input.released(key)`
 - `input.repeated(key)` - went down **or auto-repeated** this frame (key held, OS repeat rate): menus, text fields, held Backspace
-- `input.text()` -> string typed this frame (keyboard layout and IME aware: `"A"` with shift, `"ё"`, `"日本"`; no control
+- `input.text()` -> string typed this frame (keyboard layout and IME aware: `"A"` with shift, `"С‘"`, `"ж—Ґжњ¬"`; no control
   characters - check `"enter"` / `"backspace"` with `input.pressed` / `input.repeated`). `""` when nothing was typed.
   ```lua
   name ..= input.text()

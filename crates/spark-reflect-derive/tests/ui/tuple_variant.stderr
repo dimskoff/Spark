@@ -1,0 +1,5 @@
+error: tuple variants are not supported; use named fields (`V { x: f32 }`) or a unit variant
+ --> tests/ui/tuple_variant.rs:6:6
+  |
+6 |     X(f32),
+  |      ^^^^^

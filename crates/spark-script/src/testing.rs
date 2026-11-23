@@ -148,11 +148,12 @@ pub(crate) fn install(lua: &Lua, shared: SharedTest) -> LuaResult<()> {
     t.set(
         "button",
         lua.create_function(|lua, (b, down): (String, bool)| {
-            let btn = MouseButton::from_name(&b).ok_or_else(|| rt(format!("test.button: unknown mouse button '{b}' (left, right, middle)")))?;
+            let btn =
+                MouseButton::from_name(&b).ok_or_else(|| rt(format!("test.button: unknown mouse button '{b}' (left, right, middle)")))?;
             push(lua, TestInput::Button(btn, down))
         })?,
     )?;
-    t.set("mouse", lua.create_function(|lua, (x, y): (f32, f32)| push(lua, TestInput::Move(x, y)))?)?;
+    t.set("mouse", lua.create_function(|lua, (Num(x), Num(y)): (Num, Num)| push(lua, TestInput::Move(x, y)))?)?;
     t.set("text", lua.create_function(|lua, s: String| push(lua, TestInput::Text(s)))?)?;
     // Strings the game drew (draw.text, ui.label, ...) in the last frame, in draw order.
     t.set("texts", lua.create_function(|lua, ()| with(lua, |w| Ok(w.canvas.drawn_texts().to_vec())))?)?;
@@ -209,9 +210,9 @@ pub fn world_snapshot(w: &World) -> String {
         let e = o.euler();
         let mut v = format!(
             "pos {} rot {} scale {}",
-            vec3(o.position),
+            vec3(o.transform.position),
             vec3(Vec3::new(e.x.to_degrees(), e.y.to_degrees(), e.z.to_degrees())),
-            vec3(o.scale)
+            vec3(o.transform.scale)
         );
         if let Some(p) = o.parent().and_then(|p| w.scene.get(p)) {
             let _ = write!(v, " parent {:?}", p.name);
@@ -250,21 +251,35 @@ fn flatten(out: &mut String, prefix: &str, v: &Value, depth: usize) -> LuaResult
     match v {
         Value::Table(t) => flatten_table(out, prefix, t, depth),
         Value::Nil => Ok(()),
-        Value::Boolean(b) => Ok(writeln!(out, "{prefix} = {b}").unwrap_or(())),
-        Value::Integer(i) => Ok(writeln!(out, "{prefix} = {i}").unwrap_or(())),
+        Value::Boolean(b) => {
+            writeln!(out, "{prefix} = {b}").unwrap_or(());
+            Ok(())
+        }
+        Value::Integer(i) => {
+            writeln!(out, "{prefix} = {i}").unwrap_or(());
+            Ok(())
+        }
         Value::Number(n) => {
             let s = if n.fract() == 0.0 && n.abs() < 1e15 { format!("{}", *n as i64) } else { num(*n as f32) };
-            Ok(writeln!(out, "{prefix} = {s}").unwrap_or(()))
+            writeln!(out, "{prefix} = {s}").unwrap_or(());
+            Ok(())
         }
-        Value::String(s) => Ok(writeln!(out, "{prefix} = {:?}", s.to_string_lossy()).unwrap_or(())),
-        Value::Vector(x) => Ok(writeln!(out, "{prefix} = {}", vec3(Vec3::new(x.x(), x.y(), x.z()))).unwrap_or(())),
+        Value::String(s) => {
+            writeln!(out, "{prefix} = {:?}", s.to_string_lossy()).unwrap_or(());
+            Ok(())
+        }
+        Value::Vector(x) => {
+            writeln!(out, "{prefix} = {}", vec3(Vec3::new(x.x(), x.y(), x.z()))).unwrap_or(());
+            Ok(())
+        }
         other => {
             // Objects and other userdata: their tostring() (e.g. the object name).
             let s = match other {
                 Value::UserData(_) => other.to_string().unwrap_or_else(|_| "<userdata>".into()),
                 _ => format!("<{}>", other.type_name()),
             };
-            Ok(writeln!(out, "{prefix} = {s}").unwrap_or(()))
+            writeln!(out, "{prefix} = {s}").unwrap_or(());
+            Ok(())
         }
     }
 }
@@ -419,7 +434,11 @@ mod tests {
             ]
         );
         assert!(diff(a, a).is_empty());
-        let c = Change::Changed("obj \"d\"".into(), "pos (0.00, 1.00, 0.00) rot (0.00, 0.00, 0.00) body dynamic".into(), "pos (0.00, 3.00, 0.00) rot (0.00, 0.00, 0.00) body static".into());
+        let c = Change::Changed(
+            "obj \"d\"".into(),
+            "pos (0.00, 1.00, 0.00) rot (0.00, 0.00, 0.00) body dynamic".into(),
+            "pos (0.00, 3.00, 0.00) rot (0.00, 0.00, 0.00) body static".into(),
+        );
         assert_eq!(c.to_string(), "~ obj \"d\": pos (0.00, 1.00, 0.00) -> (0.00, 3.00, 0.00), body dynamic -> static");
         let c = Change::Changed("state.x".into(), "1".into(), "2".into());
         assert_eq!(c.to_string(), "~ state.x: 1  ->  2");

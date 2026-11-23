@@ -2,19 +2,24 @@
 //! dependency-free. Without a backend bodies simply don't move.
 
 use glam::{Quat, Vec3};
+use spark_reflect::{Reflect, ReflectEnum};
 
+use crate::reflect::GREATER_THAN_ZERO;
 use crate::scene::ObjectId;
 use crate::world::World;
 
 /// How a body moves.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ReflectEnum)]
 pub enum BodyKind {
     /// Moved by the simulation (gravity, collisions, impulses).
     #[default]
+    #[reflect(name = "dynamic")]
     Dynamic,
     /// Never moves on its own (ground, walls). You can still teleport it.
+    #[reflect(name = "static")]
     Static,
     /// Moved only by your code (position / rotation); pushes dynamic bodies.
+    #[reflect(name = "kinematic")]
     Kinematic,
 }
 
@@ -38,48 +43,93 @@ impl BodyKind {
 }
 
 /// Collision shape in the object's local space (multiplied by the object's scale).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, ReflectEnum)]
 pub enum Shape {
     /// Derived from the mesh: box / sphere / cylinder for primitives, triangle mesh (static,
     /// kinematic) or convex hull (dynamic) for custom meshes.
     #[default]
+    #[reflect(name = "auto")]
     Auto,
-    /// Box with full size (width, height, depth).
-    Box(Vec3),
-    Sphere(f32),
-    /// Capsule along Y. `height` is the total height including the caps.
-    Capsule { radius: f32, height: f32 },
-    Cylinder { radius: f32, height: f32 },
+    /// Box.
+    #[reflect(name = "box")]
+    Box {
+        /// Full size (width, height, depth).
+        #[reflect(default = Vec3::ONE)]
+        size: Vec3,
+    },
+    /// Ball.
+    #[reflect(name = "sphere")]
+    Sphere {
+        /// Radius.
+        #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", default = 0.5)]
+        radius: f32,
+    },
+    /// Capsule along Y.
+    #[reflect(name = "capsule")]
+    Capsule {
+        /// Radius of the caps and the body.
+        #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", default = 0.5)]
+        radius: f32,
+        /// Total height including the caps.
+        #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", default = 2.0)]
+        height: f32,
+    },
+    /// Cylinder along Y.
+    #[reflect(name = "cylinder")]
+    Cylinder {
+        /// Radius.
+        #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", default = 0.5)]
+        radius: f32,
+        /// Height.
+        #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "m", default = 1.0)]
+        height: f32,
+    },
 }
 
 /// A rigid body attached to an object (`Object::body`).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Reflect)]
 pub struct Body {
+    /// How the body moves.
     pub kind: BodyKind,
+    /// Collision shape in the object's local space.
     pub shape: Shape,
     /// Total mass in kg. `None` = computed from volume (density 1).
+    #[reflect(range = GREATER_THAN_ZERO..=f32::MAX, unit = "kg", lua = "mass")]
     pub mass: Option<f32>,
+    /// Surface friction (0 = ice).
+    #[reflect(range = 0.0..=f32::MAX, step = 0.05)]
     pub friction: f32,
     /// 0 = no bounce, 1 = perfectly elastic.
+    #[reflect(step = 0.01)]
     pub bounciness: f32,
     /// Sensors detect overlaps (collision events) but don't push anything.
+    #[reflect(lua = "sensor")]
     pub sensor: bool,
     /// Keeps the body upright (characters).
     pub lock_rotation: bool,
+    /// Multiplier of the world gravity for this body (0 = floats, negative = rises).
+    #[reflect(lua = "gravity_scale")]
     pub gravity_scale: f32,
+    /// Slows the linear velocity down over time.
     pub linear_damping: f32,
+    /// Slows the rotation down over time.
     pub angular_damping: f32,
     /// Continuous collision detection for fast objects (bullets).
     pub ccd: bool,
     /// World-space velocity (m/s). Written back by the simulation; set it to change it.
+    #[reflect(unit = "m/s", transient, lua = "velocity")]
     pub velocity: Vec3,
     /// World-space angular velocity (rad/s).
+    #[reflect(unit = "rad/s", transient, lua = "angular_velocity")]
     pub angular_velocity: Vec3,
     /// Impulse applied at the next physics step, then reset.
+    #[reflect(transient, hidden)]
     pub impulse: Vec3,
     /// Angular impulse applied at the next physics step, then reset.
+    #[reflect(transient, hidden)]
     pub torque_impulse: Vec3,
     /// Force applied during the next physics step, then reset (call every fixed_update).
+    #[reflect(transient, hidden)]
     pub force: Vec3,
 }
 
